@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
+import { TEAM_PROFILES, type TeamProfile, type PlayerInfo } from "@/lib/teams";
 
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -106,6 +107,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [animate, setAnimate] = useState(true);
   const [tick, setTick] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
+  const scrolledRef = useRef(false);
+  const mainRef = useRef<HTMLElement>(null);
 
   const pollLive = useCallback(async () => {
     if (isMock()) {
@@ -167,6 +171,34 @@ export default function Tournament({ data }: { data: TournamentData }) {
     schedule();
   }, [liveStatus, schedule]);
 
+  useEffect(() => {
+    if (scrolledRef.current) return;
+    const tryScroll = () => {
+      const el = document.getElementById("today-anchor");
+      if (el && view === "schedule") {
+        scrolledRef.current = true;
+        const stickyOffset = 100;
+        const top = el.getBoundingClientRect().top + window.scrollY - stickyOffset;
+        window.scrollTo({ top, behavior: "instant" });
+      }
+    };
+    const t = setTimeout(tryScroll, 100);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    function handleTeamClick(e: MouseEvent) {
+      const target = (e.target as HTMLElement).closest("[data-team]") as HTMLElement | null;
+      if (target) {
+        e.preventDefault();
+        setTeamDrawer(target.dataset.team || null);
+      }
+    }
+    document.addEventListener("click", handleTeamClick);
+    return () => document.removeEventListener("click", handleTeamClick);
+  }, []);
+
   const today = todayISO();
   const tomorrow = tomorrowISO();
 
@@ -226,7 +258,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
   function teamRow(t: string, goal: string, lead: boolean): string {
     const host = data.hosts.includes(t) ? '<span class="host">HOST</span>' : "";
-    return `<div class="team${lead ? " lead" : ""}"><span class="fl">${fl(t)}</span><span class="nm">${esc(t)}</span>${host}${goal}</div>`;
+    return `<div class="team${lead ? " lead" : ""}"><span class="fl">${fl(t)}</span><a class="nm teamlink" data-team="${esc(t)}" href="#">${esc(t)}</a>${host}${goal}</div>`;
   }
 
   function tixCard(m: GroupStageMatch, anim: boolean): string {
@@ -271,7 +303,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
             ? '<span class="today-pill" style="background:#cfe3d9;color:#0A5C3E">Tomorrow</span>'
             : "";
         const t = parseISO(m.iso);
-        html += `<div class="dayhead"><span class="dow">${DOW[t.getDay()]}</span><h3>${t.getDate()} ${MON[t.getMonth()]}</h3>${pill}</div>`;
+        const anchor = m.iso === today ? ' id="today-anchor"' : '';
+        html += `<div class="dayhead"${anchor}><span class="dow">${DOW[t.getDay()]}</span><h3>${t.getDate()} ${MON[t.getMonth()]}</h3>${pill}</div>`;
       }
       html += tixCard(m, anim);
     }
@@ -290,7 +323,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         const gd = r.gf - r.ga;
         const gds = (gd > 0 ? "+" : "") + gd;
         return `<tr class="${cls}"><td class="pos l">${i + 1}</td>
-          <td class="l"><span class="tm"><span class="fl">${fl(r.t)}</span><span class="nm">${esc(r.t)}</span>${host}</span></td>
+          <td class="l"><span class="tm"><span class="fl">${fl(r.t)}</span><a class="nm teamlink" data-team="${esc(r.t)}" href="#">${esc(r.t)}</a>${host}</span></td>
           <td>${r.p}</td><td>${played ? gds : "–"}</td><td class="pts">${r.pts}</td></tr>`;
       }).join("");
       html += `<div class="gcard${anim ? " rise" : ""}" style="--gc:${data.gcolor[g]}">
@@ -464,12 +497,174 @@ export default function Tournament({ data }: { data: TournamentData }) {
       )}
 
       <main
+        ref={mainRef}
         className={view !== "groups" && view !== "knockout" ? "section" : undefined}
         dangerouslySetInnerHTML={{ __html: viewContent }}
       />
 
       <div className="foot">
         Schedule cross-checked 11 Jun 2026 &middot; live scores via API-Football (unofficial) &middot; knockout teams fill in as results come in
+      </div>
+
+      {teamDrawer && <TeamDrawer name={teamDrawer} flags={data.flags} groups={data.groups} gcolor={data.gcolor} gs={data.gs} hosts={data.hosts} onClose={() => setTeamDrawer(null)} />}
+    </div>
+  );
+}
+
+function posLabel(p: string): string {
+  return ({ GK: "Goalkeeper", DF: "Defender", MF: "Midfielder", FW: "Forward" }[p]) || p;
+}
+
+function posColor(p: string): string {
+  return ({ GK: "#b58900", DF: "#2563eb", MF: "#0A5C3E", FW: "#D23B2E" }[p]) || "#5C6B62";
+}
+
+function TeamDrawer({ name, flags, groups, gcolor, gs, hosts, onClose }: {
+  name: string;
+  flags: Record<string, string>;
+  groups: Record<string, string[]>;
+  gcolor: Record<string, string>;
+  gs: GroupStageMatch[];
+  hosts: string[];
+  onClose: () => void;
+}) {
+  const profile = TEAM_PROFILES[name];
+  const flag = flags[name] || "⚽";
+  const isHost = hosts.includes(name);
+
+  const groupLetter = Object.entries(groups).find(([, teams]) => teams.includes(name))?.[0] || null;
+  const groupMatches = gs.filter(m => m.t1 === name || m.t2 === name);
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  if (!profile) {
+    return (
+      <div className="drawer-overlay" onClick={onClose}>
+        <div className="drawer" onClick={e => e.stopPropagation()}>
+          <div className="drawer__header">
+            <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
+            <div className="drawer__flag">{flag}</div>
+            <h2 className="drawer__name">{name}</h2>
+          </div>
+          <div className="drawer__body">
+            <p style={{ textAlign: "center", color: "#5C6B62", padding: "40px 20px" }}>Profile data not available yet.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const byPos: Record<string, PlayerInfo[]> = {};
+  for (const p of profile.squad) {
+    if (!byPos[p.pos]) byPos[p.pos] = [];
+    byPos[p.pos].push(p);
+  }
+  const posOrder = ["GK", "DF", "MF", "FW"];
+
+  return (
+    <div className="drawer-overlay" onClick={onClose}>
+      <div className="drawer" onClick={e => e.stopPropagation()}>
+        <div className="drawer__header" style={{ background: profile.kitColors.primary, color: profile.kitColors.primary === "#FFFFFF" || profile.kitColors.primary === "#FFDF00" || profile.kitColors.primary === "#FCD116" || profile.kitColors.primary === "#FECC02" || profile.kitColors.primary === "#FFB81C" || profile.kitColors.primary === "#FFCD00" || profile.kitColors.primary === "#FF8200" || profile.kitColors.primary === "#FFD100" ? "#122019" : "#fff" }}>
+          <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
+          <div className="drawer__flag">{flag}</div>
+          <h2 className="drawer__name">{name}</h2>
+          {profile.nickname && <div className="drawer__nick">{profile.nickname}</div>}
+          {isHost && <span className="drawer__host">HOST NATION</span>}
+        </div>
+
+        <div className="drawer__body">
+          <div className="drawer__stats-grid">
+            <div className="drawer__stat">
+              <span className="drawer__stat-val">{profile.fifaRanking}</span>
+              <span className="drawer__stat-lbl">FIFA Rank</span>
+            </div>
+            <div className="drawer__stat">
+              <span className="drawer__stat-val">{profile.wcAppearances}</span>
+              <span className="drawer__stat-lbl">WC Apps</span>
+            </div>
+            <div className="drawer__stat">
+              <span className="drawer__stat-val">{profile.confederation}</span>
+              <span className="drawer__stat-lbl">Conf.</span>
+            </div>
+            {groupLetter && (
+              <div className="drawer__stat">
+                <span className="drawer__stat-val" style={{ color: gcolor[groupLetter] }}>{groupLetter}</span>
+                <span className="drawer__stat-lbl">Group</span>
+              </div>
+            )}
+          </div>
+
+          <div className="drawer__section">
+            <div className="drawer__badge">Best Finish</div>
+            <p className="drawer__best">{profile.bestFinish}</p>
+          </div>
+
+          <div className="drawer__section">
+            <h3 className="drawer__h3">History</h3>
+            <p className="drawer__text">{profile.history}</p>
+          </div>
+
+          <div className="drawer__section">
+            <h3 className="drawer__h3">Coach</h3>
+            <p className="drawer__text">{profile.coach}</p>
+          </div>
+
+          {groupMatches.length > 0 && (
+            <div className="drawer__section">
+              <h3 className="drawer__h3">Group Matches</h3>
+              {groupMatches.map(m => {
+                const d = parseISO(m.iso);
+                const opponent = m.t1 === name ? m.t2 : m.t1;
+                const isHome = m.t1 === name;
+                return (
+                  <div key={m.no} className="drawer__match">
+                    <div className="drawer__match-date">{d.getDate()} {MON[d.getMonth()]}</div>
+                    <div className="drawer__match-vs">
+                      <span>{flag}</span>
+                      <span className="drawer__match-ha">{isHome ? "vs" : "@"}</span>
+                      <span>{flags[opponent] || "⚽"} {opponent}</span>
+                    </div>
+                    <div className="drawer__match-time">{m.et}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="drawer__section">
+            <h3 className="drawer__h3">Squad</h3>
+            {posOrder.filter(pos => byPos[pos]).map(pos => (
+              <div key={pos}>
+                <div className="drawer__pos-head" style={{ color: posColor(pos) }}>{posLabel(pos)}s</div>
+                {byPos[pos].map(p => (
+                  <div key={p.name} className="drawer__player">
+                    <div className="drawer__player-main">
+                      {p.number && <span className="drawer__player-num">{p.number}</span>}
+                      <span className="drawer__player-name">{p.name}</span>
+                      <span className="drawer__player-pos" style={{ background: posColor(p.pos) }}>{p.pos}</span>
+                    </div>
+                    <div className="drawer__player-meta">
+                      <span>{p.club}</span>
+                      <span className="drawer__player-sep">&middot;</span>
+                      <span>Age {p.age}</span>
+                      <span className="drawer__player-sep">&middot;</span>
+                      <span>{p.caps} caps</span>
+                      {p.goals > 0 && <><span className="drawer__player-sep">&middot;</span><span>{p.goals} goals</span></>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

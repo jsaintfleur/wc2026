@@ -53,6 +53,49 @@ async function fetchFixtures(key: string): Promise<FixtureResponse> {
       };
       stats = { home: parse(rawStats[0]?.statistics || []), away: parse(rawStats[1]?.statistics || []) };
     }
+    const rawLineups = f.lineups || [];
+    let lineups = undefined;
+    if (rawLineups.length === 2) {
+      lineups = rawLineups.map((l: any) => ({
+        team: l.team?.name ?? "",
+        formation: l.formation ?? "",
+        startXI: (l.startXI || []).map((p: any) => ({
+          name: p.player?.name ?? "", number: p.player?.number ?? 0,
+          pos: p.player?.pos ?? "", grid: p.player?.grid ?? null,
+        })),
+        substitutes: (l.substitutes || []).map((p: any) => ({
+          name: p.player?.name ?? "", number: p.player?.number ?? 0,
+          pos: p.player?.pos ?? "", grid: p.player?.grid ?? null,
+        })),
+      }));
+    }
+
+    const rawPlayers = f.players || [];
+    let players = undefined;
+    if (rawPlayers.length) {
+      players = rawPlayers.flatMap((t: any) => {
+        const teamName = t.team?.name ?? "";
+        return (t.players || []).map((p: any) => {
+          const s = p.statistics?.[0] || {};
+          return {
+            name: p.player?.name ?? "", number: p.player?.number ?? 0, team: teamName,
+            minutes: s.games?.minutes ?? null, rating: s.games?.rating ?? null,
+            goals: s.goals?.total ?? 0, assists: s.goals?.assists ?? 0,
+            shots: s.shots?.total ?? 0, shotsOn: s.shots?.on ?? 0,
+            passes: s.passes?.total ?? 0, passAccuracy: s.passes?.accuracy ? `${s.passes.accuracy}%` : null,
+            tackles: s.tackles?.total ?? 0,
+            duels: s.duels?.total ?? 0, duelsWon: s.duels?.won ?? 0,
+            dribbles: s.dribbles?.attempts ?? 0, dribblesSuccess: s.dribbles?.success ?? 0,
+            foulsDrawn: s.fouls?.drawn ?? 0, foulsCommitted: s.fouls?.committed ?? 0,
+            yellowCards: s.cards?.yellow ?? 0, redCards: s.cards?.red ?? 0,
+            saves: s.goals?.saves ?? 0,
+          };
+        });
+      });
+    }
+
+    const referee = f.fixture?.referee ?? undefined;
+
     return {
       ts: Date.parse(f.fixture?.date),
       status: f.fixture?.status?.short,
@@ -65,7 +108,10 @@ async function fetchFixtures(key: string): Promise<FixtureResponse> {
       ga: f.goals?.away ?? null,
       fixtureId: f.fixture?.id ?? null,
       events: events.length ? events : undefined,
-      stats: stats,
+      stats,
+      lineups,
+      players: players?.length ? players : undefined,
+      referee,
     };
   });
   return { ok: true, fixtures, quota };

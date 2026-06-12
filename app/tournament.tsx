@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type MatchEvent } from "@/lib/data";
+import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type MatchEvent, type TeamLineup, type PlayerMatchStat } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
 import { TEAM_PROFILES, type TeamProfile, type PlayerInfo } from "@/lib/teams";
 
@@ -108,7 +108,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [tick, setTick] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
-  const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture } | null>(null);
+  const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture | null } | null>(null);
   const scrolledRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -202,9 +202,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         const m = data.gs.find(g => g.no === matchNo);
         if (m) {
           const f = findLive(m, fixtures);
-          if (f && (LIVE_STATUSES.has(f.status) || DONE_STATUSES.has(f.status))) {
-            setMatchDetail({ match: m, fixture: f });
-          }
+          setMatchDetail({ match: m, fixture: f });
         }
       }
     }
@@ -258,9 +256,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
   function liveChipHtml(): string {
     void tick;
     const s = liveStatus;
-    if (s === "off") return `<div class="livebar off" role="status">Live scores are ready — add your API-Football key on the server (see the README) to switch them on. The confirmed schedule is shown below.</div>`;
-    if (s === "paused") return `<div class="livebar paused" role="status"><span class="dotlive" style="background:#b58900"></span><b>Live updates paused</b> — free daily limit or a hiccup. Showing the latest known scores${liveTs ? ` (as of ${agoStr()})` : ""}.</div>`;
-    if (s === "nofix") return `<div class="livebar nofix" role="status"><b>Connected, but no World Cup fixtures returned.</b> The league or season may need adjusting — open <code>/api/live?debug=1</code> and see the README.</div>`;
+    if (s === "off") return `<div class="livebar idle" role="status">Scores update live during matches. The confirmed schedule is shown below.</div>`;
+    if (s === "paused") return `<div class="livebar paused" role="status"><span class="dotlive" style="background:#b58900"></span><b>Live updates paused</b> — showing the latest known scores${liveTs ? ` (as of ${agoStr()})` : ""}.</div>`;
+    if (s === "nofix") return `<div class="livebar idle" role="status">No fixtures in play right now. The confirmed schedule is shown below.</div>`;
     const n = fixtures.filter(f => LIVE_STATUSES.has(f.status)).length;
     if (s === "active" && n) return `<div class="livebar on" role="status" aria-live="polite"><span class="dotlive"></span>Live now — ${n} match${n > 1 ? "es" : ""} in play · updated ${agoStr()}</div>`;
     const nx = nextStart();
@@ -305,9 +303,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     } else {
       timeHtml = `<div class="lo">${esc(m.et)}</div>${m.local !== m.et ? `<div class="et">${esc(m.local)}</div>` : ""}`;
     }
-    const matchData = f ? ` data-match-id="${m.no}"` : "";
-    const hasDetail = f && (LIVE_STATUSES.has(f.status) || DONE_STATUSES.has(f.status));
-    return `<article class="tix${cls}${anim ? " rise" : ""}${hasDetail ? " tix--clickable" : ""}" style="--gc:${gc}"${matchData}>
+    return `<article class="tix${cls}${anim ? " rise" : ""} tix--clickable" style="--gc:${gc}" data-match-id="${m.no}">
       <span class="tix__tab"></span>
       <div class="tix__main">
         <div class="tix__teams">${teamRow(m.t1, g1, lead1)}${scorers1}<div class="vs">vs</div>${teamRow(m.t2, g2, lead2)}${scorers2}</div>
@@ -408,18 +404,15 @@ export default function Tournament({ data }: { data: TournamentData }) {
   function renderAbout(): string {
     return `<div class="about">
       <h3>About this app</h3>
-      <p>A mobile companion to the 2026 World Cup across Canada, Mexico and the United States. The schedule, venues and groups are fixed; <b>scores and group tables update live during matches</b> via API-Football. Filter the schedule by group, team, or search; a <span class="today-pill">Today</span> tag marks the current matchday.</p>
-      <h3>Live data &amp; limits</h3>
-      <p>Scores come from API-Football’s free tier, so updates run on a short delay and the app only polls while matches are in play, to stay within the daily limit. If the limit is reached it shows the latest known scores and a <b>paused</b> note rather than breaking. Data is unofficial; FIFA is the source of record.</p>
-      <h3>Knockout teams</h3>
+      <p>A mobile companion to the 2026 FIFA World Cup across Canada, Mexico and the United States. Scores, statistics, lineups and group tables update live during matches. Tap any match card for detailed statistics, lineups and a full timeline.</p>
+      <h3>Live scores &amp; stats</h3>
+      <p>Match data updates automatically during live matches. When no matches are in play, the confirmed schedule is displayed. All data is unofficial; FIFA is the source of record.</p>
+      <h3>Knockout bracket</h3>
       <p>Knockout dates, times and venues are confirmed; teams read <span class="legend">Pending FIFA Confirmation</span> and fill in automatically as the bracket is decided.</p>
-      <h3>How the schedule was validated</h3>
-      <p>Compiled 11 June 2026 and cross-checked against FIFA, FOX Sports, NBC Sports, ESPN, Al Jazeera, FourFourTwo and Wikipedia.</p>
-      <div class="callout"><b>Two source errors caught &amp; corrected</b>
-        <div class="fix"><span class="ic">1</span><div><b>Belgium v Egypt</b> (15 Jun) is at Lumen Field, <b>Seattle</b> — one source had Vancouver.</div></div>
-        <div class="fix"><span class="ic">2</span><div><b>Australia v Türkiye</b> (13 Jun) kicks off <b>9:00 PM PT / 12:00 AM ET</b>, corrected from a mislisted 6:00 PM PT.</div></div></div>
       <h3>Times</h3>
       <p>All times default to <b>U.S. Eastern (ET)</b>. Local venue time is shown below when different. <b>HOST</b> marks Canada, Mexico and the United States.</p>
+      <h3>Schedule accuracy</h3>
+      <p>Compiled 11 June 2026 and cross-checked against FIFA, FOX Sports, NBC Sports, ESPN, Al Jazeera, FourFourTwo and Wikipedia.</p>
     </div>`;
   }
 
@@ -537,7 +530,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       </div>
 
       {teamDrawer && <TeamDrawer name={teamDrawer} flags={data.flags} groups={data.groups} gcolor={data.gcolor} gs={data.gs} hosts={data.hosts} onClose={() => setTeamDrawer(null)} />}
-      {matchDetail && <MatchDetailDrawer match={matchDetail.match} fixture={matchDetail.fixture} flags={data.flags} venues={data.venues} gcolor={data.gcolor} onClose={() => setMatchDetail(null)} />}
+      {matchDetail && <MatchDetailDrawer match={matchDetail.match} initialFixture={matchDetail.fixture} fixtures={fixtures} flags={data.flags} venues={data.venues} gcolor={data.gcolor} vName={vName} findLive={findLive} onClose={() => setMatchDetail(null)} onTeamClick={(t) => { setMatchDetail(null); setTeamDrawer(t); }} />}
     </div>
   );
 }
@@ -717,16 +710,26 @@ function eventIcon(type: string, detail: string): string {
   return "•";
 }
 
-function MatchDetailDrawer({ match, fixture, flags, venues, gcolor, onClose }: {
+type MdTab = "summary" | "stats" | "lineups";
+
+function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gcolor, vName: _vName, findLive, onClose, onTeamClick }: {
   match: GroupStageMatch;
-  fixture: LiveFixture;
+  initialFixture: LiveFixture | null;
+  fixtures: LiveFixture[];
   flags: Record<string, string>;
   venues: Record<string, { common: string; fifa: string; city: string; country: string; cap: number }>;
   gcolor: Record<string, string>;
+  vName: (k: string) => string;
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   onClose: () => void;
+  onTeamClick: (team: string) => void;
 }) {
-  const isLive = LIVE_STATUSES.has(fixture.status);
-  const isDone = DONE_STATUSES.has(fixture.status);
+  const [tab, setTab] = useState<MdTab>("summary");
+  const fixture = findLive(match, fixtures) || initialFixture;
+
+  const isLive = fixture ? LIVE_STATUSES.has(fixture.status) : false;
+  const isDone = fixture ? DONE_STATUSES.has(fixture.status) : false;
+  const isUpcoming = !isLive && !isDone;
   const v = venues[match.v] || { common: "", city: "", country: "" };
 
   useEffect(() => {
@@ -739,8 +742,8 @@ function MatchDetailDrawer({ match, fixture, flags, venues, gcolor, onClose }: {
     };
   }, [onClose]);
 
-  const homeGoals = (fixture.events || []).filter(e => e.type === "Goal" && canon(e.team) === canon(fixture.home));
-  const awayGoals = (fixture.events || []).filter(e => e.type === "Goal" && canon(e.team) === canon(fixture.away));
+  const homeGoals = fixture ? (fixture.events || []).filter(e => e.type === "Goal" && canon(e.team) === canon(fixture.home)) : [];
+  const awayGoals = fixture ? (fixture.events || []).filter(e => e.type === "Goal" && canon(e.team) === canon(fixture.away)) : [];
 
   const statKeys = ["Ball Possession", "Total Shots", "Shots on Goal", "Corner Kicks", "Fouls", "Offsides", "Yellow Cards", "Red Cards", "Goalkeeper Saves", "Total passes", "Passes accurate"];
   const statLabels: Record<string, string> = {
@@ -750,34 +753,44 @@ function MatchDetailDrawer({ match, fixture, flags, venues, gcolor, onClose }: {
     "Total passes": "Passes", "Passes accurate": "Accurate Passes",
   };
 
-  return (
-    <div className="drawer-overlay" onClick={onClose}>
-      <div className="drawer md-drawer" onClick={e => e.stopPropagation()}>
-        <div className="md-drawer__header" style={{ borderTopColor: gcolor[match.g] || "#0A5C3E" }}>
-          <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
-          <div className="md-drawer__badge">Group {match.g} · Match #{match.no}</div>
+  const hasStats = fixture?.stats && (Object.keys(fixture.stats.home).length > 0);
+  const hasLineups = fixture?.lineups && fixture.lineups.length === 2;
 
-          <div className="md-drawer__score-row">
-            <div className="md-drawer__team">
-              <span className="md-drawer__flag">{flags[match.t1] || "⚽"}</span>
-              <span className="md-drawer__team-name">{match.t1}</span>
-            </div>
-            <div className="md-drawer__score">
-              <span className="md-drawer__goals">{fixture.gh ?? 0}</span>
-              <span className="md-drawer__sep">–</span>
-              <span className="md-drawer__goals">{fixture.ga ?? 0}</span>
-            </div>
-            <div className="md-drawer__team">
-              <span className="md-drawer__flag">{flags[match.t2] || "⚽"}</span>
-              <span className="md-drawer__team-name">{match.t2}</span>
-            </div>
+  function renderScoreHeader() {
+    return (
+      <div className="md-drawer__header" style={{ borderTopColor: gcolor[match.g] || "#0A5C3E" }}>
+        <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
+        <div className="md-drawer__badge">Group {match.g} · Match #{match.no}</div>
+
+        <div className="md-drawer__score-row">
+          <button className="md-drawer__team md-drawer__team--link" onClick={() => onTeamClick(match.t1)} aria-label={`View ${match.t1} profile`}>
+            <span className="md-drawer__flag">{flags[match.t1] || "⚽"}</span>
+            <span className="md-drawer__team-name">{match.t1}</span>
+          </button>
+          <div className="md-drawer__score">
+            {isUpcoming ? (
+              <span className="md-drawer__time-display">{match.et}</span>
+            ) : (
+              <>
+                <span className="md-drawer__goals">{fixture!.gh ?? 0}</span>
+                <span className="md-drawer__sep">–</span>
+                <span className="md-drawer__goals">{fixture!.ga ?? 0}</span>
+              </>
+            )}
           </div>
+          <button className="md-drawer__team md-drawer__team--link" onClick={() => onTeamClick(match.t2)} aria-label={`View ${match.t2} profile`}>
+            <span className="md-drawer__flag">{flags[match.t2] || "⚽"}</span>
+            <span className="md-drawer__team-name">{match.t2}</span>
+          </button>
+        </div>
 
-          <div className="md-drawer__status">
-            {isLive && <span className="md-drawer__live">{fixture.status === "HT" ? "HALF TIME" : `${fixture.elapsed}'`}</span>}
-            {isDone && <span className="md-drawer__ft">{fixture.status === "AET" ? "AFTER EXTRA TIME" : fixture.status === "PEN" ? "PENALTIES" : "FULL TIME"}</span>}
-          </div>
+        <div className="md-drawer__status">
+          {isLive && <span className="md-drawer__live">{fixture!.status === "HT" ? "HALF TIME" : `${fixture!.elapsed}'`}</span>}
+          {isDone && <span className="md-drawer__ft">{fixture!.status === "AET" ? "AFTER EXTRA TIME" : fixture!.status === "PEN" ? "PENALTIES" : "FULL TIME"}</span>}
+          {isUpcoming && <span className="md-drawer__upcoming">UPCOMING</span>}
+        </div>
 
+        {!isUpcoming && (homeGoals.length > 0 || awayGoals.length > 0) && (
           <div className="md-drawer__scorers-row">
             <div className="md-drawer__scorers-col">
               {homeGoals.map((g, i) => {
@@ -794,67 +807,237 @@ function MatchDetailDrawer({ match, fixture, flags, venues, gcolor, onClose }: {
               })}
             </div>
           </div>
+        )}
+
+        {!isUpcoming && (
+          <div className="md-tabs" role="tablist">
+            {(["summary", "stats", "lineups"] as MdTab[]).map(t => (
+              <button key={t} role="tab" aria-selected={tab === t} className={`md-tab${tab === t ? " md-tab--active" : ""}${t === "stats" && !hasStats ? " md-tab--disabled" : ""}${t === "lineups" && !hasLineups ? " md-tab--disabled" : ""}`}
+                onClick={() => { if (t === "stats" && !hasStats) return; if (t === "lineups" && !hasLineups) return; setTab(t); }}>
+                {t === "summary" ? "Summary" : t === "stats" ? "Stats" : "Lineups"}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderSummaryTab() {
+    return (
+      <>
+        <div className="md-drawer__venue">
+          {v.common} · {v.city}, {v.country}
+          <br />{match.et}{match.local !== match.et ? ` (${match.local})` : ""}
+          {fixture?.referee && <><br />Referee: {fixture.referee}</>}
         </div>
 
-        <div className="drawer__body">
-          <div className="md-drawer__venue">
-            📍 {v.common} · {v.city}, {v.country}
-            <br />{match.et}{match.local !== match.et ? ` (${match.local})` : ""}
+        {fixture?.events && fixture.events.length > 0 && (
+          <div className="drawer__section">
+            <h3 className="drawer__h3">Match Timeline</h3>
+            <div className="md-drawer__timeline">
+              {fixture.events.map((ev, i) => {
+                const isHome = canon(ev.team) === canon(match.t1);
+                const min = ev.extra ? `${ev.minute}+${ev.extra}'` : `${ev.minute}'`;
+                return (
+                  <div key={i} className={`md-drawer__event ${isHome ? "md-drawer__event--home" : "md-drawer__event--away"}`}>
+                    <span className="md-drawer__event-min">{min}</span>
+                    <span className="md-drawer__event-icon">{eventIcon(ev.type, ev.detail)}</span>
+                    <span className="md-drawer__event-text">
+                      {ev.player}
+                      {ev.type === "Goal" && ev.assist && <span className="md-drawer__event-assist"> (assist: {ev.assist})</span>}
+                      {ev.type === "Goal" && ev.detail === "Penalty" && <span className="md-drawer__event-detail"> PEN</span>}
+                      {ev.type === "Goal" && ev.detail === "Own Goal" && <span className="md-drawer__event-detail"> OG</span>}
+                      {ev.type === "subst" && ev.assist && <span className="md-drawer__event-assist"> ↩ {ev.assist}</span>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
+        )}
 
-          {fixture.events && fixture.events.length > 0 && (
-            <div className="drawer__section">
-              <h3 className="drawer__h3">Match Timeline</h3>
-              <div className="md-drawer__timeline">
-                {fixture.events.map((ev, i) => {
-                  const isHome = canon(ev.team) === canon(match.t1);
-                  const min = ev.extra ? `${ev.minute}+${ev.extra}'` : `${ev.minute}'`;
-                  return (
-                    <div key={i} className={`md-drawer__event ${isHome ? "md-drawer__event--home" : "md-drawer__event--away"}`}>
-                      <span className="md-drawer__event-min">{min}</span>
-                      <span className="md-drawer__event-icon">{eventIcon(ev.type, ev.detail)}</span>
-                      <span className="md-drawer__event-text">
-                        {ev.player}
-                        {ev.type === "Goal" && ev.assist && <span className="md-drawer__event-assist"> (assist: {ev.assist})</span>}
-                        {ev.type === "Goal" && ev.detail === "Penalty" && <span className="md-drawer__event-detail"> PEN</span>}
-                        {ev.type === "Goal" && ev.detail === "Own Goal" && <span className="md-drawer__event-detail"> OG</span>}
-                        {ev.type === "subst" && ev.assist && <span className="md-drawer__event-assist"> ↩ {ev.assist}</span>}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {fixture.stats && (
-            <div className="drawer__section">
-              <h3 className="drawer__h3">Match Stats</h3>
-              <div className="md-drawer__stats">
-                {statKeys.filter(k => fixture.stats!.home[k] != null || fixture.stats!.away[k] != null).map(k => {
-                  const hv = fixture.stats!.home[k];
-                  const av = fixture.stats!.away[k];
-                  const hNum = typeof hv === "string" ? parseInt(hv) : (hv ?? 0);
-                  const aNum = typeof av === "string" ? parseInt(av) : (av ?? 0);
-                  const total = (typeof hNum === "number" ? hNum : 0) + (typeof aNum === "number" ? aNum : 0);
-                  const hPct = total > 0 ? (typeof hNum === "number" ? hNum : 0) / total * 100 : 50;
-                  return (
-                    <div key={k} className="md-drawer__stat-row">
-                      <span className="md-drawer__stat-val">{hv ?? 0}</span>
-                      <div className="md-drawer__stat-bar-wrap">
-                        <div className="md-drawer__stat-label">{statLabels[k] || k}</div>
-                        <div className="md-drawer__stat-bar">
-                          <div className="md-drawer__stat-bar-h" style={{ width: `${hPct}%` }} />
-                          <div className="md-drawer__stat-bar-a" style={{ width: `${100 - hPct}%` }} />
-                        </div>
+        {hasStats && (
+          <div className="drawer__section">
+            <h3 className="drawer__h3">Key Stats</h3>
+            <div className="md-drawer__stats">
+              {["Ball Possession", "Total Shots", "Shots on Goal", "Corner Kicks", "Fouls"].filter(k => fixture!.stats!.home[k] != null).map(k => {
+                const hv = fixture!.stats!.home[k];
+                const av = fixture!.stats!.away[k];
+                const hNum = typeof hv === "string" ? parseInt(hv) : (hv ?? 0);
+                const aNum = typeof av === "string" ? parseInt(av) : (av ?? 0);
+                const total = (typeof hNum === "number" ? hNum : 0) + (typeof aNum === "number" ? aNum : 0);
+                const hPct = total > 0 ? (typeof hNum === "number" ? hNum : 0) / total * 100 : 50;
+                return (
+                  <div key={k} className="md-drawer__stat-row">
+                    <span className="md-drawer__stat-val">{hv ?? 0}</span>
+                    <div className="md-drawer__stat-bar-wrap">
+                      <div className="md-drawer__stat-label">{statLabels[k] || k}</div>
+                      <div className="md-drawer__stat-bar">
+                        <div className="md-drawer__stat-bar-h" style={{ width: `${hPct}%` }} />
+                        <div className="md-drawer__stat-bar-a" style={{ width: `${100 - hPct}%` }} />
                       </div>
-                      <span className="md-drawer__stat-val">{av ?? 0}</span>
                     </div>
-                  );
-                })}
-              </div>
+                    <span className="md-drawer__stat-val">{av ?? 0}</span>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  function renderStatsTab() {
+    if (!fixture?.stats) return <div className="md-drawer__empty">Statistics not available yet.</div>;
+    return (
+      <div className="drawer__section" style={{ marginTop: 0 }}>
+        <div className="md-drawer__stats-header">
+          <span>{flags[match.t1] || "⚽"} {match.t1}</span>
+          <span>{match.t2} {flags[match.t2] || "⚽"}</span>
+        </div>
+        <div className="md-drawer__stats">
+          {statKeys.filter(k => fixture.stats!.home[k] != null || fixture.stats!.away[k] != null).map(k => {
+            const hv = fixture.stats!.home[k];
+            const av = fixture.stats!.away[k];
+            const hNum = typeof hv === "string" ? parseInt(hv) : (hv ?? 0);
+            const aNum = typeof av === "string" ? parseInt(av) : (av ?? 0);
+            const total = (typeof hNum === "number" ? hNum : 0) + (typeof aNum === "number" ? aNum : 0);
+            const hPct = total > 0 ? (typeof hNum === "number" ? hNum : 0) / total * 100 : 50;
+            return (
+              <div key={k} className="md-drawer__stat-row">
+                <span className="md-drawer__stat-val">{hv ?? 0}</span>
+                <div className="md-drawer__stat-bar-wrap">
+                  <div className="md-drawer__stat-label">{statLabels[k] || k}</div>
+                  <div className="md-drawer__stat-bar">
+                    <div className="md-drawer__stat-bar-h" style={{ width: `${hPct}%` }} />
+                    <div className="md-drawer__stat-bar-a" style={{ width: `${100 - hPct}%` }} />
+                  </div>
+                </div>
+                <span className="md-drawer__stat-val">{av ?? 0}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {fixture.players && fixture.players.length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <h3 className="drawer__h3">Top Performers</h3>
+            <div className="md-drawer__performers">
+              {[...fixture.players].filter(p => p.rating).sort((a, b) => parseFloat(b.rating || "0") - parseFloat(a.rating || "0")).slice(0, 6).map((p, i) => (
+                <div key={i} className="md-drawer__performer">
+                  <div className="md-drawer__performer-rating">{parseFloat(p.rating || "0").toFixed(1)}</div>
+                  <div className="md-drawer__performer-info">
+                    <span className="md-drawer__performer-name">{p.name}</span>
+                    <span className="md-drawer__performer-team">{flags[p.team] || "⚽"} {p.team}</span>
+                  </div>
+                  <div className="md-drawer__performer-stats">
+                    {p.goals > 0 && <span>{p.goals}G</span>}
+                    {p.assists > 0 && <span>{p.assists}A</span>}
+                    {p.shotsOn > 0 && <span>{p.shotsOn} SoT</span>}
+                    {p.tackles > 0 && <span>{p.tackles} Tkl</span>}
+                    {p.passAccuracy && <span>{p.passAccuracy} Pass</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderLineupTeam(lineup: TeamLineup, teamName: string) {
+    return (
+      <div className="md-lineup">
+        <div className="md-lineup__header">
+          <span className="md-lineup__flag">{flags[teamName] || "⚽"}</span>
+          <span className="md-lineup__team">{teamName}</span>
+          <span className="md-lineup__formation">{lineup.formation}</span>
+        </div>
+        <div className="md-lineup__section-label">Starting XI</div>
+        {lineup.startXI.map((p, i) => {
+          const playerStats = fixture?.players?.find(ps => ps.number === p.number && canon(ps.team) === canon(teamName));
+          return (
+            <div key={i} className="md-lineup__player">
+              <span className="md-lineup__num">{p.number}</span>
+              <span className="md-lineup__name">{p.name}</span>
+              <span className="md-lineup__pos" data-pos={p.pos}>{p.pos}</span>
+              {playerStats?.rating && <span className="md-lineup__rating">{parseFloat(playerStats.rating).toFixed(1)}</span>}
+              {playerStats && (playerStats.goals > 0 || playerStats.yellowCards > 0 || playerStats.redCards > 0) && (
+                <span className="md-lineup__icons">
+                  {playerStats.goals > 0 && "⚽"}
+                  {playerStats.yellowCards > 0 && "🟨"}
+                  {playerStats.redCards > 0 && "🟥"}
+                </span>
+              )}
+            </div>
+          );
+        })}
+        {lineup.substitutes.length > 0 && (
+          <>
+            <div className="md-lineup__section-label">Substitutes</div>
+            {lineup.substitutes.map((p, i) => (
+              <div key={i} className="md-lineup__player md-lineup__player--sub">
+                <span className="md-lineup__num">{p.number}</span>
+                <span className="md-lineup__name">{p.name}</span>
+                <span className="md-lineup__pos" data-pos={p.pos}>{p.pos}</span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  function renderLineupsTab() {
+    if (!fixture?.lineups || fixture.lineups.length < 2) return <div className="md-drawer__empty">Lineups not available yet.</div>;
+    return (
+      <div className="drawer__section" style={{ marginTop: 0 }}>
+        {renderLineupTeam(fixture.lineups[0], fixture.lineups[0].team)}
+        <div style={{ height: 16 }} />
+        {renderLineupTeam(fixture.lineups[1], fixture.lineups[1].team)}
+      </div>
+    );
+  }
+
+  function renderUpcomingBody() {
+    return (
+      <>
+        <div className="md-drawer__venue">
+          {v.common} · {v.city}, {v.country}
+          <br />{match.et}{match.local !== match.et ? ` (${match.local})` : ""}
+        </div>
+        <div className="md-drawer__prematch">
+          <div className="md-drawer__prematch-row">
+            <button className="md-drawer__prematch-team" onClick={() => onTeamClick(match.t1)}>
+              <span className="md-drawer__prematch-flag">{flags[match.t1] || "⚽"}</span>
+              <span>{match.t1}</span>
+              <span className="md-drawer__prematch-arrow">→</span>
+            </button>
+          </div>
+          <div className="md-drawer__prematch-row">
+            <button className="md-drawer__prematch-team" onClick={() => onTeamClick(match.t2)}>
+              <span className="md-drawer__prematch-flag">{flags[match.t2] || "⚽"}</span>
+              <span>{match.t2}</span>
+              <span className="md-drawer__prematch-arrow">→</span>
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="drawer-overlay" onClick={onClose}>
+      <div className="drawer md-drawer" onClick={e => e.stopPropagation()}>
+        {renderScoreHeader()}
+        <div className="drawer__body">
+          {isUpcoming && renderUpcomingBody()}
+          {!isUpcoming && tab === "summary" && renderSummaryTab()}
+          {!isUpcoming && tab === "stats" && renderStatsTab()}
+          {!isUpcoming && tab === "lineups" && renderLineupsTab()}
         </div>
       </div>
     </div>

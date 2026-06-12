@@ -52,12 +52,57 @@ export const MOCK_FIXTURES: LiveFixture[] = [
     "stats": {"home": {"Ball Possession": "58%", "Total Shots": 14, "Shots on Goal": 6, "Corner Kicks": 7, "Fouls": 12}, "away": {"Ball Possession": "42%", "Total Shots": 8, "Shots on Goal": 2, "Corner Kicks": 3, "Fouls": 15}}
   },
   {"ts": 1781229600000, "status": "2H", "elapsed": 67, "venue": "Estadio Akron", "round": "Group Stage - 1", "home": "Korea Republic", "away": "Czech Republic", "gh": 1, "ga": 1,
+    "referee": "Daniele Orsato",
     "events": [
       {"minute": 12, "extra": null, "type": "Goal", "detail": "Normal Goal", "player": "Son Heung-min", "assist": "Lee Kang-in", "team": "Korea Republic"},
       {"minute": 34, "extra": null, "type": "Card", "detail": "Yellow Card", "player": "Kim Min-jae", "assist": null, "team": "Korea Republic"},
       {"minute": 55, "extra": null, "type": "Goal", "detail": "Normal Goal", "player": "Patrik Schick", "assist": "Adam Hložek", "team": "Czech Republic"}
     ],
-    "stats": {"home": {"Ball Possession": "52%", "Total Shots": 11, "Shots on Goal": 4, "Corner Kicks": 5, "Fouls": 10}, "away": {"Ball Possession": "48%", "Total Shots": 9, "Shots on Goal": 3, "Corner Kicks": 4, "Fouls": 11}}
+    "stats": {"home": {"Ball Possession": "52%", "Total Shots": 11, "Shots on Goal": 4, "Corner Kicks": 5, "Fouls": 10, "Offsides": 2, "Passes accurate": "312 (84%)", "Total passes": 372}, "away": {"Ball Possession": "48%", "Total Shots": 9, "Shots on Goal": 3, "Corner Kicks": 4, "Fouls": 11, "Offsides": 1, "Passes accurate": "288 (81%)", "Total passes": 356}},
+    "lineups": [
+      {"team": "Korea Republic", "formation": "4-2-3-1", "startXI": [
+        {"name": "Kim Seung-gyu", "number": 1, "pos": "G", "grid": "1:1"},
+        {"name": "Kim Moon-hwan", "number": 2, "pos": "D", "grid": "2:4"},
+        {"name": "Kim Min-jae", "number": 3, "pos": "D", "grid": "2:3"},
+        {"name": "Kim Young-gwon", "number": 4, "pos": "D", "grid": "2:2"},
+        {"name": "Kim Jin-su", "number": 6, "pos": "D", "grid": "2:1"},
+        {"name": "Hwang In-beom", "number": 8, "pos": "M", "grid": "3:2"},
+        {"name": "Jung Woo-young", "number": 5, "pos": "M", "grid": "3:1"},
+        {"name": "Lee Kang-in", "number": 10, "pos": "M", "grid": "4:3"},
+        {"name": "Hwang Hee-chan", "number": 11, "pos": "M", "grid": "4:1"},
+        {"name": "Jeong Sang-bin", "number": 17, "pos": "M", "grid": "4:2"},
+        {"name": "Son Heung-min", "number": 7, "pos": "F", "grid": "5:1"}
+      ], "substitutes": [
+        {"name": "Jo Hyeon-woo", "number": 21, "pos": "G", "grid": null},
+        {"name": "Cho Gue-sung", "number": 9, "pos": "F", "grid": null},
+        {"name": "Lee Jae-sung", "number": 14, "pos": "M", "grid": null}
+      ]},
+      {"team": "Czech Republic", "formation": "3-4-3", "startXI": [
+        {"name": "Jindřich Staněk", "number": 1, "pos": "G", "grid": "1:1"},
+        {"name": "Vladimír Coufal", "number": 5, "pos": "D", "grid": "2:3"},
+        {"name": "Robin Hranáč", "number": 4, "pos": "D", "grid": "2:2"},
+        {"name": "Ladislav Krejčí", "number": 3, "pos": "D", "grid": "2:1"},
+        {"name": "David Jurásek", "number": 2, "pos": "M", "grid": "3:4"},
+        {"name": "Tomáš Souček", "number": 6, "pos": "M", "grid": "3:3"},
+        {"name": "Lukáš Provod", "number": 8, "pos": "M", "grid": "3:2"},
+        {"name": "David Douděra", "number": 14, "pos": "M", "grid": "3:1"},
+        {"name": "Patrik Schick", "number": 9, "pos": "F", "grid": "4:2"},
+        {"name": "Adam Hložek", "number": 10, "pos": "F", "grid": "4:3"},
+        {"name": "Mojmír Chytil", "number": 11, "pos": "F", "grid": "4:1"}
+      ], "substitutes": [
+        {"name": "Matěj Kovář", "number": 23, "pos": "G", "grid": null},
+        {"name": "Pavel Šulc", "number": 16, "pos": "M", "grid": null},
+        {"name": "Ondřej Lingr", "number": 18, "pos": "F", "grid": null}
+      ]}
+    ],
+    "players": [
+      {"name": "Son Heung-min", "number": 7, "team": "Korea Republic", "minutes": 67, "rating": "7.8", "goals": 1, "assists": 0, "shots": 3, "shotsOn": 2, "passes": 38, "passAccuracy": "86%", "tackles": 1, "duels": 8, "duelsWon": 5, "dribbles": 3, "dribblesSuccess": 2, "foulsDrawn": 2, "foulsCommitted": 0, "yellowCards": 0, "redCards": 0, "saves": 0},
+      {"name": "Lee Kang-in", "number": 10, "team": "Korea Republic", "minutes": 67, "rating": "7.5", "goals": 0, "assists": 1, "shots": 2, "shotsOn": 1, "passes": 45, "passAccuracy": "88%", "tackles": 2, "duels": 6, "duelsWon": 3, "dribbles": 4, "dribblesSuccess": 3, "foulsDrawn": 1, "foulsCommitted": 1, "yellowCards": 0, "redCards": 0, "saves": 0},
+      {"name": "Kim Min-jae", "number": 3, "team": "Korea Republic", "minutes": 67, "rating": "6.4", "goals": 0, "assists": 0, "shots": 0, "shotsOn": 0, "passes": 52, "passAccuracy": "91%", "tackles": 4, "duels": 10, "duelsWon": 7, "dribbles": 0, "dribblesSuccess": 0, "foulsDrawn": 0, "foulsCommitted": 2, "yellowCards": 1, "redCards": 0, "saves": 0},
+      {"name": "Patrik Schick", "number": 9, "team": "Czech Republic", "minutes": 67, "rating": "7.6", "goals": 1, "assists": 0, "shots": 4, "shotsOn": 2, "passes": 18, "passAccuracy": "78%", "tackles": 0, "duels": 7, "duelsWon": 3, "dribbles": 1, "dribblesSuccess": 0, "foulsDrawn": 2, "foulsCommitted": 1, "yellowCards": 0, "redCards": 0, "saves": 0},
+      {"name": "Adam Hložek", "number": 10, "team": "Czech Republic", "minutes": 67, "rating": "7.3", "goals": 0, "assists": 1, "shots": 2, "shotsOn": 1, "passes": 24, "passAccuracy": "83%", "tackles": 1, "duels": 9, "duelsWon": 4, "dribbles": 3, "dribblesSuccess": 2, "foulsDrawn": 1, "foulsCommitted": 0, "yellowCards": 0, "redCards": 0, "saves": 0},
+      {"name": "Tomáš Souček", "number": 6, "team": "Czech Republic", "minutes": 67, "rating": "7.0", "goals": 0, "assists": 0, "shots": 1, "shotsOn": 0, "passes": 42, "passAccuracy": "85%", "tackles": 5, "duels": 12, "duelsWon": 8, "dribbles": 0, "dribblesSuccess": 0, "foulsDrawn": 1, "foulsCommitted": 2, "yellowCards": 0, "redCards": 0, "saves": 0}
+    ]
   },
   {"ts": 1781798400000, "status": "FT", "elapsed": 90, "venue": "Mercedes-Benz Stadium", "round": "Group Stage - 2", "home": "Czech Republic", "away": "South Africa", "gh": 3, "ga": 1,
     "events": [
@@ -94,6 +139,44 @@ export interface MatchStats {
   away: Record<string, string | number | null>;
 }
 
+export interface LineupPlayer {
+  name: string;
+  number: number;
+  pos: string;
+  grid: string | null;
+}
+
+export interface TeamLineup {
+  team: string;
+  formation: string;
+  startXI: LineupPlayer[];
+  substitutes: LineupPlayer[];
+}
+
+export interface PlayerMatchStat {
+  name: string;
+  number: number;
+  team: string;
+  minutes: number | null;
+  rating: string | null;
+  goals: number;
+  assists: number;
+  shots: number;
+  shotsOn: number;
+  passes: number;
+  passAccuracy: string | null;
+  tackles: number;
+  duels: number;
+  duelsWon: number;
+  dribbles: number;
+  dribblesSuccess: number;
+  foulsDrawn: number;
+  foulsCommitted: number;
+  yellowCards: number;
+  redCards: number;
+  saves: number;
+}
+
 export interface LiveFixture {
   ts: number;
   status: string;
@@ -106,5 +189,8 @@ export interface LiveFixture {
   ga: number | null;
   events?: MatchEvent[];
   stats?: MatchStats;
+  lineups?: TeamLineup[];
+  players?: PlayerMatchStat[];
+  referee?: string;
   fixtureId?: number;
 }

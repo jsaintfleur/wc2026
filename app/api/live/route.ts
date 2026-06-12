@@ -32,17 +32,42 @@ async function fetchFixtures(key: string): Promise<FixtureResponse> {
     remaining: r.headers.get("x-ratelimit-requests-remaining"),
   };
   if (!r.ok) return { ok: false, http: r.status, errors: body.errors || null, quota };
-  const fixtures = (body.response || []).map((f: Record<string, Record<string, Record<string, unknown>>>) => ({
-    ts: Date.parse(f.fixture.date as unknown as string),
-    status: f.fixture.status && (f.fixture.status as Record<string, unknown>).short,
-    elapsed: f.fixture.status && (f.fixture.status as Record<string, unknown>).elapsed,
-    venue: f.fixture.venue && (f.fixture.venue as Record<string, unknown>).name,
-    round: f.league && (f.league as Record<string, unknown>).round,
-    home: f.teams && f.teams.home && (f.teams.home as Record<string, unknown>).name,
-    away: f.teams && f.teams.away && (f.teams.away as Record<string, unknown>).name,
-    gh: f.goals ? (f.goals as Record<string, unknown>).home : null,
-    ga: f.goals ? (f.goals as Record<string, unknown>).away : null,
-  }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fixtures = (body.response || []).map((f: any) => {
+    const events = (f.events || []).map((e: any) => ({
+      minute: e.time?.elapsed ?? 0,
+      extra: e.time?.extra ?? null,
+      type: e.type,
+      detail: e.detail,
+      player: e.player?.name ?? "",
+      assist: e.assist?.name ?? null,
+      team: e.team?.name ?? "",
+    }));
+    const rawStats = f.statistics || [];
+    let stats = undefined;
+    if (rawStats.length === 2) {
+      const parse = (arr: any[]) => {
+        const out: Record<string, string | number | null> = {};
+        for (const s of arr) out[s.type] = s.value;
+        return out;
+      };
+      stats = { home: parse(rawStats[0]?.statistics || []), away: parse(rawStats[1]?.statistics || []) };
+    }
+    return {
+      ts: Date.parse(f.fixture?.date),
+      status: f.fixture?.status?.short,
+      elapsed: f.fixture?.status?.elapsed,
+      venue: f.fixture?.venue?.name,
+      round: f.league?.round,
+      home: f.teams?.home?.name,
+      away: f.teams?.away?.name,
+      gh: f.goals?.home ?? null,
+      ga: f.goals?.away ?? null,
+      fixtureId: f.fixture?.id ?? null,
+      events: events.length ? events : undefined,
+      stats: stats,
+    };
+  });
   return { ok: true, fixtures, quota };
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch } from "@/lib/data";
+import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type MatchEvent } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
 import { TEAM_PROFILES, type TeamProfile, type PlayerInfo } from "@/lib/teams";
 
@@ -108,6 +108,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [tick, setTick] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
+  const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture } | null>(null);
   const scrolledRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -142,7 +143,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const schedule = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (isMock()) return;
-    const ms = liveStatus === "active" ? 45000 : 180000;
+    const ms = liveStatus === "active" ? 30000 : 180000;
     timerRef.current = setInterval(() => { pollLive(); }, ms);
   }, [liveStatus, pollLive]);
 
@@ -188,16 +189,28 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }, []);
 
   useEffect(() => {
-    function handleTeamClick(e: MouseEvent) {
-      const target = (e.target as HTMLElement).closest("[data-team]") as HTMLElement | null;
-      if (target) {
+    function handleClick(e: MouseEvent) {
+      const teamEl = (e.target as HTMLElement).closest("[data-team]") as HTMLElement | null;
+      if (teamEl) {
         e.preventDefault();
-        setTeamDrawer(target.dataset.team || null);
+        setTeamDrawer(teamEl.dataset.team || null);
+        return;
+      }
+      const matchEl = (e.target as HTMLElement).closest("[data-match-id]") as HTMLElement | null;
+      if (matchEl && !(e.target as HTMLElement).closest("[data-team]")) {
+        const matchNo = parseInt(matchEl.dataset.matchId || "0", 10);
+        const m = data.gs.find(g => g.no === matchNo);
+        if (m) {
+          const f = findLive(m, fixtures);
+          if (f && (LIVE_STATUSES.has(f.status) || DONE_STATUSES.has(f.status))) {
+            setMatchDetail({ match: m, fixture: f });
+          }
+        }
       }
     }
-    document.addEventListener("click", handleTeamClick);
-    return () => document.removeEventListener("click", handleTeamClick);
-  }, []);
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [fixtures, data.gs]);
 
   const today = todayISO();
   const tomorrow = tomorrowISO();
@@ -261,10 +274,23 @@ export default function Tournament({ data }: { data: TournamentData }) {
     return `<div class="team${lead ? " lead" : ""}"><span class="fl">${fl(t)}</span><a class="nm teamlink" data-team="${esc(t)}" href="#">${esc(t)}</a>${host}${goal}</div>`;
   }
 
+  function goalScorers(events: MatchEvent[] | undefined, teamName: string): string {
+    if (!events) return "";
+    const goals = events.filter(e => e.type === "Goal" && canon(e.team) === canon(teamName));
+    if (!goals.length) return "";
+    const names = goals.map(g => {
+      const surname = g.player.split(" ").pop() || g.player;
+      const min = g.extra ? `${g.minute}+${g.extra}'` : `${g.minute}'`;
+      const pen = g.detail === "Penalty" ? " (P)" : g.detail === "Own Goal" ? " (OG)" : "";
+      return `${esc(surname)} ${min}${pen}`;
+    });
+    return `<div class="scorers">${names.join(", ")}</div>`;
+  }
+
   function tixCard(m: GroupStageMatch, anim: boolean): string {
     const v = ven(m.v), gc = data.gcolor[m.g];
     const f = findLive(m, fixtures);
-    let timeHtml: string, g1 = "", g2 = "", cls = "";
+    let timeHtml: string, g1 = "", g2 = "", cls = "", scorers1 = "", scorers2 = "";
     let lead1 = false, lead2 = false;
     if (f && (LIVE_STATUSES.has(f.status) || DONE_STATUSES.has(f.status))) {
       const gg = goalsFor(m, f);
@@ -274,13 +300,17 @@ export default function Tournament({ data }: { data: TournamentData }) {
       lead1 = a > b; lead2 = b > a;
       if (LIVE_STATUSES.has(f.status)) cls = " islive";
       timeHtml = `<div class="sc">${a}–${b}</div>${liveBadge(f)}`;
+      scorers1 = goalScorers(f.events, m.t1);
+      scorers2 = goalScorers(f.events, m.t2);
     } else {
-      timeHtml = `<div class="lo">${esc(m.local)}</div>${m.local !== m.et ? `<div class="et">${esc(m.et)}</div>` : ""}`;
+      timeHtml = `<div class="lo">${esc(m.et)}</div>${m.local !== m.et ? `<div class="et">${esc(m.local)}</div>` : ""}`;
     }
-    return `<article class="tix${cls}${anim ? " rise" : ""}" style="--gc:${gc}">
+    const matchData = f ? ` data-match-id="${m.no}"` : "";
+    const hasDetail = f && (LIVE_STATUSES.has(f.status) || DONE_STATUSES.has(f.status));
+    return `<article class="tix${cls}${anim ? " rise" : ""}${hasDetail ? " tix--clickable" : ""}" style="--gc:${gc}"${matchData}>
       <span class="tix__tab"></span>
       <div class="tix__main">
-        <div class="tix__teams">${teamRow(m.t1, g1, lead1)}<div class="vs">vs</div>${teamRow(m.t2, g2, lead2)}</div>
+        <div class="tix__teams">${teamRow(m.t1, g1, lead1)}${scorers1}<div class="vs">vs</div>${teamRow(m.t2, g2, lead2)}${scorers2}</div>
         <div class="tix__time">${timeHtml}</div>
       </div>
       <div class="tix__foot"><span class="gbadge">${m.g}</span>
@@ -349,7 +379,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         if (LIVE_STATUSES.has(f.status)) cls = " islive";
         const right = live
           ? `<div class="kotix__time"><div class="sc">${f.gh ?? 0}–${f.ga ?? 0}</div>${liveBadge(f)}</div>`
-          : `<div class="kotix__time"><div class="lo">${esc(k.local)}</div>${k.local !== k.et ? `<div class="et">${esc(k.et)}</div>` : ""}</div>`;
+          : `<div class="kotix__time"><div class="lo">${esc(k.et)}</div>${k.local !== k.et ? `<div class="et">${esc(k.local)}</div>` : ""}</div>`;
         top = `<div class="kotix__top"><div class="koteams">
           <div class="team"><span class="fl">${fl(a)}</span><span class="nm">${esc(a)}</span></div>
           <div class="vs">vs</div>
@@ -359,7 +389,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       }
       html += `<article class="kotix${cls}${anim ? " rise" : ""}">${top}
         <div class="kotix__foot"><span>📍</span><span class="ven">${esc(v.common)}</span>· ${esc(v.city)}, ${esc(v.country)}
-        <span class="dt">${DOW[t.getDay()]} ${t.getDate()} ${MON[t.getMonth()]} · ${esc(k.local)}${k.local !== k.et ? ` (${esc(k.et)})` : ""}</span></div></article>`;
+        <span class="dt">${DOW[t.getDay()]} ${t.getDate()} ${MON[t.getMonth()]} · ${esc(k.et)}${k.local !== k.et ? ` (${esc(k.local)})` : ""}</span></div></article>`;
     }
     html += `<p style="font-size:12.5px;color:var(--muted);margin:14px 2px 0">Dates, times and venues are confirmed. Teams fill in automatically as results come in; until then they read “Pending FIFA Confirmation.” Round-of-32 pairings follow FIFA’s pre-set bracket.</p></div>`;
     return html;
@@ -389,7 +419,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         <div class="fix"><span class="ic">1</span><div><b>Belgium v Egypt</b> (15 Jun) is at Lumen Field, <b>Seattle</b> — one source had Vancouver.</div></div>
         <div class="fix"><span class="ic">2</span><div><b>Australia v Türkiye</b> (13 Jun) kicks off <b>9:00 PM PT / 12:00 AM ET</b>, corrected from a mislisted 6:00 PM PT.</div></div></div>
       <h3>Times</h3>
-      <p>Each match shows local kick-off and U.S. Eastern (ET). <b>HOST</b> marks Canada, Mexico and the United States.</p>
+      <p>All times default to <b>U.S. Eastern (ET)</b>. Local venue time is shown below when different. <b>HOST</b> marks Canada, Mexico and the United States.</p>
     </div>`;
   }
 
@@ -507,6 +537,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       </div>
 
       {teamDrawer && <TeamDrawer name={teamDrawer} flags={data.flags} groups={data.groups} gcolor={data.gcolor} gs={data.gs} hosts={data.hosts} onClose={() => setTeamDrawer(null)} />}
+      {matchDetail && <MatchDetailDrawer match={matchDetail.match} fixture={matchDetail.fixture} flags={data.flags} venues={data.venues} gcolor={data.gcolor} onClose={() => setMatchDetail(null)} />}
     </div>
   );
 }
@@ -569,10 +600,15 @@ function TeamDrawer({ name, flags, groups, gcolor, gs, hosts, onClose }: {
   }
   const posOrder = ["GK", "DF", "MF", "FW"];
 
+  const headerTextColor = (() => {
+    const light = ["#FFFFFF","#FFDF00","#FCD116","#FECC02","#FFB81C","#FFCD00","#FF8200","#FFD100"];
+    return light.includes(profile.kitColors.primary) ? "#122019" : "#fff";
+  })();
+
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <div className="drawer" onClick={e => e.stopPropagation()}>
-        <div className="drawer__header" style={{ background: profile.kitColors.primary, color: profile.kitColors.primary === "#FFFFFF" || profile.kitColors.primary === "#FFDF00" || profile.kitColors.primary === "#FCD116" || profile.kitColors.primary === "#FECC02" || profile.kitColors.primary === "#FFB81C" || profile.kitColors.primary === "#FFCD00" || profile.kitColors.primary === "#FF8200" || profile.kitColors.primary === "#FFD100" ? "#122019" : "#fff" }}>
+        <div className="drawer__header" style={{ background: profile.kitColors.primary, color: headerTextColor }}>
           <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
           <div className="drawer__flag">{flag}</div>
           <h2 className="drawer__name">{name}</h2>
@@ -664,6 +700,161 @@ function TeamDrawer({ name, flags, groups, gcolor, gs, hosts, onClose }: {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function eventIcon(type: string, detail: string): string {
+  if (type === "Goal" && detail === "Own Goal") return "🔴";
+  if (type === "Goal" && detail === "Penalty") return "⚽️";
+  if (type === "Goal") return "⚽";
+  if (type === "Card" && detail.includes("Red")) return "🟥";
+  if (type === "Card") return "🟨";
+  if (type === "subst") return "🔄";
+  if (type === "Var") return "📺";
+  return "•";
+}
+
+function MatchDetailDrawer({ match, fixture, flags, venues, gcolor, onClose }: {
+  match: GroupStageMatch;
+  fixture: LiveFixture;
+  flags: Record<string, string>;
+  venues: Record<string, { common: string; fifa: string; city: string; country: string; cap: number }>;
+  gcolor: Record<string, string>;
+  onClose: () => void;
+}) {
+  const isLive = LIVE_STATUSES.has(fixture.status);
+  const isDone = DONE_STATUSES.has(fixture.status);
+  const v = venues[match.v] || { common: "", city: "", country: "" };
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  const homeGoals = (fixture.events || []).filter(e => e.type === "Goal" && canon(e.team) === canon(fixture.home));
+  const awayGoals = (fixture.events || []).filter(e => e.type === "Goal" && canon(e.team) === canon(fixture.away));
+
+  const statKeys = ["Ball Possession", "Total Shots", "Shots on Goal", "Corner Kicks", "Fouls", "Offsides", "Yellow Cards", "Red Cards", "Goalkeeper Saves", "Total passes", "Passes accurate"];
+  const statLabels: Record<string, string> = {
+    "Ball Possession": "Possession", "Total Shots": "Shots", "Shots on Goal": "On Target",
+    "Corner Kicks": "Corners", "Fouls": "Fouls", "Offsides": "Offsides",
+    "Yellow Cards": "Yellows", "Red Cards": "Reds", "Goalkeeper Saves": "Saves",
+    "Total passes": "Passes", "Passes accurate": "Accurate Passes",
+  };
+
+  return (
+    <div className="drawer-overlay" onClick={onClose}>
+      <div className="drawer md-drawer" onClick={e => e.stopPropagation()}>
+        <div className="md-drawer__header" style={{ borderTopColor: gcolor[match.g] || "#0A5C3E" }}>
+          <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
+          <div className="md-drawer__badge">Group {match.g} · Match #{match.no}</div>
+
+          <div className="md-drawer__score-row">
+            <div className="md-drawer__team">
+              <span className="md-drawer__flag">{flags[match.t1] || "⚽"}</span>
+              <span className="md-drawer__team-name">{match.t1}</span>
+            </div>
+            <div className="md-drawer__score">
+              <span className="md-drawer__goals">{fixture.gh ?? 0}</span>
+              <span className="md-drawer__sep">–</span>
+              <span className="md-drawer__goals">{fixture.ga ?? 0}</span>
+            </div>
+            <div className="md-drawer__team">
+              <span className="md-drawer__flag">{flags[match.t2] || "⚽"}</span>
+              <span className="md-drawer__team-name">{match.t2}</span>
+            </div>
+          </div>
+
+          <div className="md-drawer__status">
+            {isLive && <span className="md-drawer__live">{fixture.status === "HT" ? "HALF TIME" : `${fixture.elapsed}'`}</span>}
+            {isDone && <span className="md-drawer__ft">{fixture.status === "AET" ? "AFTER EXTRA TIME" : fixture.status === "PEN" ? "PENALTIES" : "FULL TIME"}</span>}
+          </div>
+
+          <div className="md-drawer__scorers-row">
+            <div className="md-drawer__scorers-col">
+              {homeGoals.map((g, i) => {
+                const min = g.extra ? `${g.minute}+${g.extra}'` : `${g.minute}'`;
+                const pen = g.detail === "Penalty" ? " (P)" : g.detail === "Own Goal" ? " (OG)" : "";
+                return <div key={i} className="md-drawer__scorer">⚽ {g.player} {min}{pen}</div>;
+              })}
+            </div>
+            <div className="md-drawer__scorers-col md-drawer__scorers-col--away">
+              {awayGoals.map((g, i) => {
+                const min = g.extra ? `${g.minute}+${g.extra}'` : `${g.minute}'`;
+                const pen = g.detail === "Penalty" ? " (P)" : g.detail === "Own Goal" ? " (OG)" : "";
+                return <div key={i} className="md-drawer__scorer">{g.player} {min}{pen} ⚽</div>;
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="drawer__body">
+          <div className="md-drawer__venue">
+            📍 {v.common} · {v.city}, {v.country}
+            <br />{match.et}{match.local !== match.et ? ` (${match.local})` : ""}
+          </div>
+
+          {fixture.events && fixture.events.length > 0 && (
+            <div className="drawer__section">
+              <h3 className="drawer__h3">Match Timeline</h3>
+              <div className="md-drawer__timeline">
+                {fixture.events.map((ev, i) => {
+                  const isHome = canon(ev.team) === canon(match.t1);
+                  const min = ev.extra ? `${ev.minute}+${ev.extra}'` : `${ev.minute}'`;
+                  return (
+                    <div key={i} className={`md-drawer__event ${isHome ? "md-drawer__event--home" : "md-drawer__event--away"}`}>
+                      <span className="md-drawer__event-min">{min}</span>
+                      <span className="md-drawer__event-icon">{eventIcon(ev.type, ev.detail)}</span>
+                      <span className="md-drawer__event-text">
+                        {ev.player}
+                        {ev.type === "Goal" && ev.assist && <span className="md-drawer__event-assist"> (assist: {ev.assist})</span>}
+                        {ev.type === "Goal" && ev.detail === "Penalty" && <span className="md-drawer__event-detail"> PEN</span>}
+                        {ev.type === "Goal" && ev.detail === "Own Goal" && <span className="md-drawer__event-detail"> OG</span>}
+                        {ev.type === "subst" && ev.assist && <span className="md-drawer__event-assist"> ↩ {ev.assist}</span>}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {fixture.stats && (
+            <div className="drawer__section">
+              <h3 className="drawer__h3">Match Stats</h3>
+              <div className="md-drawer__stats">
+                {statKeys.filter(k => fixture.stats!.home[k] != null || fixture.stats!.away[k] != null).map(k => {
+                  const hv = fixture.stats!.home[k];
+                  const av = fixture.stats!.away[k];
+                  const hNum = typeof hv === "string" ? parseInt(hv) : (hv ?? 0);
+                  const aNum = typeof av === "string" ? parseInt(av) : (av ?? 0);
+                  const total = (typeof hNum === "number" ? hNum : 0) + (typeof aNum === "number" ? aNum : 0);
+                  const hPct = total > 0 ? (typeof hNum === "number" ? hNum : 0) / total * 100 : 50;
+                  return (
+                    <div key={k} className="md-drawer__stat-row">
+                      <span className="md-drawer__stat-val">{hv ?? 0}</span>
+                      <div className="md-drawer__stat-bar-wrap">
+                        <div className="md-drawer__stat-label">{statLabels[k] || k}</div>
+                        <div className="md-drawer__stat-bar">
+                          <div className="md-drawer__stat-bar-h" style={{ width: `${hPct}%` }} />
+                          <div className="md-drawer__stat-bar-a" style={{ width: `${100 - hPct}%` }} />
+                        </div>
+                      </div>
+                      <span className="md-drawer__stat-val">{av ?? 0}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

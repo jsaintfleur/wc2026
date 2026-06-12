@@ -1298,6 +1298,87 @@ code { background: #eef2ee; border: 1px solid var(--line); border-radius: 5px; p
 .md-drawer__prematch-flag { font-size: 24px; }
 .md-drawer__prematch-arrow { margin-left: auto; color: var(--muted); font-size: 14px; }
 
+/* ── Match Center Sections ── */
+.mc-sec {
+  margin-bottom: 8px;
+}
+.mc-hd {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: var(--ink);
+  padding: 14px 4px 6px;
+  margin: 4px 0 2px;
+  border-bottom: 2px solid var(--gold);
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.mc-hd--live {
+  color: var(--live);
+  border-bottom-color: var(--live);
+}
+.mc-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--live);
+  animation: pulse 1.4s infinite;
+  flex-shrink: 0;
+  position: relative;
+  top: -1px;
+}
+.mc-date {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .4px;
+  text-transform: uppercase;
+}
+.mc-sub {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--pitch);
+  padding: 12px 4px 4px;
+}
+.mc-sub--done { color: var(--muted); }
+.mc-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 4px 6px;
+  margin: 4px 0 2px;
+  border: none;
+  border-bottom: 2px solid var(--line);
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s;
+}
+.mc-toggle:hover { border-bottom-color: var(--pitch); }
+.mc-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .3px;
+}
+.mc-arrow {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--muted);
+}
+.tix--done {
+  opacity: .65;
+}
+.tix--done:hover { opacity: .85; }
+
 /* ── Countdown Hero ── */
 .cd-hero {
   background: linear-gradient(135deg, var(--pitch-deep) 0%, var(--pitch) 100%);

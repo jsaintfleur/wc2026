@@ -113,6 +113,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
   const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture | null } | null>(null);
   const [playerProfile, setPlayerProfile] = useState<{ name: string; team: string } | null>(null);
+  const [showResults, setShowResults] = useState(false);
   const scrolledRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -186,23 +187,16 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }, [liveStatus, schedule]);
 
   useEffect(() => {
-    if (scrolledRef.current) return;
-    const tryScroll = () => {
-      const el = document.getElementById("today-anchor");
-      if (el && view === "schedule") {
-        scrolledRef.current = true;
-        const stickyOffset = 100;
-        const top = el.getBoundingClientRect().top + window.scrollY - stickyOffset;
-        window.scrollTo({ top, behavior: "instant" });
-      }
-    };
-    const t = setTimeout(tryScroll, 100);
-    return () => clearTimeout(t);
+    if (scrolledRef.current || view !== "schedule") return;
+    scrolledRef.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
+      const toggleEl = (e.target as HTMLElement).closest("[data-action='toggle-results']") as HTMLElement | null;
+      if (toggleEl) { e.preventDefault(); setShowResults(p => !p); return; }
+
       const teamEl = (e.target as HTMLElement).closest("[data-team]") as HTMLElement | null;
       if (teamEl) {
         e.preventDefault();
@@ -251,11 +245,12 @@ export default function Tournament({ data }: { data: TournamentData }) {
     for (const m of data.gs) {
       if (m.g !== g) continue;
       const f = findLive(m, fixtures);
+      const hasKickedOff = m.ts <= Date.now() + 5 * 60000;
       let t1g: number | null = null, t2g: number | null = null;
-      if (f && DONE_STATUSES.has(f.status)) {
+      if (hasKickedOff && f && DONE_STATUSES.has(f.status)) {
         const gg = goalsFor(m, f);
         t1g = gg.t1; t2g = gg.t2;
-      } else if (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null) {
+      } else if (hasKickedOff && m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null) {
         t1g = m.dbGh; t2g = m.dbGa;
       }
       if (t1g == null || t2g == null) continue;
@@ -297,22 +292,25 @@ export default function Tournament({ data }: { data: TournamentData }) {
     return `<div class="scorers">${names.join(", ")}</div>`;
   }
 
-  function tixCard(m: GroupStageMatch, anim: boolean): string {
+  function tixCard(m: GroupStageMatch, anim: boolean, dimmed = false): string {
     const v = ven(m.v), gc = data.gcolor[m.g];
     const f = findLive(m, fixtures);
-    let timeHtml: string, g1 = "", g2 = "", cls = "", scorers1 = "", scorers2 = "";
+    const hasKickedOff = m.ts <= Date.now() + 5 * 60000;
+    const fLive = f && LIVE_STATUSES.has(f.status);
+    const fDone = f && DONE_STATUSES.has(f.status);
+    let timeHtml: string, g1 = "", g2 = "", cls = dimmed ? " tix--done" : "", scorers1 = "", scorers2 = "";
     let lead1 = false, lead2 = false;
-    if (f && (LIVE_STATUSES.has(f.status) || DONE_STATUSES.has(f.status))) {
-      const gg = goalsFor(m, f);
+    if (fLive || (hasKickedOff && fDone)) {
+      const gg = goalsFor(m, f!);
       const a = gg.t1 == null ? 0 : gg.t1, b = gg.t2 == null ? 0 : gg.t2;
       g1 = `<span class="gl">${a}</span>`;
       g2 = `<span class="gl">${b}</span>`;
       lead1 = a > b; lead2 = b > a;
-      if (LIVE_STATUSES.has(f.status)) cls = " islive";
-      timeHtml = `<div class="sc">${a}–${b}</div>${liveBadge(f)}`;
-      scorers1 = goalScorers(f.events, m.t1);
-      scorers2 = goalScorers(f.events, m.t2);
-    } else if (m.dbStatus && (LIVE_STATUSES.has(m.dbStatus) || DONE_STATUSES.has(m.dbStatus)) && m.dbGh != null && m.dbGa != null) {
+      if (fLive) cls += " islive";
+      timeHtml = `<div class="sc">${a}–${b}</div>${liveBadge(f!)}`;
+      scorers1 = goalScorers(f!.events, m.t1);
+      scorers2 = goalScorers(f!.events, m.t2);
+    } else if (hasKickedOff && m.dbStatus && (LIVE_STATUSES.has(m.dbStatus) || DONE_STATUSES.has(m.dbStatus)) && m.dbGh != null && m.dbGa != null) {
       const a = m.dbGh, b = m.dbGa;
       g1 = `<span class="gl">${a}</span>`;
       g2 = `<span class="gl">${b}</span>`;
@@ -335,25 +333,97 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }
 
   function renderSchedule(anim: boolean): string {
+    const now = Date.now();
     const list = data.gs.filter(matchHit);
-    const head = liveIndicatorHtml();
-    if (!list.length) return head + `<div class="empty">No matches match your filters.<br>Try clearing the search or picking “All”.</div>`;
-    let html = head, cur = "";
+    if (!list.length) return `<div class="empty">No matches match your filters.<br>Try clearing the search or picking "All".</div>`;
+
+    const live: GroupStageMatch[] = [];
+    const todayUp: GroupStageMatch[] = [];
+    const todayDone: GroupStageMatch[] = [];
+    const tmrw: GroupStageMatch[] = [];
+    const upByDate = new Map<string, GroupStageMatch[]>();
+    const pastByDate = new Map<string, GroupStageMatch[]>();
+
     for (const m of list) {
-      if (m.iso !== cur) {
-        cur = m.iso;
-        let pill = m.iso === today
-          ? '<span class="today-pill">Today</span>'
-          : m.iso === tomorrow
-            ? '<span class="today-pill" style="background:#cfe3d9;color:#0A5C3E">Tomorrow</span>'
-            : "";
-        const t = parseISO(m.iso);
-        const anchor = m.iso === today ? ' id="today-anchor"' : '';
-        html += `<div class="dayhead"${anchor}><span class="dow">${DOW[t.getDay()]}</span><h3>${t.getDate()} ${MON[t.getMonth()]}</h3>${pill}</div>`;
+      const f = findLive(m, fixtures);
+      const isLive = f && LIVE_STATUSES.has(f.status);
+      const hasKickedOff = m.ts <= now + 5 * 60000;
+      const isDone = hasKickedOff && (
+        (f && DONE_STATUSES.has(f.status)) ||
+        (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null)
+      );
+
+      if (isLive) {
+        live.push(m);
+      } else if (m.iso === today) {
+        isDone ? todayDone.push(m) : todayUp.push(m);
+      } else if (m.iso === tomorrow) {
+        tmrw.push(m);
+      } else if (m.iso < today) {
+        if (!pastByDate.has(m.iso)) pastByDate.set(m.iso, []);
+        pastByDate.get(m.iso)!.push(m);
+      } else {
+        if (!upByDate.has(m.iso)) upByDate.set(m.iso, []);
+        upByDate.get(m.iso)!.push(m);
       }
-      html += tixCard(m, anim);
     }
-    return html;
+
+    let html = "";
+
+    if (live.length) {
+      html += `<div class="mc-sec" id="mc-live"><div class="mc-hd mc-hd--live"><span class="mc-dot"></span>Live Now</div>`;
+      for (const m of live) html += tixCard(m, anim);
+      html += `</div>`;
+    }
+
+    const hasToday = todayUp.length || todayDone.length;
+    if (hasToday) {
+      const dt = new Date();
+      html += `<div class="mc-sec" id="today-anchor"><div class="mc-hd">Gameday<span class="mc-date">${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}</span></div>`;
+      if (todayUp.length) {
+        if (todayDone.length) html += `<div class="mc-sub">Upcoming</div>`;
+        for (const m of todayUp) html += tixCard(m, anim);
+      }
+      if (todayDone.length) {
+        html += `<div class="mc-sub mc-sub--done">Completed</div>`;
+        for (const m of todayDone) html += tixCard(m, anim, true);
+      }
+      html += `</div>`;
+    }
+
+    if (tmrw.length) {
+      const dt = new Date(); dt.setDate(dt.getDate() + 1);
+      html += `<div class="mc-sec" id="mc-tomorrow"><div class="mc-hd">Tomorrow<span class="mc-date">${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}</span></div>`;
+      for (const m of tmrw) html += tixCard(m, anim);
+      html += `</div>`;
+    }
+
+    if (upByDate.size) {
+      html += `<div class="mc-sec" id="mc-upcoming"><div class="mc-hd">Upcoming Matches</div>`;
+      for (const [iso, matches] of upByDate) {
+        const dt = parseISO(iso);
+        html += `<div class="dayhead"><span class="dow">${DOW[dt.getDay()]}</span><h3>${dt.getDate()} ${MON[dt.getMonth()]}</h3></div>`;
+        for (const m of matches) html += tixCard(m, anim);
+      }
+      html += `</div>`;
+    }
+
+    if (pastByDate.size) {
+      const totalPast = [...pastByDate.values()].reduce((s, a) => s + a.length, 0);
+      html += `<div class="mc-sec mc-sec--results" id="mc-results">`;
+      html += `<button class="mc-toggle" data-action="toggle-results"><span class="mc-hd" style="margin:0;padding:0;border:0">Results</span><span class="mc-count">${totalPast} match${totalPast !== 1 ? "es" : ""}</span><span class="mc-arrow">${showResults ? "&#9662;" : "&#9656;"}</span></button>`;
+      if (showResults) {
+        const sortedDates = [...pastByDate.keys()].sort().reverse();
+        for (const iso of sortedDates) {
+          const dt = parseISO(iso);
+          html += `<div class="dayhead"><span class="dow">${DOW[dt.getDay()]}</span><h3>${dt.getDate()} ${MON[dt.getMonth()]}</h3></div>`;
+          for (const m of pastByDate.get(iso)!) html += tixCard(m, anim, true);
+        }
+      }
+      html += `</div>`;
+    }
+
+    return html || `<div class="empty">No matches match your filters.</div>`;
   }
 
   function renderGroups(anim: boolean): string {
@@ -376,7 +446,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         <table class="tbl"><thead><tr><th class="l"></th><th class="l">Team</th><th>P</th><th>GD</th><th>Pts</th></tr></thead>
         <tbody>${body}</tbody></table></div>`;
     }
-    html += `<p class="qnote">Tables update from full-time scores as they come in. Order uses points, then goal difference, then goals scored — FIFA’s official tiebreakers (including head-to-head and fair-play) decide the final standings.</p></div>`;
+    html += `<p class="qnote">Tables update from full-time scores as they come in. Order uses points, then goal difference, then goals scored — FIFA's official tiebreakers (including head-to-head and fair-play) decide the final standings.</p></div>`;
     return html;
   }
 
@@ -406,7 +476,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         <div class="kotix__foot"><span>📍</span><span class="ven">${esc(v.common)}</span>· ${esc(v.city)}, ${esc(v.country)}
         <span class="dt">${DOW[t.getDay()]} ${t.getDate()} ${MON[t.getMonth()]} · ${esc(k.et)}${k.local !== k.et ? ` (${esc(k.local)})` : ""}</span></div></article>`;
     }
-    html += `<p style="font-size:12.5px;color:var(--muted);margin:14px 2px 0">Dates, times and venues are confirmed. Teams fill in automatically as results come in; until then they read “Pending FIFA Confirmation.” Round-of-32 pairings follow FIFA’s pre-set bracket.</p></div>`;
+    html += `<p style="font-size:12.5px;color:var(--muted);margin:14px 2px 0">Dates, times and venues are confirmed. Teams fill in automatically as results come in; until then they read "Pending FIFA Confirmation." Round-of-32 pairings follow FIFA's pre-set bracket.</p></div>`;
     return html;
   }
 
@@ -442,7 +512,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     if (view === "venues") return renderVenues(animate);
     return renderAbout();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, group, team, query, fixtures, liveStatus, liveTs, animate, tick]);
+  }, [view, group, team, query, fixtures, liveStatus, liveTs, animate, tick, showResults]);
 
   function handleTab(v: ViewType) {
     setAnimate(true);
@@ -947,9 +1017,10 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   const [tab, setTab] = useState<MdTab>("summary");
   const fixture = findLive(match, fixtures) || initialFixture;
 
+  const hasKickedOff = match.ts <= Date.now() + 5 * 60000;
   const hasDbScore = match.dbStatus && match.dbGh != null && match.dbGa != null;
-  const isLive = fixture ? LIVE_STATUSES.has(fixture.status) : (hasDbScore ? LIVE_STATUSES.has(match.dbStatus!) : false);
-  const isDone = fixture ? DONE_STATUSES.has(fixture.status) : (hasDbScore ? DONE_STATUSES.has(match.dbStatus!) : false);
+  const isLive = fixture ? LIVE_STATUSES.has(fixture.status) : (hasKickedOff && hasDbScore ? LIVE_STATUSES.has(match.dbStatus!) : false);
+  const isDone = hasKickedOff && (fixture ? DONE_STATUSES.has(fixture.status) : (hasDbScore ? DONE_STATUSES.has(match.dbStatus!) : false));
   const isUpcoming = !isLive && !isDone;
 
   const scoreGh = fixture ? (fixture.gh ?? 0) : (match.dbGh ?? 0);

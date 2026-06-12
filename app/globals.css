@@ -1270,6 +1270,303 @@ code { background: #eef2ee; border: 1px solid var(--line); border-radius: 5px; p
 }
 .md-lineup__icons { font-size: 12px; }
 
+/* ── Formation Pitch Diagram ── */
+.fm-wrap {
+  background: linear-gradient(180deg, #1B5E20 0%, #2E7D32 50%, #1B5E20 100%);
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 0 0 16px;
+  position: relative;
+}
+.fm-divider {
+  height: 2px;
+  background: rgba(255,255,255,.2);
+  margin: 0 16px;
+  position: relative;
+}
+.fm-divider::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -12px;
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255,255,255,.2);
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
+.fm-pitch {
+  padding: 8px 0;
+}
+.fm-pitch__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  color: rgba(255,255,255,.9);
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+.fm-pitch__flag { font-size: 18px; }
+.fm-pitch__formation {
+  margin-left: auto;
+  font-size: 12px;
+  background: rgba(255,255,255,.15);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.fm-pitch__field {
+  position: relative;
+  height: 180px;
+  margin: 0 8px;
+}
+.fm-pitch__row {
+  position: absolute;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.fm-pitch__player {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
+  gap: 1px;
+}
+.fm-pitch__player:hover .fm-pitch__num {
+  background: var(--gold);
+  color: #111;
+}
+.fm-pitch__num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.9);
+  color: #1B5E20;
+  font-weight: 700;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, color .15s;
+}
+.fm-pitch__name {
+  font-size: 9px;
+  font-weight: 600;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0,0,0,.6);
+}
+.fm-pitch__rating {
+  font-size: 9px;
+  font-weight: 700;
+  background: var(--gold);
+  color: #111;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+/* ── H2H Tab ── */
+.h2h-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+}
+.h2h-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  color: var(--fg);
+}
+.h2h-team:hover { color: var(--pitch); }
+.h2h-flag { font-size: 24px; }
+.h2h-vs {
+  font-family: var(--disp);
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.h2h-record {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  padding: 12px 16px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.h2h-record__item {
+  text-align: center;
+}
+.h2h-record__num {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 28px;
+}
+.h2h-record__item--w .h2h-record__num { color: var(--pitch); }
+.h2h-record__item--d .h2h-record__num { color: var(--muted); }
+.h2h-record__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+.h2h-match {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.h2h-match__date {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 6px;
+}
+.h2h-match__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+.h2h-match__score {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 16px;
+  min-width: 60px;
+  text-align: center;
+}
+.h2h-match__venue {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.h2h-empty {
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  padding: 24px 16px;
+}
+
+/* ── Match Report Tab ── */
+.report {
+  padding: 0 16px;
+}
+.report__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.report__badge {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--pitch);
+}
+.report__match {
+  font-size: 11px;
+  color: var(--muted);
+}
+.report__title {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 20px;
+  margin: 0 0 12px;
+}
+.report__narrative {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--fg);
+  margin-bottom: 20px;
+}
+.report__section {
+  margin-bottom: 16px;
+}
+.report__h4 {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin: 0 0 8px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 4px;
+}
+.report__potm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.report__potm-rating {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--gold);
+  color: #111;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.report__potm-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+.report__potm-team {
+  font-size: 12px;
+  color: var(--muted);
+}
+.report__potm-stats {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.report__goal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.report__goal-min {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 36px;
+}
+.report__goal-team {
+  margin-left: auto;
+  font-size: 16px;
+}
+.report__goal-detail {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* Pre-match view */
 .md-drawer__prematch { padding: 16px 16px 0; }
 .md-drawer__prematch-row { margin-bottom: 8px; }

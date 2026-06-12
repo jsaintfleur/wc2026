@@ -633,7 +633,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       </div>
 
       {teamDrawer && <TeamDrawer name={teamDrawer} flags={data.flags} groups={data.groups} gcolor={data.gcolor} gs={data.gs} hosts={data.hosts} onClose={() => setTeamDrawer(null)} onPlayerClick={(p, t) => { setTeamDrawer(null); setPlayerProfile({ name: p, team: t }); }} />}
-      {matchDetail && <MatchDetailDrawer match={matchDetail.match} initialFixture={matchDetail.fixture} fixtures={fixtures} flags={data.flags} venues={data.venues} gcolor={data.gcolor} vName={vName} findLive={findLive} onClose={() => setMatchDetail(null)} onTeamClick={(t) => { setMatchDetail(null); setTeamDrawer(t); }} onPlayerClick={(p, t) => { setMatchDetail(null); setPlayerProfile({ name: p, team: t }); }} />}
+      {matchDetail && <MatchDetailDrawer match={matchDetail.match} initialFixture={matchDetail.fixture} fixtures={fixtures} flags={data.flags} venues={data.venues} gcolor={data.gcolor} allMatches={data.gs} vName={vName} findLive={findLive} onClose={() => setMatchDetail(null)} onTeamClick={(t) => { setMatchDetail(null); setTeamDrawer(t); }} onPlayerClick={(p, t) => { setMatchDetail(null); setPlayerProfile({ name: p, team: t }); }} />}
       {playerProfile && <PlayerProfileDrawer playerName={playerProfile.name} teamName={playerProfile.team} flags={data.flags} data={data} onClose={() => setPlayerProfile(null)} onTeamClick={(t) => { setPlayerProfile(null); setTeamDrawer(t); }} />}
     </div>
   );
@@ -1011,15 +1011,16 @@ function eventIcon(type: string, detail: string): string {
   return "•";
 }
 
-type MdTab = "summary" | "stats" | "lineups";
+type MdTab = "summary" | "stats" | "lineups" | "h2h" | "report";
 
-function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gcolor, vName: _vName, findLive, onClose, onTeamClick, onPlayerClick }: {
+function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gcolor, allMatches, vName: _vName, findLive, onClose, onTeamClick, onPlayerClick }: {
   match: GroupStageMatch;
   initialFixture: LiveFixture | null;
   fixtures: LiveFixture[];
   flags: Record<string, string>;
   venues: Record<string, { common: string; fifa: string; city: string; country: string; cap: number }>;
   gcolor: Record<string, string>;
+  allMatches: GroupStageMatch[];
   vName: (k: string) => string;
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   onClose: () => void;
@@ -1123,12 +1124,13 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
 
         {!isUpcoming && !isStale && (
           <div className="md-tabs" role="tablist">
-            {(["summary", "stats", "lineups"] as MdTab[]).map(t => {
+            {(["summary", "stats", "lineups", "h2h", "report"] as MdTab[]).map(t => {
               const disabled = (t === "stats" && !hasStats) || (t === "lineups" && !hasLineups);
+              const label: Record<MdTab, string> = { summary: "Summary", stats: "Stats", lineups: "Lineups", h2h: "H2H", report: "Report" };
               return (
                 <button key={t} role="tab" aria-selected={tab === t} className={`md-tab${tab === t ? " md-tab--active" : ""}${disabled ? " md-tab--disabled" : ""}`}
                   onClick={() => { if (!disabled) setTab(t); }}>
-                  {t === "summary" ? "Summary" : t === "stats" ? "Stats" : "Lineups"}
+                  {label[t]}
                 </button>
               );
             })}
@@ -1308,13 +1310,276 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     );
   }
 
+  function renderFormation(lineup: TeamLineup, teamName: string, flip: boolean) {
+    const resolvedTeam = canon(teamName) === canon(match.t1) ? match.t1 : match.t2;
+    const rows: Record<number, { name: string; number: number; pos: string; col: number }[]> = {};
+    for (const p of lineup.startXI) {
+      if (!p.grid) continue;
+      const [r, c] = p.grid.split(":").map(Number);
+      if (!rows[r]) rows[r] = [];
+      rows[r].push({ name: p.name, number: p.number, pos: p.pos, col: c });
+    }
+    const sortedRows = Object.keys(rows).map(Number).sort((a, b) => flip ? b - a : a - b);
+    const maxRow = Math.max(...sortedRows, 5);
+    return (
+      <div className="fm-pitch">
+        <div className="fm-pitch__label">
+          <span className="fm-pitch__flag">{flags[resolvedTeam] || "⚽"}</span>
+          <span>{resolvedTeam}</span>
+          <span className="fm-pitch__formation">{lineup.formation}</span>
+        </div>
+        <div className="fm-pitch__field">
+          {sortedRows.map(row => {
+            const players = rows[row].sort((a, b) => a.col - b.col);
+            const maxCol = Math.max(...players.map(p => p.col), 1);
+            return (
+              <div key={row} className="fm-pitch__row" style={{ top: `${((flip ? maxRow - row : row - 1) / (maxRow - 1)) * 85 + 5}%` }}>
+                {players.map((p, i) => {
+                  const left = maxCol === 1 ? 50 : (p.col - 1) / (maxCol - 1) * 70 + 15;
+                  const ps = fixture?.players?.find(ps => ps.number === p.number && canon(ps.team) === canon(teamName));
+                  return (
+                    <button key={i} className="fm-pitch__player" style={{ left: `${left}%` }}
+                      onClick={() => onPlayerClick(p.name, resolvedTeam)}>
+                      <span className="fm-pitch__num">{p.number}</span>
+                      <span className="fm-pitch__name">{p.name.split(" ").pop()}</span>
+                      {ps?.rating && <span className="fm-pitch__rating">{parseFloat(ps.rating).toFixed(1)}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   function renderLineupsTab() {
     if (!fixture?.lineups || fixture.lineups.length < 2) return <div className="md-drawer__empty">Lineups not available yet.</div>;
+    const hasGrid = fixture.lineups[0].startXI.some(p => p.grid) && fixture.lineups[1].startXI.some(p => p.grid);
     return (
       <div className="drawer__section" style={{ marginTop: 0 }}>
+        {hasGrid && (
+          <div className="fm-wrap">
+            {renderFormation(fixture.lineups[0], fixture.lineups[0].team, false)}
+            <div className="fm-divider" />
+            {renderFormation(fixture.lineups[1], fixture.lineups[1].team, true)}
+          </div>
+        )}
         {renderLineupTeam(fixture.lineups[0], fixture.lineups[0].team)}
         <div style={{ height: 16 }} />
         {renderLineupTeam(fixture.lineups[1], fixture.lineups[1].team)}
+      </div>
+    );
+  }
+
+  function renderH2HTab() {
+    const h2hMatches = allMatches.filter(m => {
+      if (m.no === match.no) return false;
+      const pair = [m.t1, m.t2].sort().join("|");
+      const thisPair = [match.t1, match.t2].sort().join("|");
+      return pair === thisPair;
+    });
+
+    const h2hFixtures = h2hMatches.map(m => {
+      const f = findLive(m, fixtures);
+      const hasKickedOff = m.ts <= Date.now() + 5 * 60000;
+      const done = hasKickedOff && (
+        (f && DONE_STATUSES.has(f.status)) ||
+        (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null)
+      );
+      let gh: number | null = null, ga: number | null = null;
+      if (done && f) {
+        const gg = goalsFor(m, f);
+        gh = gg.t1; ga = gg.t2;
+      } else if (done && m.dbGh != null && m.dbGa != null) {
+        gh = m.dbGh; ga = m.dbGa;
+      }
+      return { match: m, gh, ga, done: !!done };
+    });
+
+    const completed = h2hFixtures.filter(h => h.done && h.gh != null && h.ga != null);
+    let w1 = 0, w2 = 0, draws = 0;
+    for (const h of completed) {
+      if (h.gh! > h.ga!) w1++;
+      else if (h.gh! < h.ga!) w2++;
+      else draws++;
+    }
+
+    return (
+      <div className="drawer__section" style={{ marginTop: 0 }}>
+        <div className="h2h-header">
+          <button className="h2h-team" onClick={() => onTeamClick(match.t1)}>
+            <span className="h2h-flag">{flags[match.t1] || "⚽"}</span>
+            <span>{match.t1}</span>
+          </button>
+          <div className="h2h-vs">vs</div>
+          <button className="h2h-team" onClick={() => onTeamClick(match.t2)}>
+            <span className="h2h-flag">{flags[match.t2] || "⚽"}</span>
+            <span>{match.t2}</span>
+          </button>
+        </div>
+
+        {completed.length > 0 && (
+          <div className="h2h-record">
+            <div className="h2h-record__item h2h-record__item--w">
+              <div className="h2h-record__num">{w1}</div>
+              <div className="h2h-record__label">Wins</div>
+            </div>
+            <div className="h2h-record__item h2h-record__item--d">
+              <div className="h2h-record__num">{draws}</div>
+              <div className="h2h-record__label">Draws</div>
+            </div>
+            <div className="h2h-record__item h2h-record__item--w">
+              <div className="h2h-record__num">{w2}</div>
+              <div className="h2h-record__label">Wins</div>
+            </div>
+          </div>
+        )}
+
+        <h3 className="drawer__h3">{h2hMatches.length > 0 ? "Tournament Meetings" : "No Previous Meetings"}</h3>
+
+        {h2hMatches.length === 0 && (
+          <p className="h2h-empty">This is the first meeting between {match.t1} and {match.t2} in this tournament.</p>
+        )}
+
+        {h2hFixtures.map(h => {
+          const d = parseISO(h.match.iso);
+          const vn = venues[h.match.v] || { common: "", city: "", country: "" };
+          return (
+            <div key={h.match.no} className="h2h-match">
+              <div className="h2h-match__date">{d.getDate()} {MON[d.getMonth()]} · Group {h.match.g}</div>
+              <div className="h2h-match__row">
+                <span>{flags[h.match.t1] || "⚽"} {h.match.t1}</span>
+                <span className="h2h-match__score">
+                  {h.done && h.gh != null ? `${h.gh} – ${h.ga}` : h.match.et}
+                </span>
+                <span>{h.match.t2} {flags[h.match.t2] || "⚽"}</span>
+              </div>
+              <div className="h2h-match__venue">{vn.common}, {vn.city}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function renderReportTab() {
+    if (!fixture || !isDone) return <div className="md-drawer__empty">Match report will be available after the final whistle.</div>;
+
+    const events = fixture.events || [];
+    const goals = events.filter(e => e.type === "Goal");
+    const cards = events.filter(e => e.type === "Card");
+    const subs = events.filter(e => e.type === "subst");
+    const gh = fixture.gh ?? 0;
+    const ga = fixture.ga ?? 0;
+
+    const homeGoals = goals.filter(e => canon(e.team) === canon(fixture.home));
+    const awayGoals = goals.filter(e => canon(e.team) === canon(fixture.away));
+    const possession = fixture.stats?.home?.["Ball Possession"];
+
+    let narrative = "";
+
+    if (gh === ga) {
+      narrative += `${match.t1} and ${match.t2} played out a ${gh}–${ga} draw at ${v.common} in ${v.city}. `;
+    } else {
+      const winner = gh > ga ? match.t1 : match.t2;
+      const loser = gh > ga ? match.t2 : match.t1;
+      const winScore = Math.max(gh, ga);
+      const loseScore = Math.min(gh, ga);
+      narrative += `${winner} ${winScore === 1 && loseScore === 0 ? "edged past" : "defeated"} ${loser} ${winScore}–${loseScore} at ${v.common} in ${v.city}. `;
+    }
+
+    if (goals.length > 0) {
+      const opener = goals[0];
+      narrative += `${opener.player} opened the scoring in the ${opener.minute}${opener.extra ? `+${opener.extra}` : ""}’ minute`;
+      if (opener.assist) narrative += ` with an assist from ${opener.assist}`;
+      narrative += `. `;
+    }
+
+    if (homeGoals.length > 1) {
+      narrative += `${match.t1} added ${homeGoals.length - 1} more goal${homeGoals.length > 2 ? "s" : ""} through ${homeGoals.slice(1).map(g => g.player).join(" and ")}. `;
+    }
+    if (awayGoals.length > 1) {
+      narrative += `${match.t2} responded with goal${awayGoals.length > 1 ? "s" : ""} from ${awayGoals.map(g => g.player).join(" and ")}. `;
+    }
+
+    if (possession) {
+      narrative += `${match.t1} controlled ${possession} of possession. `;
+    }
+
+    const totalShots = (fixture.stats?.home?.["Total Shots"] || 0) as number;
+    const totalShotsAway = (fixture.stats?.away?.["Total Shots"] || 0) as number;
+    if (totalShots || totalShotsAway) {
+      narrative += `The shot count finished ${totalShots}–${totalShotsAway}. `;
+    }
+
+    if (cards.length > 0) {
+      const yellows = cards.filter(c => c.detail.includes("Yellow")).length;
+      const reds = cards.filter(c => c.detail.includes("Red")).length;
+      if (yellows > 0) narrative += `The referee showed ${yellows} yellow card${yellows !== 1 ? "s" : ""}`;
+      if (reds > 0) narrative += `${yellows > 0 ? " and " : ""}${reds} red card${reds !== 1 ? "s" : ""}`;
+      narrative += `. `;
+    }
+
+    if (subs.length > 0) {
+      narrative += `There were ${subs.length} substitution${subs.length !== 1 ? "s" : ""} across both sides. `;
+    }
+
+    const topPerformers = (fixture.players || [])
+      .filter(p => p.rating)
+      .sort((a, b) => parseFloat(b.rating || "0") - parseFloat(a.rating || "0"))
+      .slice(0, 3);
+
+    return (
+      <div className="drawer__section" style={{ marginTop: 0 }}>
+        <div className="report">
+          <div className="report__header">
+            <span className="report__badge">Match Report</span>
+            <span className="report__match">Group {match.g} · Match #{match.no}</span>
+          </div>
+
+          <h3 className="report__title">
+            {match.t1} {gh} – {ga} {match.t2}
+          </h3>
+
+          <p className="report__narrative">{narrative}</p>
+
+          {topPerformers.length > 0 && (
+            <div className="report__section">
+              <h4 className="report__h4">Player of the Match</h4>
+              {topPerformers.map((p, i) => (
+                <div key={i} className="report__potm">
+                  <span className="report__potm-rating">{parseFloat(p.rating || "0").toFixed(1)}</span>
+                  <span className="report__potm-name">{p.name}</span>
+                  <span className="report__potm-team">{flags[p.team] || "⚽"} {p.team}</span>
+                  <span className="report__potm-stats">
+                    {p.goals > 0 && `${p.goals}G `}
+                    {p.assists > 0 && `${p.assists}A `}
+                    {p.passAccuracy && `${p.passAccuracy} pass`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {goals.length > 0 && (
+            <div className="report__section">
+              <h4 className="report__h4">Goals</h4>
+              {goals.map((g, i) => {
+                const min = g.extra ? `${g.minute}+${g.extra}'` : `${g.minute}'`;
+                return (
+                  <div key={i} className="report__goal">
+                    <span className="report__goal-min">{min}</span>
+                    <span>{eventIcon(g.type, g.detail)} {g.player}</span>
+                    <span className="report__goal-team">{flags[g.team] || "⚽"}</span>
+                    {g.detail !== "Normal Goal" && <span className="report__goal-detail">({g.detail})</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -1396,6 +1661,8 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
           {!isUpcoming && !isStale && tab === "summary" && renderSummaryTab()}
           {!isUpcoming && !isStale && tab === "stats" && renderStatsTab()}
           {!isUpcoming && !isStale && tab === "lineups" && renderLineupsTab()}
+          {!isUpcoming && !isStale && tab === "h2h" && renderH2HTab()}
+          {!isUpcoming && !isStale && tab === "report" && renderReportTab()}
         </div>
       </div>
     </div>

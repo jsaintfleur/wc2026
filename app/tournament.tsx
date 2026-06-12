@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch } from "@/lib/data";
+import { nrm, canon } from "@/lib/merge";
 
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -9,27 +10,8 @@ const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const LIVE_STATUSES = new Set(["1H","2H","HT","ET","BT","P","LIVE","SUSP","INT"]);
 const DONE_STATUSES = new Set(["FT","AET","PEN","PEN_LIVE","WO","AWD"]);
 
-const TEAM_NORM: Record<string, string> = {
-  turkey: "Türkiye", czechrepublic: "Czechia", czechia: "Czechia",
-  korearepublic: "South Korea", southkorea: "South Korea",
-  usa: "United States", unitedstates: "United States",
-  cotedivoire: "Ivory Coast", ivorycoast: "Ivory Coast",
-  congodr: "DR Congo", drcongo: "DR Congo", democraticrepublicofcongo: "DR Congo",
-  caboverde: "Cape Verde", capeverdeislands: "Cape Verde", capeverde: "Cape Verde",
-  bosniaandherzegovina: "Bosnia & Herzegovina", bosniaherzegovina: "Bosnia & Herzegovina",
-  curacao: "Curaçao",
-};
-
 type ViewType = "schedule" | "groups" | "knockout" | "venues" | "about";
 type LiveStatus = "init" | "off" | "idle" | "active" | "paused" | "nofix";
-
-function nrm(s: string): string {
-  return (s || "").toString().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
-}
-
-function canon(n: string): string {
-  return TEAM_NORM[nrm(n)] || n;
-}
 
 function parseISO(iso: string): Date {
   const [y, m, da] = iso.split("-").map(Number);

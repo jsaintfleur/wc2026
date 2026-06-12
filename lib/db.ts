@@ -45,7 +45,7 @@ export async function loadTournamentData(): Promise<{ data: TournamentData; sour
       prisma.group.findMany({ orderBy: { letter: "asc" } }),
       prisma.groupTeam.findMany({ include: { team: true }, orderBy: [{ groupLetter: "asc" }, { position: "asc" }] }),
       prisma.match.findMany({
-        include: { homeTeam: true, awayTeam: true },
+        include: { homeTeam: true, awayTeam: true, state: true },
         orderBy: { matchNumber: "asc" },
       }),
     ]);
@@ -78,6 +78,8 @@ export async function loadTournamentData(): Promise<{ data: TournamentData; sour
       starts.push(ts);
       const iso = m.isoDate.toISOString().slice(0, 10);
 
+      const state = m.state;
+
       if (m.stage === "group") {
         gs.push({
           no: m.matchNumber,
@@ -89,6 +91,7 @@ export async function loadTournamentData(): Promise<{ data: TournamentData; sour
           t2: m.awayTeam?.name || "TBD",
           v: m.venueCode,
           ts,
+          ...(state ? { dbStatus: state.status, dbGh: state.homeGoals, dbGa: state.awayGoals } : {}),
         });
       } else {
         ko.push({

@@ -16,6 +16,9 @@ export interface GroupStageMatch {
   t2: string;
   v: string;
   ts: number;
+  dbStatus?: string;
+  dbGh?: number | null;
+  dbGa?: number | null;
 }
 
 export interface KnockoutMatch {

@@ -1,6 +1,8 @@
 import { loadTournamentData } from "@/lib/db";
 import Tournament from "./tournament";
 
+export const revalidate = 60;
+
 export default async function Home() {
   const { data, source } = await loadTournamentData();
   if (source === "static") {

@@ -238,14 +238,19 @@ export default function Tournament({ data }: { data: TournamentData }) {
     for (const m of data.gs) {
       if (m.g !== g) continue;
       const f = findLive(m, fixtures);
-      if (!f || !DONE_STATUSES.has(f.status)) continue;
-      const gg = goalsFor(m, f);
-      if (gg.t1 == null || gg.t2 == null) continue;
+      let t1g: number | null = null, t2g: number | null = null;
+      if (f && DONE_STATUSES.has(f.status)) {
+        const gg = goalsFor(m, f);
+        t1g = gg.t1; t2g = gg.t2;
+      } else if (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null) {
+        t1g = m.dbGh; t2g = m.dbGa;
+      }
+      if (t1g == null || t2g == null) continue;
       const A = T[m.t1], Bx = T[m.t2];
       if (!A || !Bx) continue;
-      A.p++; Bx.p++; A.gf += gg.t1; A.ga += gg.t2; Bx.gf += gg.t2; Bx.ga += gg.t1; played++;
-      if (gg.t1 > gg.t2) { A.w++; A.pts += 3; Bx.l++; }
-      else if (gg.t1 < gg.t2) { Bx.w++; Bx.pts += 3; A.l++; }
+      A.p++; Bx.p++; A.gf += t1g; A.ga += t2g; Bx.gf += t2g; Bx.ga += t1g; played++;
+      if (t1g > t2g) { A.w++; A.pts += 3; Bx.l++; }
+      else if (t1g < t2g) { Bx.w++; Bx.pts += 3; A.l++; }
       else { A.d++; Bx.d++; A.pts++; Bx.pts++; }
     }
     const rows = teams.map(t => T[t]).sort((a, b) =>
@@ -300,6 +305,13 @@ export default function Tournament({ data }: { data: TournamentData }) {
       timeHtml = `<div class="sc">${a}–${b}</div>${liveBadge(f)}`;
       scorers1 = goalScorers(f.events, m.t1);
       scorers2 = goalScorers(f.events, m.t2);
+    } else if (m.dbStatus && (LIVE_STATUSES.has(m.dbStatus) || DONE_STATUSES.has(m.dbStatus)) && m.dbGh != null && m.dbGa != null) {
+      const a = m.dbGh, b = m.dbGa;
+      g1 = `<span class="gl">${a}</span>`;
+      g2 = `<span class="gl">${b}</span>`;
+      lead1 = a > b; lead2 = b > a;
+      const badge = DONE_STATUSES.has(m.dbStatus) ? `<span class="ft">FT</span>` : `<span class="ft live">${m.dbStatus}</span>`;
+      timeHtml = `<div class="sc">${a}–${b}</div>${badge}`;
     } else {
       timeHtml = `<div class="lo">${esc(m.et)}</div>${m.local !== m.et ? `<div class="et">${esc(m.local)}</div>` : ""}`;
     }

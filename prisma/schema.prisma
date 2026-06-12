@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Team {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique
+  flag   String  @default("⚽")
+  isHost Boolean @default(false) @map("is_host")
+
+  groupMemberships GroupTeam[]
+  homeMatches      Match[]    @relation("HomeTeam")
+  awayMatches      Match[]    @relation("AwayTeam")
+
+  @@map("teams")
+}
+
+model Venue {
+  code       String @id
+  commonName String @map("common_name")
+  fifaName   String @map("fifa_name")
+  city       String
+  country    String
+  capacity   Int
+
+  matches Match[]
+
+  @@map("venues")
+}
+
+model Group {
+  letter String @id @db.Char(1)
+  color  String
+
+  teams   GroupTeam[]
+  matches Match[]
+
+  @@map("groups")
+}
+
+model GroupTeam {
+  groupLetter String @map("group_letter") @db.Char(1)
+  teamId      Int    @map("team_id")
+  position    Int    @db.SmallInt
+
+  group Group @relation(fields: [groupLetter], references: [letter])
+  team  Team  @relation(fields: [teamId], references: [id])
+
+  @@id([groupLetter, teamId])
+  @@map("group_teams")
+}
+
+model Match {
+  id          Int     @id @default(autoincrement())
+  matchNumber Int     @unique @map("match_number") @db.SmallInt
+  stage       String
+  groupLetter String? @map("group_letter") @db.Char(1)
+  round       String?
+  matchRange  String? @map("match_range")
+  homeTeamId  Int?    @map("home_team_id")
+  awayTeamId  Int?    @map("away_team_id")
+  venueCode   String  @map("venue_code")
+  kickoffUtc  DateTime @map("kickoff_utc") @db.Timestamptz()
+  localTime   String  @map("local_time")
+  etTime      String  @map("et_time")
+  isoDate     DateTime @map("iso_date") @db.Date
+
+  group    Group? @relation(fields: [groupLetter], references: [letter])
+  homeTeam Team?  @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam Team?  @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  venue    Venue  @relation(fields: [venueCode], references: [code])
+  state    MatchState?
+
+  @@index([kickoffUtc])
+  @@index([groupLetter])
+  @@index([stage])
+  @@map("matches")
+}
+
+model MatchState {
+  matchId         Int      @id @map("match_id")
+  status          String   @default("NS")
+  elapsed         Int?     @db.SmallInt
+  homeGoals       Int?     @map("home_goals") @db.SmallInt
+  awayGoals       Int?     @map("away_goals") @db.SmallInt
+  vendorFixtureId BigInt?  @map("vendor_fixture_id")
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+
+  match Match @relation(fields: [matchId], references: [id])
+
+  @@map("match_state")
+}

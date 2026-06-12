@@ -4,22 +4,33 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "postinstall": "prisma generate",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:seed": "npx tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.108.1",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "next": "16.2.9",
+    "pg": "^8.21.0",
+    "prisma": "^7.8.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "tsx": "^4.22.4",
     "typescript": "^5"
   }
 }

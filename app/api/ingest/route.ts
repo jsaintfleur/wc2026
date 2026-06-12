@@ -133,9 +133,10 @@ export async function GET(request: NextRequest) {
   }
 
   const now = Date.now();
+  const force = request.nextUrl.searchParams.has("force");
   const active = inWindow(now);
 
-  if (!active) {
+  if (!active && !force) {
     return NextResponse.json({
       ok: true,
       skipped: true,

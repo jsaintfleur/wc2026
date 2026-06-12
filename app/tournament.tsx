@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
+import BracketBuilder from "@/app/components/BracketBuilder";
 
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -19,7 +20,7 @@ function isStaleStatus(ts: number, status: string, now = Date.now()): boolean {
   return now - ts > STALE_LIVE_THRESHOLD;
 }
 
-type ViewType = "schedule" | "groups" | "knockout" | "venues" | "about";
+type ViewType = "schedule" | "groups" | "knockout" | "bracket" | "venues" | "about";
 type LiveStatus = "init" | "off" | "idle" | "active" | "paused" | "nofix";
 
 function parseISO(iso: string): Date {
@@ -503,6 +504,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     { key: "schedule", label: "Schedule" },
     { key: "groups", label: "Groups & tables" },
     { key: "knockout", label: "Knockout" },
+    { key: "bracket", label: "My Bracket" },
     { key: "venues", label: "Venues" },
     { key: "about", label: "About" },
   ];
@@ -589,11 +591,15 @@ export default function Tournament({ data }: { data: TournamentData }) {
         </div>
       )}
 
-      <main
-        ref={mainRef}
-        className={view !== "groups" && view !== "knockout" ? "section" : undefined}
-        dangerouslySetInnerHTML={{ __html: viewContent }}
-      />
+      {view === "bracket" ? (
+        <BracketBuilder flags={data.flags} teams={allTeams} />
+      ) : (
+        <main
+          ref={mainRef}
+          className={view !== "groups" && view !== "knockout" ? "section" : undefined}
+          dangerouslySetInnerHTML={{ __html: viewContent }}
+        />
+      )}
 
       <div className="foot">
         All data is unofficial &middot; FIFA is the source of record &middot; Knockout teams fill in as results are confirmed

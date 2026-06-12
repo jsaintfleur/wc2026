@@ -417,14 +417,15 @@ export default function Tournament({ data }: { data: TournamentData }) {
         const cls = i < 2 ? "adv" : (i === 2 ? "cont" : "");
         const host = data.hosts.includes(r.t) ? '<span class="host">H</span>' : "";
         const gd = r.gf - r.ga;
+        const gdCls = gd > 0 ? "gd-col gd-pos" : gd < 0 ? "gd-col gd-neg" : "gd-col";
         return `<tr class="${cls}"><td class="pos l">${i + 1}</td>
           <td class="l"><span class="tm"><span class="fl">${fl(r.t)}</span><a class="nm teamlink" data-team="${esc(r.t)}" href="#">${esc(r.t)}</a>${host}</span></td>
-          <td>${played ? r.p : 0}</td><td>${formatGD(gd, played)}</td><td class="pts">${played ? r.pts : 0}</td></tr>`;
+          <td>${r.p}</td><td class="w-col">${r.w}</td><td>${r.d}</td><td class="l-col">${r.l}</td><td class="gf-col">${r.gf}</td><td class="ga-col">${r.ga}</td><td class="${gdCls}">${formatGD(gd, played)}</td><td class="pts">${r.pts}</td></tr>`;
       }).join("");
       html += `<div class="gcard${anim ? " rise" : ""}" style="--gc:${data.gcolor[g]}">
         <div class="gcard__h">Group ${g}<span class="pl">${played ? played + " played" : "not started"}</span></div>
-        <table class="tbl"><colgroup><col class="tbl__pos" /><col class="tbl__team" /><col class="tbl__p" /><col class="tbl__gd" /><col class="tbl__pts" /></colgroup><thead><tr><th class="l"></th><th class="l">Team</th><th>P</th><th>GD</th><th>Pts</th></tr></thead>
-        <tbody>${body}</tbody></table></div>`;
+        <div class="tbl-wrap"><table class="tbl"><colgroup><col class="tbl__pos" /><col class="tbl__team" /><col class="tbl__stat" /><col class="tbl__stat" /><col class="tbl__stat" /><col class="tbl__stat" /><col class="tbl__gf" /><col class="tbl__ga" /><col class="tbl__gd" /><col class="tbl__pts" /></colgroup><thead><tr><th class="l"></th><th class="l">Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead>
+        <tbody>${body}</tbody></table></div></div>`;
     }
     html += `<p class="qnote">Tables update from full-time scores as they come in. Order uses points, then goal difference, then goals scored — FIFA's official tiebreakers (including head-to-head and fair-play) decide the final standings.</p></div>`;
     return html;

@@ -46,10 +46,13 @@ function goalsFor(m: { t1?: string; t2?: string }, f: LiveFixture) {
 }
 
 function human(ms: number): string {
-  const m = Math.round(ms / 60000);
-  if (m < 60) return m + "m";
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  if (totalSec < 60) return totalSec + "s";
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  if (m < 60) return m + "m " + String(s).padStart(2, "0") + "s";
   const h = Math.floor(m / 60);
-  return h + "h " + (m % 60) + "m";
+  return h + "h " + String(m % 60).padStart(2, "0") + "m " + String(s).padStart(2, "0") + "s";
 }
 
 function esc(s: string | number): string {
@@ -160,10 +163,19 @@ export default function Tournament({ data }: { data: TournamentData }) {
     const refreshTimer = setInterval(() => {
       if (!document.hidden) setTick(t => t + 1);
     }, 60000);
+    const countdownTimer = setInterval(() => {
+      if (document.hidden) return;
+      document.querySelectorAll<HTMLSpanElement>(".countdown[data-target]").forEach(el => {
+        const target = Number(el.dataset.target);
+        const diff = target - Date.now();
+        el.textContent = diff <= 0 ? "kicking off now" : human(diff);
+      });
+    }, 1000);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
       if (timerRef.current) clearInterval(timerRef.current);
       clearInterval(refreshTimer);
+      clearInterval(countdownTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -267,7 +279,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     const n = fixtures.filter(f => LIVE_STATUSES.has(f.status)).length;
     if (s === "active" && n) return `<div class="livebar on" role="status" aria-live="polite"><span class="dotlive"></span>Live now — ${n} match${n > 1 ? "es" : ""} in play · updated ${agoStr()}</div>`;
     const nx = nextStart();
-    const when = nx ? (nx - Date.now() <= 0 ? "kicking off now" : `in ${human(nx - Date.now())}`) : "after the tournament";
+    const when = nx ? (nx - Date.now() <= 0 ? "kicking off now" : `in <span class="countdown" data-target="${nx}">${human(nx - Date.now())}</span>`) : "after the tournament";
     if (s === "active" || s === "idle") return `<div class="livebar idle" role="status">Connected · scores &amp; tables update during matches · next match ${when}</div>`;
     return `<div class="livebar idle" role="status">Loading live data…</div>`;
   }
@@ -739,9 +751,14 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   const [tab, setTab] = useState<MdTab>("summary");
   const fixture = findLive(match, fixtures) || initialFixture;
 
-  const isLive = fixture ? LIVE_STATUSES.has(fixture.status) : false;
-  const isDone = fixture ? DONE_STATUSES.has(fixture.status) : false;
+  const hasDbScore = match.dbStatus && match.dbGh != null && match.dbGa != null;
+  const isLive = fixture ? LIVE_STATUSES.has(fixture.status) : (hasDbScore ? LIVE_STATUSES.has(match.dbStatus!) : false);
+  const isDone = fixture ? DONE_STATUSES.has(fixture.status) : (hasDbScore ? DONE_STATUSES.has(match.dbStatus!) : false);
   const isUpcoming = !isLive && !isDone;
+
+  const scoreGh = fixture ? (fixture.gh ?? 0) : (match.dbGh ?? 0);
+  const scoreGa = fixture ? (fixture.ga ?? 0) : (match.dbGa ?? 0);
+  const statusLabel = fixture ? fixture.status : (match.dbStatus || "");
   const v = venues[match.v] || { common: "", city: "", country: "" };
 
   useEffect(() => {
@@ -784,9 +801,9 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
               <span className="md-drawer__time-display">{match.et}</span>
             ) : (
               <>
-                <span className="md-drawer__goals">{fixture!.gh ?? 0}</span>
+                <span className="md-drawer__goals">{scoreGh}</span>
                 <span className="md-drawer__sep">–</span>
-                <span className="md-drawer__goals">{fixture!.ga ?? 0}</span>
+                <span className="md-drawer__goals">{scoreGa}</span>
               </>
             )}
           </div>
@@ -797,8 +814,8 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
         </div>
 
         <div className="md-drawer__status">
-          {isLive && <span className="md-drawer__live">{fixture!.status === "HT" ? "HALF TIME" : `${fixture!.elapsed}'`}</span>}
-          {isDone && <span className="md-drawer__ft">{fixture!.status === "AET" ? "AFTER EXTRA TIME" : fixture!.status === "PEN" ? "PENALTIES" : "FULL TIME"}</span>}
+          {isLive && <span className="md-drawer__live">{statusLabel === "HT" ? "HALF TIME" : `${fixture?.elapsed || ""}'`}</span>}
+          {isDone && <span className="md-drawer__ft">{statusLabel === "AET" ? "AFTER EXTRA TIME" : statusLabel === "PEN" ? "PENALTIES" : "FULL TIME"}</span>}
           {isUpcoming && <span className="md-drawer__upcoming">UPCOMING</span>}
         </div>
 
@@ -823,12 +840,15 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
 
         {!isUpcoming && (
           <div className="md-tabs" role="tablist">
-            {(["summary", "stats", "lineups"] as MdTab[]).map(t => (
-              <button key={t} role="tab" aria-selected={tab === t} className={`md-tab${tab === t ? " md-tab--active" : ""}${t === "stats" && !hasStats ? " md-tab--disabled" : ""}${t === "lineups" && !hasLineups ? " md-tab--disabled" : ""}`}
-                onClick={() => { if (t === "stats" && !hasStats) return; if (t === "lineups" && !hasLineups) return; setTab(t); }}>
-                {t === "summary" ? "Summary" : t === "stats" ? "Stats" : "Lineups"}
-              </button>
-            ))}
+            {(["summary", "stats", "lineups"] as MdTab[]).map(t => {
+              const disabled = (t === "stats" && !hasStats) || (t === "lineups" && !hasLineups);
+              return (
+                <button key={t} role="tab" aria-selected={tab === t} className={`md-tab${tab === t ? " md-tab--active" : ""}${disabled ? " md-tab--disabled" : ""}`}
+                  onClick={() => { if (!disabled) setTab(t); }}>
+                  {t === "summary" ? "Summary" : t === "stats" ? "Stats" : "Lineups"}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

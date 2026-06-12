@@ -42,8 +42,8 @@ export async function loadTournamentData(): Promise<{ data: TournamentData; sour
     const [allTeams, allVenues, allGroups, allGroupTeams, allMatches] = await Promise.all([
       prisma.team.findMany(),
       prisma.venue.findMany(),
-      prisma.group.findMany(),
-      prisma.groupTeam.findMany({ include: { team: true }, orderBy: { position: "asc" } }),
+      prisma.group.findMany({ orderBy: { letter: "asc" } }),
+      prisma.groupTeam.findMany({ include: { team: true }, orderBy: [{ groupLetter: "asc" }, { position: "asc" }] }),
       prisma.match.findMany({
         include: { homeTeam: true, awayTeam: true },
         orderBy: { matchNumber: "asc" },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type MatchEvent, type TeamLineup, type PlayerMatchStat } from "@/lib/data";
+import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup, type PlayerMatchStat } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
 import { TEAM_PROFILES, type TeamProfile, type PlayerInfo } from "@/lib/teams";
 
@@ -112,6 +112,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
   const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture | null } | null>(null);
+  const [playerProfile, setPlayerProfile] = useState<{ name: string; team: string } | null>(null);
   const scrolledRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -270,18 +271,12 @@ export default function Tournament({ data }: { data: TournamentData }) {
     return { rows, played };
   }
 
-  function liveChipHtml(): string {
+  function liveIndicatorHtml(): string {
     void tick;
-    const s = liveStatus;
-    if (s === "off") return `<div class="livebar idle" role="status">Scores update live during matches. The confirmed schedule is shown below.</div>`;
-    if (s === "paused") return `<div class="livebar paused" role="status"><span class="dotlive" style="background:#b58900"></span><b>Live updates paused</b> — showing the latest known scores${liveTs ? ` (as of ${agoStr()})` : ""}.</div>`;
-    if (s === "nofix") return `<div class="livebar idle" role="status">No fixtures in play right now. The confirmed schedule is shown below.</div>`;
     const n = fixtures.filter(f => LIVE_STATUSES.has(f.status)).length;
-    if (s === "active" && n) return `<div class="livebar on" role="status" aria-live="polite"><span class="dotlive"></span>Live now — ${n} match${n > 1 ? "es" : ""} in play · updated ${agoStr()}</div>`;
-    const nx = nextStart();
-    const when = nx ? (nx - Date.now() <= 0 ? "kicking off now" : `in <span class="countdown" data-target="${nx}">${human(nx - Date.now())}</span>`) : "after the tournament";
-    if (s === "active" || s === "idle") return `<div class="livebar idle" role="status">Connected · scores &amp; tables update during matches · next match ${when}</div>`;
-    return `<div class="livebar idle" role="status">Loading live data…</div>`;
+    if (n > 0) return `<div class="livebar on" role="status" aria-live="polite"><span class="dotlive"></span>${n} match${n > 1 ? "es" : ""} in play</div>`;
+    if (liveStatus === "paused") return `<div class="livebar paused" role="status"><span class="dotlive" style="background:#b58900"></span>Showing latest scores</div>`;
+    return "";
   }
 
   function teamRow(t: string, goal: string, lead: boolean): string {
@@ -341,7 +336,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
   function renderSchedule(anim: boolean): string {
     const list = data.gs.filter(matchHit);
-    const head = liveChipHtml();
+    const head = liveIndicatorHtml();
     if (!list.length) return head + `<div class="empty">No matches match your filters.<br>Try clearing the search or picking “All”.</div>`;
     let html = head, cur = "";
     for (const m of list) {
@@ -362,7 +357,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }
 
   function renderGroups(anim: boolean): string {
-    let html = `<div class="gwrap">${liveChipHtml()}
+    let html = `<div class="gwrap">${liveIndicatorHtml()}
       <div class="qkey"><span><i style="background:#1F8A6B"></i>Top 2 advance</span>
       <span><i style="background:#E5B53A"></i>3rd — best 8 advance</span></div>`;
     for (const [g, teams] of Object.entries(data.groups)) {
@@ -386,7 +381,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }
 
   function renderKnockout(anim: boolean): string {
-    let html = '<div class="section" style="padding-top:4px">' + liveChipHtml();
+    let html = '<div class="section" style="padding-top:4px">' + liveIndicatorHtml();
     let cur = "";
     for (const k of data.ko) {
       if (k.round !== cur) { cur = k.round; html += `<div class="kohead">${esc(k.round)}<span class="mr">Matches ${esc(k.mr)}</span></div>`; }
@@ -473,7 +468,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       <section className="hero">
         <div className="hero__eyebrow">Canada &middot; Mexico &middot; United States</div>
         <h1 className="hero__title">LIVE<br />SCHEDULE</h1>
-        <div className="hero__sub">11 June &ndash; 19 July 2026 &middot; scores &amp; tables update during matches</div>
+        <div className="hero__sub">11 June &ndash; 19 July 2026</div>
         <div className="hero__stats">
           <div className="stat"><b>48</b><span>Teams</span></div>
           <div className="stat"><b>104</b><span>Matches</span></div>
@@ -495,6 +490,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
           </button>
         ))}
       </nav>
+
+      <CountdownHero data={data} fixtures={fixtures} findLive={findLive} />
 
       {view === "schedule" && (
         <div className="filters">
@@ -550,11 +547,98 @@ export default function Tournament({ data }: { data: TournamentData }) {
       />
 
       <div className="foot">
-        Schedule cross-checked 11 Jun 2026 &middot; live scores via API-Football (unofficial) &middot; knockout teams fill in as results come in
+        All data is unofficial &middot; FIFA is the source of record &middot; Knockout teams fill in as results are confirmed
       </div>
 
-      {teamDrawer && <TeamDrawer name={teamDrawer} flags={data.flags} groups={data.groups} gcolor={data.gcolor} gs={data.gs} hosts={data.hosts} onClose={() => setTeamDrawer(null)} />}
-      {matchDetail && <MatchDetailDrawer match={matchDetail.match} initialFixture={matchDetail.fixture} fixtures={fixtures} flags={data.flags} venues={data.venues} gcolor={data.gcolor} vName={vName} findLive={findLive} onClose={() => setMatchDetail(null)} onTeamClick={(t) => { setMatchDetail(null); setTeamDrawer(t); }} />}
+      {teamDrawer && <TeamDrawer name={teamDrawer} flags={data.flags} groups={data.groups} gcolor={data.gcolor} gs={data.gs} hosts={data.hosts} onClose={() => setTeamDrawer(null)} onPlayerClick={(p, t) => { setTeamDrawer(null); setPlayerProfile({ name: p, team: t }); }} />}
+      {matchDetail && <MatchDetailDrawer match={matchDetail.match} initialFixture={matchDetail.fixture} fixtures={fixtures} flags={data.flags} venues={data.venues} gcolor={data.gcolor} vName={vName} findLive={findLive} onClose={() => setMatchDetail(null)} onTeamClick={(t) => { setMatchDetail(null); setTeamDrawer(t); }} onPlayerClick={(p, t) => { setMatchDetail(null); setPlayerProfile({ name: p, team: t }); }} />}
+      {playerProfile && <PlayerProfileDrawer playerName={playerProfile.name} teamName={playerProfile.team} flags={data.flags} data={data} onClose={() => setPlayerProfile(null)} onTeamClick={(t) => { setPlayerProfile(null); setTeamDrawer(t); }} />}
+    </div>
+  );
+}
+
+function CountdownHero({ data, fixtures, findLive }: {
+  data: TournamentData;
+  fixtures: LiveFixture[];
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const fl = (t: string) => data.flags[t] || "⚽";
+
+  const liveMatches: { match: GroupStageMatch; fixture: LiveFixture }[] = [];
+  for (const m of data.gs) {
+    const f = findLive(m, fixtures);
+    if (f && LIVE_STATUSES.has(f.status)) liveMatches.push({ match: m, fixture: f });
+  }
+
+  if (liveMatches.length > 0) {
+    const { match, fixture } = liveMatches[0];
+    const v = data.venues[match.v];
+    const elapsed = fixture.status === "HT" ? "Half Time" : `${fixture.elapsed || ""}'`;
+    return (
+      <div className="cd-hero cd-hero--live">
+        <div className="cd-hero__label"><span className="cd-hero__pulse" />{liveMatches.length > 1 ? `${liveMatches.length} MATCHES LIVE` : "LIVE NOW"}</div>
+        <div className="cd-hero__teams">
+          <div className="cd-hero__side"><span className="cd-hero__flag">{fl(match.t1)}</span><span className="cd-hero__name">{match.t1}</span></div>
+          <div className="cd-hero__score-live">{fixture.gh ?? 0} – {fixture.ga ?? 0}</div>
+          <div className="cd-hero__side"><span className="cd-hero__flag">{fl(match.t2)}</span><span className="cd-hero__name">{match.t2}</span></div>
+        </div>
+        <div className="cd-hero__info">{elapsed}{v ? ` · ${v.common}, ${v.city}` : ""}</div>
+      </div>
+    );
+  }
+
+  let nextGs: GroupStageMatch | null = null;
+  for (const m of data.gs) {
+    if (m.ts > now && (!nextGs || m.ts < nextGs.ts)) nextGs = m;
+  }
+  let nextKo: KnockoutMatch | null = null;
+  for (const k of data.ko) {
+    if (k.ts > now && (!nextKo || k.ts < nextKo.ts)) nextKo = k;
+  }
+
+  const useGs = nextGs && (!nextKo || nextGs.ts <= nextKo.ts);
+  const ts = useGs ? nextGs!.ts : nextKo?.ts;
+  if (!ts) return null;
+
+  const diff = Math.max(0, ts - now);
+  const totalSec = Math.floor(diff / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const mn = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  const isoDate = useGs ? nextGs!.iso : nextKo!.iso;
+  const d = parseISO(isoDate);
+  const etTime = useGs ? nextGs!.et : nextKo!.et;
+  const venCode = useGs ? nextGs!.v : nextKo!.v;
+  const v = data.venues[venCode];
+
+  return (
+    <div className="cd-hero">
+      <div className="cd-hero__label">NEXT MATCH</div>
+      <div className="cd-hero__countdown">
+        <span className="cd-hero__digit">{pad(h)}</span>
+        <span className="cd-hero__colon">:</span>
+        <span className="cd-hero__digit">{pad(mn)}</span>
+        <span className="cd-hero__colon">:</span>
+        <span className="cd-hero__digit">{pad(s)}</span>
+      </div>
+      {useGs && nextGs ? (
+        <div className="cd-hero__teams">
+          <div className="cd-hero__side"><span className="cd-hero__flag">{fl(nextGs.t1)}</span><span className="cd-hero__name">{nextGs.t1}</span></div>
+          <span className="cd-hero__vs">vs</span>
+          <div className="cd-hero__side"><span className="cd-hero__flag">{fl(nextGs.t2)}</span><span className="cd-hero__name">{nextGs.t2}</span></div>
+        </div>
+      ) : nextKo ? (
+        <div className="cd-hero__teams"><span className="cd-hero__round">{nextKo.round}</span></div>
+      ) : null}
+      <div className="cd-hero__info">{DOW[d.getDay()]} {d.getDate()} {MON[d.getMonth()]} · {etTime}{v ? ` · ${v.common}` : ""}</div>
     </div>
   );
 }
@@ -567,7 +651,116 @@ function posColor(p: string): string {
   return ({ GK: "#b58900", DF: "#2563eb", MF: "#0A5C3E", FW: "#D23B2E" }[p]) || "#5C6B62";
 }
 
-function TeamDrawer({ name, flags, groups, gcolor, gs, hosts, onClose }: {
+function PlayerProfileDrawer({ playerName, teamName, flags, data, onClose, onTeamClick }: {
+  playerName: string;
+  teamName: string;
+  flags: Record<string, string>;
+  data: TournamentData;
+  onClose: () => void;
+  onTeamClick: (team: string) => void;
+}) {
+  const profile = TEAM_PROFILES[teamName];
+  const player = profile?.squad.find(p => p.name === playerName);
+  const flag = flags[teamName] || "⚽";
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = ""; document.removeEventListener("keydown", onKey); };
+  }, [onClose]);
+
+  const groupLetter = Object.entries(data.groups).find(([, teams]) => teams.includes(teamName))?.[0] || null;
+  const groupMatches = data.gs.filter(m => m.t1 === teamName || m.t2 === teamName);
+  const headerBg = profile?.kitColors.primary || "#0A5C3E";
+  const lightColors = ["#FFFFFF","#FFDF00","#FCD116","#FECC02","#FFB81C","#FFCD00","#FF8200","#FFD100"];
+  const headerText = lightColors.includes(headerBg) ? "#122019" : "#fff";
+
+  if (!player) {
+    return (
+      <div className="drawer-overlay" onClick={onClose}>
+        <div className="drawer pp-drawer" onClick={e => e.stopPropagation()}>
+          <div className="pp-drawer__header" style={{ background: headerBg, color: headerText }}>
+            <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
+            <div className="pp-drawer__name">{playerName}</div>
+            <button className="pp-drawer__team-link" onClick={() => { onClose(); onTeamClick(teamName); }}>
+              {flag} {teamName} →
+            </button>
+          </div>
+          <div className="drawer__body">
+            <p style={{ textAlign: "center", color: "#5C6B62", padding: "40px 20px" }}>Detailed profile not available yet.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="drawer-overlay" onClick={onClose}>
+      <div className="drawer pp-drawer" onClick={e => e.stopPropagation()}>
+        <div className="pp-drawer__header" style={{ background: headerBg, color: headerText }}>
+          <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
+          {player.number != null && <div className="pp-drawer__number">{player.number}</div>}
+          <div className="pp-drawer__name">{player.name}</div>
+          <div className="pp-drawer__pos" style={{ background: posColor(player.pos) }}>{posLabel(player.pos)}</div>
+        </div>
+
+        <div className="drawer__body">
+          <button className="pp-drawer__team-row" onClick={() => { onClose(); onTeamClick(teamName); }}>
+            <span>{flag}</span>
+            <span className="pp-drawer__team-name">{teamName}</span>
+            {groupLetter && <span className="pp-drawer__group" style={{ color: data.gcolor[groupLetter] }}>Group {groupLetter}</span>}
+            <span className="pp-drawer__arrow">→</span>
+          </button>
+
+          <div className="drawer__stats-grid">
+            <div className="drawer__stat"><span className="drawer__stat-val">{player.age}</span><span className="drawer__stat-lbl">Age</span></div>
+            <div className="drawer__stat"><span className="drawer__stat-val">{player.caps}</span><span className="drawer__stat-lbl">Caps</span></div>
+            <div className="drawer__stat"><span className="drawer__stat-val">{player.goals}</span><span className="drawer__stat-lbl">Int&apos;l Goals</span></div>
+            {player.number != null && <div className="drawer__stat"><span className="drawer__stat-val">#{player.number}</span><span className="drawer__stat-lbl">Jersey</span></div>}
+          </div>
+
+          <div className="drawer__section">
+            <h3 className="drawer__h3">Club</h3>
+            <p className="drawer__text">{player.club}</p>
+          </div>
+
+          <div className="drawer__section">
+            <h3 className="drawer__h3">Position</h3>
+            <p className="drawer__text" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="drawer__player-pos" style={{ background: posColor(player.pos) }}>{player.pos}</span>
+              {posLabel(player.pos)}
+            </p>
+          </div>
+
+          {groupMatches.length > 0 && (
+            <div className="drawer__section">
+              <h3 className="drawer__h3">Group Stage Schedule</h3>
+              {groupMatches.map(m => {
+                const d = parseISO(m.iso);
+                const opponent = m.t1 === teamName ? m.t2 : m.t1;
+                const isHome = m.t1 === teamName;
+                return (
+                  <div key={m.no} className="drawer__match">
+                    <div className="drawer__match-date">{d.getDate()} {MON[d.getMonth()]}</div>
+                    <div className="drawer__match-vs">
+                      <span>{flag}</span>
+                      <span className="drawer__match-ha">{isHome ? "vs" : "@"}</span>
+                      <span>{flags[opponent] || "⚽"} {opponent}</span>
+                    </div>
+                    <div className="drawer__match-time">{m.et}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TeamDrawer({ name, flags, groups, gcolor, gs, hosts, onClose, onPlayerClick }: {
   name: string;
   flags: Record<string, string>;
   groups: Record<string, string[]>;
@@ -575,6 +768,7 @@ function TeamDrawer({ name, flags, groups, gcolor, gs, hosts, onClose }: {
   gs: GroupStageMatch[];
   hosts: string[];
   onClose: () => void;
+  onPlayerClick: (playerName: string, teamName: string) => void;
 }) {
   const profile = TEAM_PROFILES[name];
   const flag = flags[name] || "⚽";
@@ -698,11 +892,12 @@ function TeamDrawer({ name, flags, groups, gcolor, gs, hosts, onClose }: {
               <div key={pos}>
                 <div className="drawer__pos-head" style={{ color: posColor(pos) }}>{posLabel(pos)}s</div>
                 {byPos[pos].map(p => (
-                  <div key={p.name} className="drawer__player">
+                  <div key={p.name} className="drawer__player drawer__player--clickable" onClick={() => onPlayerClick(p.name, name)} role="button" tabIndex={0}>
                     <div className="drawer__player-main">
                       {p.number && <span className="drawer__player-num">{p.number}</span>}
                       <span className="drawer__player-name">{p.name}</span>
                       <span className="drawer__player-pos" style={{ background: posColor(p.pos) }}>{p.pos}</span>
+                      <span className="drawer__player-arrow">›</span>
                     </div>
                     <div className="drawer__player-meta">
                       <span>{p.club}</span>
@@ -736,7 +931,7 @@ function eventIcon(type: string, detail: string): string {
 
 type MdTab = "summary" | "stats" | "lineups";
 
-function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gcolor, vName: _vName, findLive, onClose, onTeamClick }: {
+function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gcolor, vName: _vName, findLive, onClose, onTeamClick, onPlayerClick }: {
   match: GroupStageMatch;
   initialFixture: LiveFixture | null;
   fixtures: LiveFixture[];
@@ -747,6 +942,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   onClose: () => void;
   onTeamClick: (team: string) => void;
+  onPlayerClick: (playerName: string, teamName: string) => void;
 }) {
   const [tab, setTab] = useState<MdTab>("summary");
   const fixture = findLive(match, fixtures) || initialFixture;
@@ -981,18 +1177,20 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   }
 
   function renderLineupTeam(lineup: TeamLineup, teamName: string) {
+    const resolvedTeam = canon(teamName);
+    const matchTeam = canon(match.t1) === resolvedTeam ? match.t1 : match.t2;
     return (
       <div className="md-lineup">
         <div className="md-lineup__header">
-          <span className="md-lineup__flag">{flags[teamName] || "⚽"}</span>
-          <span className="md-lineup__team">{teamName}</span>
+          <span className="md-lineup__flag">{flags[matchTeam] || "⚽"}</span>
+          <span className="md-lineup__team">{matchTeam}</span>
           <span className="md-lineup__formation">{lineup.formation}</span>
         </div>
         <div className="md-lineup__section-label">Starting XI</div>
         {lineup.startXI.map((p, i) => {
           const playerStats = fixture?.players?.find(ps => ps.number === p.number && canon(ps.team) === canon(teamName));
           return (
-            <div key={i} className="md-lineup__player">
+            <div key={i} className="md-lineup__player md-lineup__player--clickable" onClick={() => onPlayerClick(p.name, matchTeam)} role="button" tabIndex={0}>
               <span className="md-lineup__num">{p.number}</span>
               <span className="md-lineup__name">{p.name}</span>
               <span className="md-lineup__pos" data-pos={p.pos}>{p.pos}</span>
@@ -1011,7 +1209,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
           <>
             <div className="md-lineup__section-label">Substitutes</div>
             {lineup.substitutes.map((p, i) => (
-              <div key={i} className="md-lineup__player md-lineup__player--sub">
+              <div key={i} className="md-lineup__player md-lineup__player--sub md-lineup__player--clickable" onClick={() => onPlayerClick(p.name, matchTeam)} role="button" tabIndex={0}>
                 <span className="md-lineup__num">{p.number}</span>
                 <span className="md-lineup__name">{p.name}</span>
                 <span className="md-lineup__pos" data-pos={p.pos}>{p.pos}</span>
@@ -1034,7 +1232,40 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     );
   }
 
+  function renderSquadColumn(teamName: string) {
+    const profile = TEAM_PROFILES[teamName];
+    if (!profile) return null;
+    const posOrder = ["GK", "DF", "MF", "FW"];
+    const byPos: Record<string, PlayerInfo[]> = {};
+    for (const p of profile.squad) {
+      if (!byPos[p.pos]) byPos[p.pos] = [];
+      byPos[p.pos].push(p);
+    }
+    return (
+      <div className="md-squad">
+        <div className="md-squad__header">
+          <span>{flags[teamName] || "⚽"}</span>
+          <span className="md-squad__team">{teamName}</span>
+        </div>
+        {posOrder.filter(pos => byPos[pos]).map(pos => (
+          <div key={pos}>
+            <div className="md-squad__pos" style={{ color: posColor(pos) }}>{posLabel(pos)}s</div>
+            {byPos[pos].map(p => (
+              <div key={p.name} className="md-squad__player" onClick={() => onPlayerClick(p.name, teamName)} role="button" tabIndex={0}>
+                {p.number != null && <span className="md-squad__num">{p.number}</span>}
+                <span className="md-squad__name">{p.name}</span>
+                <span className="md-squad__club">{p.club}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   function renderUpcomingBody() {
+    const profile1 = TEAM_PROFILES[match.t1];
+    const profile2 = TEAM_PROFILES[match.t2];
     return (
       <>
         <div className="md-drawer__venue">
@@ -1057,6 +1288,14 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
             </button>
           </div>
         </div>
+
+        {(profile1 || profile2) && (
+          <div className="drawer__section">
+            <h3 className="drawer__h3">Expected Squads</h3>
+            {renderSquadColumn(match.t1)}
+            {renderSquadColumn(match.t2)}
+          </div>
+        )}
       </>
     );
   }

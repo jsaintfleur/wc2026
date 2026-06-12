@@ -1297,3 +1297,268 @@ code { background: #eef2ee; border: 1px solid var(--line); border-radius: 5px; p
 .md-drawer__prematch-team:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .md-drawer__prematch-flag { font-size: 24px; }
 .md-drawer__prematch-arrow { margin-left: auto; color: var(--muted); font-size: 14px; }
+
+/* ── Countdown Hero ── */
+.cd-hero {
+  background: linear-gradient(135deg, var(--pitch-deep) 0%, var(--pitch) 100%);
+  color: #fff;
+  border-radius: 16px;
+  padding: 28px 20px 24px;
+  margin: 12px 2px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.cd-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 70% 20%, rgba(255,255,255,.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+.cd-hero--live {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid rgba(210,59,46,.4);
+}
+.cd-hero__label {
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.6);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.cd-hero--live .cd-hero__label {
+  color: var(--live);
+  font-size: 12px;
+  letter-spacing: 3px;
+}
+.cd-hero__pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--live);
+  animation: pulse 1.4s infinite;
+}
+.cd-hero__countdown {
+  font-family: var(--disp);
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  line-height: 1;
+  margin: 8px 0 16px;
+  position: relative;
+}
+.cd-hero__colon {
+  opacity: .4;
+  margin: 0 1px;
+}
+.cd-hero__teams {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin: 12px 0 8px;
+}
+.cd-hero__side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.cd-hero__flag { font-size: 36px; line-height: 1; }
+.cd-hero__name {
+  font-family: var(--disp);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+.cd-hero__vs {
+  font-size: 13px;
+  font-weight: 700;
+  opacity: .4;
+  text-transform: uppercase;
+  align-self: center;
+}
+.cd-hero__score-live {
+  font-family: var(--disp);
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  line-height: 1;
+}
+.cd-hero__info {
+  font-size: 12px;
+  opacity: .55;
+  margin-top: 8px;
+  letter-spacing: .3px;
+}
+.cd-hero__round {
+  font-family: var(--disp);
+  font-size: 18px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 600px) {
+  .cd-hero__countdown { font-size: 48px; }
+  .cd-hero__flag { font-size: 28px; }
+  .cd-hero__name { font-size: 14px; }
+  .cd-hero__score-live { font-size: 36px; }
+}
+
+/* ── Player Profile Drawer ── */
+.pp-drawer { max-height: 92vh; }
+.pp-drawer__header {
+  padding: 44px 16px 20px;
+  text-align: center;
+  position: relative;
+}
+.pp-drawer__number {
+  font-family: var(--disp);
+  font-size: 48px;
+  font-weight: 700;
+  opacity: .3;
+  line-height: 1;
+}
+.pp-drawer__name {
+  font-family: var(--disp);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  margin: 4px 0 8px;
+  text-transform: uppercase;
+}
+.pp-drawer__pos {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+.pp-drawer__team-link {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 12px;
+  background: rgba(255,255,255,.15);
+  border: none;
+  border-radius: 8px;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.pp-drawer__team-link:hover { background: rgba(255,255,255,.25); }
+.pp-drawer__team-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-family: var(--disp);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.pp-drawer__team-row:hover { border-color: var(--pitch); }
+.pp-drawer__team-name { letter-spacing: .03em; }
+.pp-drawer__group { font-size: 12px; font-weight: 700; margin-left: auto; }
+.pp-drawer__arrow { color: var(--muted); font-size: 14px; }
+
+/* ── Clickable Players ── */
+.drawer__player--clickable {
+  cursor: pointer;
+  transition: background .12s;
+  border-radius: 8px;
+  margin: 0 -6px;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+.drawer__player--clickable:hover { background: rgba(10,92,62,.05); }
+.drawer__player-arrow {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 300;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.drawer__player--clickable:hover .drawer__player-arrow { opacity: 1; }
+
+.md-lineup__player--clickable {
+  cursor: pointer;
+  transition: background .12s;
+  border-radius: 6px;
+}
+.md-lineup__player--clickable:hover { background: rgba(10,92,62,.05); }
+
+/* ── Expected Squads in Match Drawer ── */
+.md-squad {
+  margin-bottom: 16px;
+}
+.md-squad__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 15px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+.md-squad__team { letter-spacing: .03em; text-transform: uppercase; }
+.md-squad__pos {
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 6px 0 2px;
+}
+.md-squad__player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .12s;
+}
+.md-squad__player:hover { background: rgba(10,92,62,.05); }
+.md-squad__num {
+  width: 22px;
+  text-align: center;
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--muted);
+}
+.md-squad__name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.md-squad__club {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}

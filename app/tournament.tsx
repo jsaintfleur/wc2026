@@ -11,6 +11,14 @@ const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const LIVE_STATUSES = new Set(["1H","2H","HT","ET","BT","P","LIVE","SUSP","INT"]);
 const DONE_STATUSES = new Set(["FT","AET","PEN","PEN_LIVE","WO","AWD"]);
 
+// 4 hours: even with ET + penalties + delays, a match can't be live after this
+const STALE_LIVE_THRESHOLD = 4 * 60 * 60 * 1000;
+
+function isStaleStatus(ts: number, status: string): boolean {
+  if (!LIVE_STATUSES.has(status)) return false;
+  return Date.now() - ts > STALE_LIVE_THRESHOLD;
+}
+
 type ViewType = "schedule" | "groups" | "knockout" | "venues" | "about";
 type LiveStatus = "init" | "off" | "idle" | "active" | "paused" | "nofix";
 
@@ -296,11 +304,14 @@ export default function Tournament({ data }: { data: TournamentData }) {
     const v = ven(m.v), gc = data.gcolor[m.g];
     const f = findLive(m, fixtures);
     const hasKickedOff = m.ts <= Date.now() + 5 * 60000;
-    const fLive = f && LIVE_STATUSES.has(f.status);
+    const fStale = f && isStaleStatus(m.ts, f.status);
+    const fLive = f && LIVE_STATUSES.has(f.status) && !fStale;
     const fDone = f && DONE_STATUSES.has(f.status);
     let timeHtml: string, g1 = "", g2 = "", cls = dimmed ? " tix--done" : "", scorers1 = "", scorers2 = "";
     let lead1 = false, lead2 = false;
-    if (fLive || (hasKickedOff && fDone)) {
+    if (fStale) {
+      timeHtml = `<div class="lo tix__updating">Updating...</div>`;
+    } else if (fLive || (hasKickedOff && fDone)) {
       const gg = goalsFor(m, f!);
       const a = gg.t1 == null ? 0 : gg.t1, b = gg.t2 == null ? 0 : gg.t2;
       g1 = `<span class="gl">${a}</span>`;
@@ -310,7 +321,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       timeHtml = `<div class="sc">${a}–${b}</div>${liveBadge(f!)}`;
       scorers1 = goalScorers(f!.events, m.t1);
       scorers2 = goalScorers(f!.events, m.t2);
-    } else if (hasKickedOff && m.dbStatus && (LIVE_STATUSES.has(m.dbStatus) || DONE_STATUSES.has(m.dbStatus)) && m.dbGh != null && m.dbGa != null) {
+    } else if (hasKickedOff && m.dbStatus && !isStaleStatus(m.ts, m.dbStatus) && (LIVE_STATUSES.has(m.dbStatus) || DONE_STATUSES.has(m.dbStatus)) && m.dbGh != null && m.dbGa != null) {
       const a = m.dbGh, b = m.dbGa;
       g1 = `<span class="gl">${a}</span>`;
       g2 = `<span class="gl">${b}</span>`;
@@ -346,9 +357,10 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
     for (const m of list) {
       const f = findLive(m, fixtures);
-      const isLive = f && LIVE_STATUSES.has(f.status);
+      const stale = (f && isStaleStatus(m.ts, f.status)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus));
+      const isLive = !stale && f && LIVE_STATUSES.has(f.status);
       const hasKickedOff = m.ts <= now + 5 * 60000;
-      const isDone = hasKickedOff && (
+      const isDone = !stale && hasKickedOff && (
         (f && DONE_STATUSES.has(f.status)) ||
         (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null)
       );
@@ -1019,9 +1031,12 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
 
   const hasKickedOff = match.ts <= Date.now() + 5 * 60000;
   const hasDbScore = match.dbStatus && match.dbGh != null && match.dbGa != null;
-  const isLive = fixture ? LIVE_STATUSES.has(fixture.status) : (hasKickedOff && hasDbScore ? LIVE_STATUSES.has(match.dbStatus!) : false);
-  const isDone = hasKickedOff && (fixture ? DONE_STATUSES.has(fixture.status) : (hasDbScore ? DONE_STATUSES.has(match.dbStatus!) : false));
-  const isUpcoming = !isLive && !isDone;
+  const fixtureStale = fixture ? isStaleStatus(match.ts, fixture.status) : false;
+  const dbStale = match.dbStatus ? isStaleStatus(match.ts, match.dbStatus) : false;
+  const isLive = !fixtureStale && (fixture ? LIVE_STATUSES.has(fixture.status) : (hasKickedOff && hasDbScore && !dbStale ? LIVE_STATUSES.has(match.dbStatus!) : false));
+  const isDone = hasKickedOff && !fixtureStale && !dbStale && (fixture ? DONE_STATUSES.has(fixture.status) : (hasDbScore ? DONE_STATUSES.has(match.dbStatus!) : false));
+  const isStale = fixtureStale || (hasKickedOff && dbStale && !fixture);
+  const isUpcoming = !isLive && !isDone && !isStale;
 
   const scoreGh = fixture ? (fixture.gh ?? 0) : (match.dbGh ?? 0);
   const scoreGa = fixture ? (fixture.ga ?? 0) : (match.dbGa ?? 0);
@@ -1064,7 +1079,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
             <span className="md-drawer__team-name">{match.t1}</span>
           </button>
           <div className="md-drawer__score">
-            {isUpcoming ? (
+            {(isUpcoming || isStale) ? (
               <span className="md-drawer__time-display">{match.et}</span>
             ) : (
               <>
@@ -1083,6 +1098,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
         <div className="md-drawer__status">
           {isLive && <span className="md-drawer__live">{statusLabel === "HT" ? "HALF TIME" : `${fixture?.elapsed || ""}'`}</span>}
           {isDone && <span className="md-drawer__ft">{statusLabel === "AET" ? "AFTER EXTRA TIME" : statusLabel === "PEN" ? "PENALTIES" : "FULL TIME"}</span>}
+          {isStale && <span className="md-drawer__updating">Updating...</span>}
           {isUpcoming && <span className="md-drawer__upcoming">UPCOMING</span>}
         </div>
 
@@ -1105,7 +1121,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
           </div>
         )}
 
-        {!isUpcoming && (
+        {!isUpcoming && !isStale && (
           <div className="md-tabs" role="tablist">
             {(["summary", "stats", "lineups"] as MdTab[]).map(t => {
               const disabled = (t === "stats" && !hasStats) || (t === "lineups" && !hasLineups);
@@ -1376,10 +1392,10 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
       <div className="drawer md-drawer" onClick={e => e.stopPropagation()}>
         {renderScoreHeader()}
         <div className="drawer__body">
-          {isUpcoming && renderUpcomingBody()}
-          {!isUpcoming && tab === "summary" && renderSummaryTab()}
-          {!isUpcoming && tab === "stats" && renderStatsTab()}
-          {!isUpcoming && tab === "lineups" && renderLineupsTab()}
+          {(isUpcoming || isStale) && renderUpcomingBody()}
+          {!isUpcoming && !isStale && tab === "summary" && renderSummaryTab()}
+          {!isUpcoming && !isStale && tab === "stats" && renderStatsTab()}
+          {!isUpcoming && !isStale && tab === "lineups" && renderLineupsTab()}
         </div>
       </div>
     </div>

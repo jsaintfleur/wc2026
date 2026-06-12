@@ -1378,6 +1378,23 @@ code { background: #eef2ee; border: 1px solid var(--line); border-radius: 5px; p
   opacity: .65;
 }
 .tix--done:hover { opacity: .85; }
+.tix__updating {
+  color: var(--gold);
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: .5px;
+  animation: pulse 1.4s infinite;
+}
+.md-drawer__updating {
+  color: var(--gold);
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  animation: pulse 1.4s infinite;
+}
 
 /* ── Countdown Hero ── */
 .cd-hero {

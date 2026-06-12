@@ -1645,6 +1645,7 @@ code { background: #eef2ee; border: 1px solid var(--line); border-radius: 5px; p
   padding: 12px 4px 4px;
 }
 .mc-sub--done { color: var(--muted); }
+.mc-sec--past .mc-hd { color: var(--muted); }
 .mc-toggle {
   display: flex;
   align-items: center;

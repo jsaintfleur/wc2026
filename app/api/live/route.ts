@@ -24,9 +24,16 @@ interface FixtureResponse {
 }
 
 async function fetchFixtures(key: string): Promise<FixtureResponse> {
-  const url = `https://v3.football.api-sports.io/fixtures?league=${LEAGUE}&season=${SEASON}`;
-  const r = await fetch(url, { headers: { "x-apisports-key": key } });
-  const body = await r.json().catch(() => ({}));
+  /* Try league+season first; fall back to date-based query if no fixtures returned */
+  let url = `https://v3.football.api-sports.io/fixtures?league=${LEAGUE}&season=${SEASON}`;
+  let r = await fetch(url, { headers: { "x-apisports-key": key } });
+  let body = await r.json().catch(() => ({}));
+  if (r.ok && (!body.response || body.response.length === 0)) {
+    const today = new Date().toISOString().slice(0, 10);
+    url = `https://v3.football.api-sports.io/fixtures?date=${today}&league=${LEAGUE}`;
+    r = await fetch(url, { headers: { "x-apisports-key": key } });
+    body = await r.json().catch(() => ({}));
+  }
   const quota = {
     limit: r.headers.get("x-ratelimit-requests-limit"),
     remaining: r.headers.get("x-ratelimit-requests-remaining"),

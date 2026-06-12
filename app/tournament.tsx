@@ -121,7 +121,6 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
   const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture | null } | null>(null);
   const [playerProfile, setPlayerProfile] = useState<{ name: string; team: string } | null>(null);
-  const [showResults, setShowResults] = useState(false);
   const scrolledRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -196,15 +195,18 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
   useEffect(() => {
     if (scrolledRef.current || view !== "schedule") return;
-    scrolledRef.current = true;
+    requestAnimationFrame(() => {
+      const anchor = document.getElementById("next-match-anchor");
+      if (anchor) {
+        anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrolledRef.current = true;
+      }
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      const toggleEl = (e.target as HTMLElement).closest("[data-action='toggle-results']") as HTMLElement | null;
-      if (toggleEl) { e.preventDefault(); setShowResults(p => !p); return; }
-
       const teamEl = (e.target as HTMLElement).closest("[data-team]") as HTMLElement | null;
       if (teamEl) {
         e.preventDefault();
@@ -348,93 +350,75 @@ export default function Tournament({ data }: { data: TournamentData }) {
     const list = data.gs.filter(matchHit);
     if (!list.length) return `<div class="empty">No matches match your filters.<br>Try clearing the search or picking "All".</div>`;
 
-    const live: GroupStageMatch[] = [];
-    const todayUp: GroupStageMatch[] = [];
-    const todayDone: GroupStageMatch[] = [];
-    const tmrw: GroupStageMatch[] = [];
-    const upByDate = new Map<string, GroupStageMatch[]>();
-    const pastByDate = new Map<string, GroupStageMatch[]>();
+    /* Group matches by ISO date, preserving chronological order */
+    const byDate = new Map<string, GroupStageMatch[]>();
+    for (const m of list) {
+      if (!byDate.has(m.iso)) byDate.set(m.iso, []);
+      byDate.get(m.iso)!.push(m);
+    }
+    const sortedDates = [...byDate.keys()].sort();
 
+    /* Find live matches for the pinned banner */
+    const liveMatches: GroupStageMatch[] = [];
     for (const m of list) {
       const f = findLive(m, fixtures);
       const stale = (f && isStaleStatus(m.ts, f.status)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus));
-      const isLive = !stale && f && LIVE_STATUSES.has(f.status);
-      const hasKickedOff = m.ts <= now + 5 * 60000;
-      const isDone = !stale && hasKickedOff && (
-        (f && DONE_STATUSES.has(f.status)) ||
-        (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null)
-      );
-
-      if (isLive) {
-        live.push(m);
-      } else if (m.iso === today) {
-        isDone ? todayDone.push(m) : todayUp.push(m);
-      } else if (m.iso === tomorrow) {
-        tmrw.push(m);
-      } else if (m.iso < today) {
-        if (!pastByDate.has(m.iso)) pastByDate.set(m.iso, []);
-        pastByDate.get(m.iso)!.push(m);
-      } else {
-        if (!upByDate.has(m.iso)) upByDate.set(m.iso, []);
-        upByDate.get(m.iso)!.push(m);
-      }
+      if (!stale && f && LIVE_STATUSES.has(f.status)) liveMatches.push(m);
     }
 
     let html = "";
 
-    if (live.length) {
+    /* Live banner pinned at top when matches are in progress */
+    if (liveMatches.length) {
       html += `<div class="mc-sec" id="mc-live"><div class="mc-hd mc-hd--live"><span class="mc-dot"></span>Live Now</div>`;
-      for (const m of live) html += tixCard(m, anim);
+      for (const m of liveMatches) html += tixCard(m, anim);
       html += `</div>`;
     }
 
-    const hasToday = todayUp.length || todayDone.length;
-    if (hasToday) {
-      const dt = new Date();
-      html += `<div class="mc-sec" id="today-anchor"><div class="mc-hd">Gameday<span class="mc-date">${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}</span></div>`;
-      if (todayUp.length) {
-        if (todayDone.length) html += `<div class="mc-sub">Upcoming</div>`;
-        for (const m of todayUp) html += tixCard(m, anim);
+    /* Chronological timeline — every date gets a section, auto-scroll anchor on the first upcoming date */
+    let anchorPlaced = false;
+    for (const iso of sortedDates) {
+      const matches = byDate.get(iso)!;
+      const dt = parseISO(iso);
+      const dateLabel = `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`;
+
+      /* Determine if this day is fully in the past, current, or future */
+      const allDone = matches.every(m => {
+        const f = findLive(m, fixtures);
+        const stale = (f && isStaleStatus(m.ts, f.status)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus));
+        const hasKickedOff = m.ts <= now + 5 * 60000;
+        return !stale && hasKickedOff && (
+          (f && DONE_STATUSES.has(f.status)) ||
+          (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null)
+        );
+      });
+      const isToday = iso === today;
+      const isPast = iso < today || (isToday && allDone);
+
+      /* Place the scroll anchor before the first non-past section */
+      if (!anchorPlaced && !isPast) {
+        html += `<div id="next-match-anchor" style="scroll-margin-top:80px"></div>`;
+        anchorPlaced = true;
       }
-      if (todayDone.length) {
-        html += `<div class="mc-sub mc-sub--done">Completed</div>`;
-        for (const m of todayDone) html += tixCard(m, anim, true);
-      }
-      html += `</div>`;
-    }
 
-    if (tmrw.length) {
-      const dt = new Date(); dt.setDate(dt.getDate() + 1);
-      html += `<div class="mc-sec" id="mc-tomorrow"><div class="mc-hd">Tomorrow<span class="mc-date">${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}</span></div>`;
-      for (const m of tmrw) html += tixCard(m, anim);
-      html += `</div>`;
-    }
+      const sectionCls = isPast ? "mc-sec mc-sec--past" : "mc-sec";
+      const headExtra = isToday ? " — Gameday" : "";
+      html += `<div class="${sectionCls}"><div class="mc-hd">${dateLabel}${headExtra}</div>`;
 
-    if (upByDate.size) {
-      html += `<div class="mc-sec" id="mc-upcoming"><div class="mc-hd">Upcoming Matches</div>`;
-      for (const [iso, matches] of upByDate) {
-        const dt = parseISO(iso);
-        html += `<div class="dayhead"><span class="dow">${DOW[dt.getDay()]}</span><h3>${dt.getDate()} ${MON[dt.getMonth()]}</h3></div>`;
-        for (const m of matches) html += tixCard(m, anim);
-      }
-      html += `</div>`;
-    }
-
-    if (pastByDate.size) {
-      const totalPast = [...pastByDate.values()].reduce((s, a) => s + a.length, 0);
-      html += `<div class="mc-sec mc-sec--results" id="mc-results">`;
-      html += `<button class="mc-toggle" data-action="toggle-results"><span class="mc-hd" style="margin:0;padding:0;border:0">Results</span><span class="mc-count">${totalPast} match${totalPast !== 1 ? "es" : ""}</span><span class="mc-arrow">${showResults ? "&#9662;" : "&#9656;"}</span></button>`;
-      if (showResults) {
-        const sortedDates = [...pastByDate.keys()].sort().reverse();
-        for (const iso of sortedDates) {
-          const dt = parseISO(iso);
-          html += `<div class="dayhead"><span class="dow">${DOW[dt.getDay()]}</span><h3>${dt.getDate()} ${MON[dt.getMonth()]}</h3></div>`;
-          for (const m of pastByDate.get(iso)!) html += tixCard(m, anim, true);
-        }
+      for (const m of matches) {
+        const f = findLive(m, fixtures);
+        const stale = (f && isStaleStatus(m.ts, f.status)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus));
+        const hasKickedOff = m.ts <= now + 5 * 60000;
+        const isDone = !stale && hasKickedOff && !!(
+          (f && DONE_STATUSES.has(f.status)) ||
+          (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null)
+        );
+        html += tixCard(m, anim, isDone);
       }
       html += `</div>`;
     }
 
+    /* If every single match is done, no anchor was placed — that's fine */
     return html || `<div class="empty">No matches match your filters.</div>`;
   }
 
@@ -524,7 +508,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     if (view === "venues") return renderVenues(animate);
     return renderAbout();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, group, team, query, fixtures, liveStatus, liveTs, animate, tick, showResults]);
+  }, [view, group, team, query, fixtures, liveStatus, liveTs, animate, tick]);
 
   function handleTab(v: ViewType) {
     setAnimate(true);

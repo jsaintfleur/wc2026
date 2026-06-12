@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup, type PlayerMatchStat } from "@/lib/data";
+import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
-import { TEAM_PROFILES, type TeamProfile, type PlayerInfo } from "@/lib/teams";
+import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -14,9 +14,9 @@ const DONE_STATUSES = new Set(["FT","AET","PEN","PEN_LIVE","WO","AWD"]);
 // 4 hours: even with ET + penalties + delays, a match can't be live after this
 const STALE_LIVE_THRESHOLD = 4 * 60 * 60 * 1000;
 
-function isStaleStatus(ts: number, status: string): boolean {
+function isStaleStatus(ts: number, status: string, now = Date.now()): boolean {
   if (!LIVE_STATUSES.has(status)) return false;
-  return Date.now() - ts > STALE_LIVE_THRESHOLD;
+  return now - ts > STALE_LIVE_THRESHOLD;
 }
 
 type ViewType = "schedule" | "groups" | "knockout" | "venues" | "about";
@@ -31,14 +31,6 @@ function todayISO(): string {
   const n = new Date();
   return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0") + "-" + String(n.getDate()).padStart(2, "0");
 }
-
-function tomorrowISO(): string {
-  const n = new Date();
-  n.setDate(n.getDate() + 1);
-  return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0") + "-" + String(n.getDate()).padStart(2, "0");
-}
-
-
 
 function liveBadge(f: LiveFixture): string {
   if (LIVE_STATUSES.has(f.status)) return `<span class="lv">${f.status === "HT" ? "HT" : (f.elapsed ? f.elapsed + "'" : "LIVE")}</span>`;
@@ -78,15 +70,6 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const vName = (k: string) => (data.venues[k] || { common: "" }).common || "";
   const allTeams = [...new Set(Object.values(data.groups).flat())].sort();
 
-  function nextStart(): number | null {
-    const n = Date.now();
-    let nx: number | null = null;
-    for (const s of data.starts) {
-      if (s > n - 90 * 60000) { if (nx === null || s < nx) nx = s; }
-    }
-    return nx;
-  }
-
   function findLive(m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]): LiveFixture | null {
     if (!fx.length) return null;
     let best: LiveFixture | null = null;
@@ -116,7 +99,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [liveTs, setLiveTs] = useState(0);
   const [, setLiveStale] = useState(false);
   const [animate, setAnimate] = useState(true);
-  const [tick, setTick] = useState(0);
+  const [nowMs, setNowMs] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
   const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture | null } | null>(null);
@@ -160,17 +143,21 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }, [liveStatus, pollLive]);
 
   useEffect(() => {
-    pollLive().then(schedule);
+    queueMicrotask(() => {
+      setNowMs(Date.now());
+      pollLive().then(schedule);
+    });
     const onVis = () => {
       if (document.hidden) {
         if (timerRef.current) clearInterval(timerRef.current);
       } else {
+        setNowMs(Date.now());
         pollLive().then(schedule);
       }
     };
     document.addEventListener("visibilitychange", onVis);
     const refreshTimer = setInterval(() => {
-      if (!document.hidden) setTick(t => t + 1);
+      if (!document.hidden) setNowMs(Date.now());
     }, 60000);
     const countdownTimer = setInterval(() => {
       if (document.hidden) return;
@@ -228,13 +215,6 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }, [fixtures, data.gs]);
 
   const today = todayISO();
-  const tomorrow = tomorrowISO();
-
-  function agoStr(): string {
-    if (!liveTs) return "";
-    const s = Math.max(0, Math.round((Date.now() - liveTs) / 60000));
-    return s < 1 ? "just now" : s + "m ago";
-  }
 
   function matchHit(m: GroupStageMatch): boolean {
     if (group !== "ALL" && m.g !== group) return false;
@@ -255,7 +235,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     for (const m of data.gs) {
       if (m.g !== g) continue;
       const f = findLive(m, fixtures);
-      const hasKickedOff = m.ts <= Date.now() + 5 * 60000;
+      const hasKickedOff = m.ts <= nowMs + 5 * 60000;
       let t1g: number | null = null, t2g: number | null = null;
       if (hasKickedOff && f && DONE_STATUSES.has(f.status)) {
         const gg = goalsFor(m, f);
@@ -276,8 +256,12 @@ export default function Tournament({ data }: { data: TournamentData }) {
     return { rows, played };
   }
 
+  function formatGD(gd: number, matchesPlayed: number): string {
+    if (matchesPlayed === 0 || gd === 0) return "0";
+    return gd > 0 ? `+${gd}` : String(gd);
+  }
+
   function liveIndicatorHtml(): string {
-    void tick;
     const n = fixtures.filter(f => LIVE_STATUSES.has(f.status)).length;
     if (n > 0) return `<div class="livebar on" role="status" aria-live="polite"><span class="dotlive"></span>${n} match${n > 1 ? "es" : ""} in play</div>`;
     if (liveStatus === "paused") return `<div class="livebar paused" role="status"><span class="dotlive" style="background:#b58900"></span>Showing latest scores</div>`;
@@ -305,8 +289,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
   function tixCard(m: GroupStageMatch, anim: boolean, dimmed = false): string {
     const v = ven(m.v), gc = data.gcolor[m.g];
     const f = findLive(m, fixtures);
-    const hasKickedOff = m.ts <= Date.now() + 5 * 60000;
-    const fStale = f && isStaleStatus(m.ts, f.status);
+    const hasKickedOff = m.ts <= nowMs + 5 * 60000;
+    const fStale = f && isStaleStatus(m.ts, f.status, nowMs);
     const fLive = f && LIVE_STATUSES.has(f.status) && !fStale;
     const fDone = f && DONE_STATUSES.has(f.status);
     let timeHtml: string, g1 = "", g2 = "", cls = dimmed ? " tix--done" : "", scorers1 = "", scorers2 = "";
@@ -323,7 +307,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       timeHtml = `<div class="sc">${a}–${b}</div>${liveBadge(f!)}`;
       scorers1 = goalScorers(f!.events, m.t1);
       scorers2 = goalScorers(f!.events, m.t2);
-    } else if (hasKickedOff && m.dbStatus && !isStaleStatus(m.ts, m.dbStatus) && (LIVE_STATUSES.has(m.dbStatus) || DONE_STATUSES.has(m.dbStatus)) && m.dbGh != null && m.dbGa != null) {
+    } else if (hasKickedOff && m.dbStatus && !isStaleStatus(m.ts, m.dbStatus, nowMs) && (LIVE_STATUSES.has(m.dbStatus) || DONE_STATUSES.has(m.dbStatus)) && m.dbGh != null && m.dbGa != null) {
       const a = m.dbGh, b = m.dbGa;
       g1 = `<span class="gl">${a}</span>`;
       g2 = `<span class="gl">${b}</span>`;
@@ -346,7 +330,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }
 
   function renderSchedule(anim: boolean): string {
-    const now = Date.now();
+    const now = nowMs;
     const list = data.gs.filter(matchHit);
     if (!list.length) return `<div class="empty">No matches match your filters.<br>Try clearing the search or picking "All".</div>`;
 
@@ -362,7 +346,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     const liveMatches: GroupStageMatch[] = [];
     for (const m of list) {
       const f = findLive(m, fixtures);
-      const stale = (f && isStaleStatus(m.ts, f.status)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus));
+      const stale = (f && isStaleStatus(m.ts, f.status, now)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, now));
       if (!stale && f && LIVE_STATUSES.has(f.status)) liveMatches.push(m);
     }
 
@@ -385,7 +369,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       /* Determine if this day is fully in the past, current, or future */
       const allDone = matches.every(m => {
         const f = findLive(m, fixtures);
-        const stale = (f && isStaleStatus(m.ts, f.status)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus));
+        const stale = (f && isStaleStatus(m.ts, f.status, now)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, now));
         const hasKickedOff = m.ts <= now + 5 * 60000;
         return !stale && hasKickedOff && (
           (f && DONE_STATUSES.has(f.status)) ||
@@ -407,7 +391,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
       for (const m of matches) {
         const f = findLive(m, fixtures);
-        const stale = (f && isStaleStatus(m.ts, f.status)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus));
+        const stale = (f && isStaleStatus(m.ts, f.status, now)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, now));
         const hasKickedOff = m.ts <= now + 5 * 60000;
         const isDone = !stale && hasKickedOff && !!(
           (f && DONE_STATUSES.has(f.status)) ||
@@ -426,20 +410,19 @@ export default function Tournament({ data }: { data: TournamentData }) {
     let html = `<div class="gwrap">${liveIndicatorHtml()}
       <div class="qkey"><span><i style="background:#1F8A6B"></i>Top 2 advance</span>
       <span><i style="background:#E5B53A"></i>3rd — best 8 advance</span></div>`;
-    for (const [g, teams] of Object.entries(data.groups)) {
+    for (const g of Object.keys(data.groups)) {
       const { rows, played } = standings(g);
       const body = rows.map((r, i) => {
         const cls = i < 2 ? "adv" : (i === 2 ? "cont" : "");
         const host = data.hosts.includes(r.t) ? '<span class="host">H</span>' : "";
         const gd = r.gf - r.ga;
-        const gds = (gd > 0 ? "+" : "") + gd;
         return `<tr class="${cls}"><td class="pos l">${i + 1}</td>
           <td class="l"><span class="tm"><span class="fl">${fl(r.t)}</span><a class="nm teamlink" data-team="${esc(r.t)}" href="#">${esc(r.t)}</a>${host}</span></td>
-          <td>${r.p}</td><td>${played ? gds : "–"}</td><td class="pts">${r.pts}</td></tr>`;
+          <td>${played ? r.p : 0}</td><td>${formatGD(gd, played)}</td><td class="pts">${played ? r.pts : 0}</td></tr>`;
       }).join("");
       html += `<div class="gcard${anim ? " rise" : ""}" style="--gc:${data.gcolor[g]}">
         <div class="gcard__h">Group ${g}<span class="pl">${played ? played + " played" : "not started"}</span></div>
-        <table class="tbl"><thead><tr><th class="l"></th><th class="l">Team</th><th>P</th><th>GD</th><th>Pts</th></tr></thead>
+        <table class="tbl"><colgroup><col class="tbl__pos" /><col class="tbl__team" /><col class="tbl__p" /><col class="tbl__gd" /><col class="tbl__pts" /></colgroup><thead><tr><th class="l"></th><th class="l">Team</th><th>P</th><th>GD</th><th>Pts</th></tr></thead>
         <tbody>${body}</tbody></table></div>`;
     }
     html += `<p class="qnote">Tables update from full-time scores as they come in. Order uses points, then goal difference, then goals scored — FIFA's official tiebreakers (including head-to-head and fair-play) decide the final standings.</p></div>`;
@@ -508,7 +491,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     if (view === "venues") return renderVenues(animate);
     return renderAbout();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, group, team, query, fixtures, liveStatus, liveTs, animate, tick]);
+  }, [view, group, team, query, fixtures, liveStatus, liveTs, animate, nowMs]);
 
   function handleTab(v: ViewType) {
     setAnimate(true);
@@ -628,8 +611,9 @@ function CountdownHero({ data, fixtures, findLive }: {
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
 }) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(0);
   useEffect(() => {
+    queueMicrotask(() => setNow(Date.now()));
     const id = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 1000);
     return () => clearInterval(id);
   }, []);
@@ -953,7 +937,7 @@ function TeamDrawer({ name, flags, groups, gcolor, gs, hosts, onClose, onPlayerC
           )}
 
           <div className="drawer__section">
-            <h3 className="drawer__h3">Squad</h3>
+            <h3 className="drawer__h3">Official Squad</h3>
             {posOrder.filter(pos => byPos[pos]).map(pos => (
               <div key={pos}>
                 <div className="drawer__pos-head" style={{ color: posColor(pos) }}>{posLabel(pos)}s</div>
@@ -1012,12 +996,18 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   onPlayerClick: (playerName: string, teamName: string) => void;
 }) {
   const [tab, setTab] = useState<MdTab>("summary");
+  const [nowMs, setNowMs] = useState(0);
+  useEffect(() => {
+    queueMicrotask(() => setNowMs(Date.now()));
+    const id = setInterval(() => { if (!document.hidden) setNowMs(Date.now()); }, 60000);
+    return () => clearInterval(id);
+  }, []);
   const fixture = findLive(match, fixtures) || initialFixture;
 
-  const hasKickedOff = match.ts <= Date.now() + 5 * 60000;
+  const hasKickedOff = match.ts <= nowMs + 5 * 60000;
   const hasDbScore = match.dbStatus && match.dbGh != null && match.dbGa != null;
-  const fixtureStale = fixture ? isStaleStatus(match.ts, fixture.status) : false;
-  const dbStale = match.dbStatus ? isStaleStatus(match.ts, match.dbStatus) : false;
+  const fixtureStale = fixture ? isStaleStatus(match.ts, fixture.status, nowMs) : false;
+  const dbStale = match.dbStatus ? isStaleStatus(match.ts, match.dbStatus, nowMs) : false;
   const isLive = !fixtureStale && (fixture ? LIVE_STATUSES.has(fixture.status) : (hasKickedOff && hasDbScore && !dbStale ? LIVE_STATUSES.has(match.dbStatus!) : false));
   const isDone = hasKickedOff && !fixtureStale && !dbStale && (fixture ? DONE_STATUSES.has(fixture.status) : (hasDbScore ? DONE_STATUSES.has(match.dbStatus!) : false));
   const isStale = fixtureStale || (hasKickedOff && dbStale && !fixture);
@@ -1367,7 +1357,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
 
     const h2hFixtures = h2hMatches.map(m => {
       const f = findLive(m, fixtures);
-      const hasKickedOff = m.ts <= Date.now() + 5 * 60000;
+      const hasKickedOff = m.ts <= nowMs + 5 * 60000;
       const done = hasKickedOff && (
         (f && DONE_STATUSES.has(f.status)) ||
         (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null)
@@ -1627,7 +1617,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
 
         {(profile1 || profile2) && (
           <div className="drawer__section">
-            <h3 className="drawer__h3">Expected Squads</h3>
+            <h3 className="drawer__h3">Official Squads</h3>
             {renderSquadColumn(match.t1)}
             {renderSquadColumn(match.t2)}
           </div>

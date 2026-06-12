@@ -40,8 +40,10 @@ body {
 .bar {
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: 40;
   background: var(--pitch-deep);
+  background-color: var(--pitch-deep);
+  isolation: isolate;
   color: #fff;
   padding: calc(8px + var(--safe-t)) 16px 8px;
   display: flex;
@@ -134,10 +136,11 @@ body {
 .tabs {
   position: sticky;
   top: calc(40px + var(--safe-t));
-  z-index: 20;
+  z-index: 30;
   display: flex;
   gap: 4px;
   background: var(--chalk);
+  background-color: var(--chalk);
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
@@ -435,15 +438,26 @@ body {
 
 .gcard__h .pl { margin-left: auto; font-size: 11px; font-weight: 600; opacity: .85; letter-spacing: .3px; }
 
-.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.tbl__pos { width: 28px; }
+.tbl__p { width: 36px; }
+.tbl__gd { width: 44px; }
+.tbl__pts { width: 42px; }
 .tbl th { font-family: var(--disp); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; font-size: 10.5px; color: var(--muted); text-align: right; padding: 6px 8px 4px; }
 .tbl th.l { text-align: left; }
 .tbl td { padding: 7px 8px; border-top: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; }
 .tbl td.l { text-align: left; }
-.tbl .pos { width: 20px; color: var(--muted); font-family: var(--disp); font-weight: 700; }
-.tbl .tm { display: flex; align-items: center; gap: 7px; }
-.tbl .tm .fl { font-size: 15px; }
-.tbl .tm .nm { font-family: var(--disp); font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34vw; }
+.tbl .pos { color: var(--muted); font-family: var(--disp); font-weight: 700; }
+.tbl .tm { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.tbl .tm .fl { flex: 0 0 auto; font-size: 15px; line-height: 1; }
+.tbl .tm .nm { flex: 1 1 auto; min-width: 0; font-family: var(--disp); font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbl .tm .host { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; height: 14px; line-height: 1; font-size: 9px; font-weight: 700; color: var(--pitch); border: 1px solid var(--pitch); border-radius: 4px; padding: 0 3px; letter-spacing: .5px; }
 .tbl .pts { font-family: var(--disp); font-weight: 700; }
 .tbl tr.adv td:first-child { box-shadow: inset 3px 0 0 #1F8A6B; }
 .tbl tr.cont td:first-child { box-shadow: inset 3px 0 0 var(--gold); }

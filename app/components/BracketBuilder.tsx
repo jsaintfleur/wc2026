@@ -1,142 +1,222 @@
 "use client";
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 /* ── types ─────────────────────────────────────────────────────── */
 
 interface BracketBuilderProps {
   flags: Record<string, string>;
-  teams: string[];
+  groups: Record<string, string[]>;
+  gcolor: Record<string, string>;
 }
 
-interface BracketPicks {
-  /* R32 slots: 16 matchups, each with teamA and teamB + winner */
-  r32: { a: string; b: string; winner: string }[];
-  /* R16 winners (8) */
-  r16: string[];
-  /* QF winners (4) */
-  qf: string[];
-  /* SF winners (2) */
-  sf: string[];
-  /* Final winner */
-  champion: string;
-  /* Third place winner */
-  thirdPlace: string;
+/* Group predictions: 1st, 2nd, 3rd for each group */
+type GroupPredictions = Record<string, { first: string; second: string; third: string }>;
+
+/* Knockout picks: winner of each matchup */
+interface KnockoutPicks {
+  r32: (string | null)[];   /* 16 winners */
+  r16: (string | null)[];   /* 8 winners */
+  qf:  (string | null)[];   /* 4 winners */
+  sf:  (string | null)[];   /* 2 winners */
+  champion: string | null;
 }
 
-/* ── bracket structure ─────────────────────────────────────────── */
-
-/* R32 matchup labels based on FIFA 48-team format.
-   Group positions map to R32 slots — users pick teams into these. */
-const R32_LABELS = [
-  ["1A", "3C/D/E"], ["2C", "2A"], ["1E", "2D"], ["1F", "3A/B/F"],
-  ["1B", "3A/D/F"], ["2D", "2F"], ["1C", "3B/C/E"], ["2B", "2E"],
-  ["1G", "3I/J/K"], ["2I", "2G"], ["1K", "2J"], ["1L", "3H/I/K"],
-  ["1H", "3G/J/L"], ["2J", "2L"], ["1I", "3G/H/L"], ["2H", "2K"],
+/* R32 bracket slots — maps each match to the group positions that feed it.
+   Format: [topSeed, bottomSeed]. Seeds like "1A" mean "winner of Group A".
+   "3*" slots are best-third wildcards — filled after user picks 8 advancing 3rds. */
+const R32_STRUCTURE: [string, string][] = [
+  ["1A", "3C/D/E"],  ["2C", "2A"],
+  ["1E", "2D"],      ["1F", "3A/B/F"],
+  ["1B", "3A/D/F"],  ["2D", "2F"],
+  ["1C", "3B/C/E"],  ["2B", "2E"],
+  ["1G", "3I/J/K"],  ["2I", "2G"],
+  ["1K", "2J"],      ["1L", "3H/I/K"],
+  ["1H", "3G/J/L"],  ["2J", "2L"],
+  ["1I", "3G/H/L"],  ["2H", "2K"],
 ];
 
-const ROUNDS = ["Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "Final"] as const;
+const STORAGE_KEY = "wc2026-bracket-v2";
 
-const STORAGE_KEY = "wc2026-bracket-picks";
+/* ── helpers ────────────────────────────────────────────────────── */
 
-function emptyPicks(): BracketPicks {
+function emptyGroupPredictions(groups: Record<string, string[]>): GroupPredictions {
+  const preds: GroupPredictions = {};
+  for (const g of Object.keys(groups)) {
+    preds[g] = { first: "", second: "", third: "" };
+  }
+  return preds;
+}
+
+function emptyKnockout(): KnockoutPicks {
   return {
-    r32: R32_LABELS.map(([a, b]) => ({ a: "", b: "", winner: "" })),
-    r16: Array(8).fill(""),
-    qf: Array(4).fill(""),
-    sf: Array(2).fill(""),
-    champion: "",
-    thirdPlace: "",
+    r32: Array(16).fill(null),
+    r16: Array(8).fill(null),
+    qf: Array(4).fill(null),
+    sf: Array(2).fill(null),
+    champion: null,
   };
 }
 
-function loadPicks(): BracketPicks {
-  if (typeof window === "undefined") return emptyPicks();
+interface SavedState {
+  groupPreds: GroupPredictions;
+  thirdPlaceAdvancing: string[];
+  knockout: KnockoutPicks;
+  step: number;
+}
+
+function loadState(groups: Record<string, string[]>): SavedState {
+  if (typeof window === "undefined") return { groupPreds: emptyGroupPredictions(groups), thirdPlaceAdvancing: [], knockout: emptyKnockout(), step: 0 };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
-  return emptyPicks();
+  return { groupPreds: emptyGroupPredictions(groups), thirdPlaceAdvancing: [], knockout: emptyKnockout(), step: 0 };
 }
 
-function savePicks(picks: BracketPicks) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(picks)); } catch { /* ignore */ }
+function saveState(state: SavedState) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
+}
+
+/* Resolve a seed like "1A" or "2C" to the actual team name from group predictions */
+function resolveSeed(seed: string, groupPreds: GroupPredictions): string {
+  if (seed.length < 2) return "";
+  const pos = seed[0]; /* "1", "2", or "3" */
+  const grp = seed.slice(1);
+  const pred = groupPreds[grp];
+  if (!pred) return "";
+  if (pos === "1") return pred.first;
+  if (pos === "2") return pred.second;
+  if (pos === "3") return pred.third;
+  return "";
+}
+
+/* Resolve a 3rd-place wildcard slot like "3C/D/E" to the team,
+   given the user's picks for which 3rd-place teams advance */
+function resolveThirdPlace(slot: string, groupPreds: GroupPredictions, advancing: string[]): string {
+  /* slot is like "3C/D/E" — the 3rd-place team from one of groups C, D, or E */
+  const groups = slot.slice(1).split("/");
+  for (const g of groups) {
+    const third = groupPreds[g]?.third;
+    if (third && advancing.includes(third)) return third;
+  }
+  return "";
+}
+
+/* Get the two teams in an R32 matchup */
+function getR32Teams(
+  matchIdx: number,
+  groupPreds: GroupPredictions,
+  advancing: string[],
+): [string, string] {
+  const [topSeed, botSeed] = R32_STRUCTURE[matchIdx];
+  const top = topSeed.startsWith("3")
+    ? resolveThirdPlace(topSeed, groupPreds, advancing)
+    : resolveSeed(topSeed, groupPreds);
+  const bot = botSeed.startsWith("3")
+    ? resolveThirdPlace(botSeed, groupPreds, advancing)
+    : resolveSeed(botSeed, groupPreds);
+  return [top, bot];
 }
 
 /* ── component ─────────────────────────────────────────────────── */
 
-export default function BracketBuilder({ flags, teams }: BracketBuilderProps) {
-  const [picks, setPicks] = useState<BracketPicks>(emptyPicks);
-  const [activeSlot, setActiveSlot] = useState<{ round: string; index: number; side: "a" | "b" | "winner" } | null>(null);
-  const [search, setSearch] = useState("");
-  const [generating, setGenerating] = useState(false);
+export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilderProps) {
+  const [state, setState] = useState<SavedState>(() => loadState(groups));
+  const { groupPreds, thirdPlaceAdvancing, knockout, step } = state;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [generating, setGenerating] = useState(false);
 
-  /* Load saved picks on mount */
-  useEffect(() => { setPicks(loadPicks()); }, []);
-
-  /* Save whenever picks change */
-  useEffect(() => { savePicks(picks); }, [picks]);
+  useEffect(() => { setState(loadState(groups)); }, [groups]);
+  useEffect(() => { saveState(state); }, [state]);
 
   const fl = (t: string) => flags[t] || "⚽";
+  const groupLetters = Object.keys(groups).sort();
 
-  /* Pick a team for a slot */
-  const pickTeam = useCallback((team: string) => {
-    if (!activeSlot) return;
-    setPicks(prev => {
-      const next = JSON.parse(JSON.stringify(prev)) as BracketPicks;
-      const { round, index, side } = activeSlot;
+  /* How many groups are fully predicted */
+  const groupsDone = groupLetters.filter(g => groupPreds[g]?.first && groupPreds[g]?.second && groupPreds[g]?.third).length;
+  const allGroupsDone = groupsDone === groupLetters.length;
 
-      if (round === "r32") {
-        if (side === "a") next.r32[index].a = team;
-        else if (side === "b") next.r32[index].b = team;
-        else {
-          next.r32[index].winner = team;
-          /* Cascade: winner flows to R16 */
-          const r16Idx = Math.floor(index / 2);
-          if (index % 2 === 0) {
-            /* This R32 winner becomes the "top" team in R16 matchup — just set the R16 slot if it was this pick */
-          }
-          next.r16[r16Idx] = cascadeR16(next, r16Idx);
-        }
-      } else if (round === "r16") {
-        next.r16[index] = team;
-        const qfIdx = Math.floor(index / 2);
-        next.qf[qfIdx] = cascadeQF(next, qfIdx);
-      } else if (round === "qf") {
-        next.qf[index] = team;
-        const sfIdx = Math.floor(index / 2);
-        next.sf[sfIdx] = cascadeSF(next, sfIdx);
-      } else if (round === "sf") {
-        next.sf[index] = team;
-        if (next.sf[0] && next.sf[1]) {
-          /* Don't auto-set champion, let user pick */
-        }
-      } else if (round === "champion") {
-        next.champion = team;
-      } else if (round === "thirdPlace") {
-        next.thirdPlace = team;
-      }
+  /* All 3rd-place teams */
+  const allThirds = groupLetters.map(g => groupPreds[g]?.third).filter(Boolean);
+  const thirdsDone = thirdPlaceAdvancing.length === 8;
 
+  /* Progress */
+  const knockoutDone = knockout.r32.filter(Boolean).length + knockout.r16.filter(Boolean).length +
+    knockout.qf.filter(Boolean).length + knockout.sf.filter(Boolean).length + (knockout.champion ? 1 : 0);
+  const totalKnockout = 16 + 8 + 4 + 2 + 1;
+
+  /* ── Step 0: Group predictions ─────────────────────────────── */
+
+  function setGroupPos(grp: string, pos: "first" | "second" | "third", team: string) {
+    setState(prev => {
+      const next = JSON.parse(JSON.stringify(prev)) as SavedState;
+      const pred = next.groupPreds[grp];
+      /* Clear the team from any other position in this group */
+      if (pred.first === team) pred.first = "";
+      if (pred.second === team) pred.second = "";
+      if (pred.third === team) pred.third = "";
+      pred[pos] = team;
+      /* Clear downstream knockout picks when group predictions change */
+      next.knockout = emptyKnockout();
+      next.thirdPlaceAdvancing = [];
       return next;
     });
-    setActiveSlot(null);
-    setSearch("");
-  }, [activeSlot]);
+  }
 
-  /* Clear all picks */
-  const clearAll = () => {
-    setPicks(emptyPicks());
+  function toggleThirdAdvancing(team: string) {
+    setState(prev => {
+      const next = JSON.parse(JSON.stringify(prev)) as SavedState;
+      const idx = next.thirdPlaceAdvancing.indexOf(team);
+      if (idx >= 0) {
+        next.thirdPlaceAdvancing.splice(idx, 1);
+      } else if (next.thirdPlaceAdvancing.length < 8) {
+        next.thirdPlaceAdvancing.push(team);
+      }
+      next.knockout = emptyKnockout();
+      return next;
+    });
+  }
+
+  function setKnockoutWinner(round: keyof KnockoutPicks, idx: number, team: string) {
+    setState(prev => {
+      const next = JSON.parse(JSON.stringify(prev)) as SavedState;
+      if (round === "champion") {
+        next.knockout.champion = team;
+      } else {
+        (next.knockout[round] as (string | null)[])[idx] = team;
+        /* Clear downstream when upstream changes */
+        if (round === "r32") {
+          const r16Idx = Math.floor(idx / 2);
+          next.knockout.r16[r16Idx] = null;
+          next.knockout.qf[Math.floor(r16Idx / 2)] = null;
+          next.knockout.sf[Math.floor(r16Idx / 4)] = null;
+          next.knockout.champion = null;
+        } else if (round === "r16") {
+          const qfIdx = Math.floor(idx / 2);
+          next.knockout.qf[qfIdx] = null;
+          next.knockout.sf[Math.floor(qfIdx / 2)] = null;
+          next.knockout.champion = null;
+        } else if (round === "qf") {
+          next.knockout.sf[Math.floor(idx / 2)] = null;
+          next.knockout.champion = null;
+        } else if (round === "sf") {
+          next.knockout.champion = null;
+        }
+      }
+      return next;
+    });
+  }
+
+  function goStep(s: number) {
+    setState(prev => ({ ...prev, step: s }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function clearAll() {
+    const fresh = { groupPreds: emptyGroupPredictions(groups), thirdPlaceAdvancing: [], knockout: emptyKnockout(), step: 0 };
+    setState(fresh);
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
-  };
-
-  /* Count filled picks */
-  const filledCount =
-    picks.r32.filter(m => m.a && m.b && m.winner).length +
-    picks.r16.filter(Boolean).length +
-    picks.qf.filter(Boolean).length +
-    picks.sf.filter(Boolean).length +
-    (picks.champion ? 1 : 0);
-  const totalSlots = 16 + 8 + 4 + 2 + 1;
+  }
 
   /* ── Image generation ──────────────────────────────────────── */
 
@@ -144,14 +224,14 @@ export default function BracketBuilder({ flags, teams }: BracketBuilderProps) {
     setGenerating(true);
     await new Promise(r => setTimeout(r, 50));
 
-    const W = 1080, H = 1350;
+    const W = 1080, H = 1920;
     const canvas = canvasRef.current;
     if (!canvas) { setGenerating(false); return; }
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext("2d")!;
 
-    /* Background gradient */
+    /* Background */
     const grad = ctx.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, "#0a0f1a");
     grad.addColorStop(0.5, "#0d1520");
@@ -159,8 +239,8 @@ export default function BracketBuilder({ flags, teams }: BracketBuilderProps) {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    /* Subtle grid lines */
-    ctx.strokeStyle = "rgba(255,255,255,0.03)";
+    /* Subtle grid */
+    ctx.strokeStyle = "rgba(255,255,255,0.02)";
     ctx.lineWidth = 1;
     for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
     for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
@@ -168,212 +248,119 @@ export default function BracketBuilder({ flags, teams }: BracketBuilderProps) {
     /* Title */
     ctx.textAlign = "center";
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 42px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText("MY WORLD CUP 2026", W / 2, 60);
-    ctx.font = "bold 28px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.font = "bold 44px -apple-system, BlinkMacSystemFont, sans-serif";
+    ctx.fillText("MY WORLD CUP 2026", W / 2, 70);
+    ctx.font = "bold 24px -apple-system, sans-serif";
     ctx.fillStyle = "#c9a84c";
-    ctx.fillText("BRACKET", W / 2, 96);
+    ctx.fillText("B R A C K E T", W / 2, 104);
+    ctx.font = "14px -apple-system, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.fillText("🇨🇦  🇲🇽  🇺🇸   Canada · Mexico · United States", W / 2, 134);
 
-    /* Hosts line */
-    ctx.font = "16px -apple-system, sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
-    ctx.fillText("🇨🇦  🇲🇽  🇺🇸   Canada · Mexico · United States", W / 2, 126);
+    /* Champion at top */
+    if (knockout.champion) {
+      ctx.font = "48px -apple-system, sans-serif";
+      ctx.fillText("👑", W / 2, 190);
+      ctx.font = "bold 28px -apple-system, sans-serif";
+      ctx.fillStyle = "#c9a84c";
+      ctx.fillText(`${fl(knockout.champion)} ${knockout.champion.toUpperCase()}`, W / 2, 226);
+      ctx.font = "10px -apple-system, sans-serif";
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.fillText("PREDICTED CHAMPION", W / 2, 246);
+    }
 
-    /* Draw bracket halves */
-    const bracketTop = 160;
-    const slotH = 26;
-    const slotGap = 4;
-    const matchH = slotH * 2 + slotGap;
-    const colW = 160;
-    const leftX = 30;
-    const rightX = W - 30 - colW;
+    /* Group predictions grid */
+    const gridTop = knockout.champion ? 280 : 170;
+    const cellW = (W - 80) / 4;
+    const cellH = 115;
+    const gridGap = 8;
 
-    /* Helper: draw a team slot */
-    function drawSlot(x: number, y: number, w: number, team: string, isWinner: boolean, isChampion: boolean) {
-      /* Background */
-      ctx.fillStyle = isChampion ? "rgba(201,168,76,0.25)" : isWinner ? "rgba(31,138,107,0.2)" : "rgba(255,255,255,0.06)";
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 14px -apple-system, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("GROUP PREDICTIONS", 40, gridTop - 10);
+
+    for (let i = 0; i < groupLetters.length; i++) {
+      const g = groupLetters[i];
+      const col = i % 4;
+      const row = Math.floor(i / 4);
+      const x = 40 + col * (cellW + gridGap);
+      const y = gridTop + row * (cellH + gridGap);
+
+      /* Cell bg */
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
       ctx.beginPath();
-      ctx.roundRect(x, y, w, slotH, 4);
+      ctx.roundRect(x, y, cellW, cellH, 6);
       ctx.fill();
 
-      /* Border */
-      ctx.strokeStyle = isChampion ? "#c9a84c" : isWinner ? "rgba(31,138,107,0.6)" : "rgba(255,255,255,0.1)";
-      ctx.lineWidth = isChampion ? 2 : 1;
-      ctx.stroke();
+      /* Group label */
+      ctx.fillStyle = gcolor[g] || "#666";
+      ctx.font = "bold 13px -apple-system, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(`Group ${g}`, x + 8, y + 18);
 
-      /* Team text */
-      if (team) {
-        ctx.textAlign = "left";
-        ctx.font = "14px -apple-system, sans-serif";
-        ctx.fillStyle = isChampion ? "#c9a84c" : isWinner ? "#1F8A6B" : "#ffffff";
-        const flag = flags[team] || "";
-        ctx.fillText(`${flag} ${team}`, x + 6, y + 18);
-      } else {
-        ctx.textAlign = "left";
-        ctx.font = "italic 12px -apple-system, sans-serif";
-        ctx.fillStyle = "rgba(255,255,255,0.2)";
-        ctx.fillText("—", x + 6, y + 18);
+      /* 1st, 2nd, 3rd */
+      const pred = groupPreds[g];
+      const entries = [
+        { pos: "1st", team: pred?.first },
+        { pos: "2nd", team: pred?.second },
+        { pos: "3rd", team: pred?.third },
+      ];
+      for (let j = 0; j < 3; j++) {
+        const ey = y + 30 + j * 26;
+        ctx.font = "bold 10px -apple-system, sans-serif";
+        ctx.fillStyle = j === 0 ? "#c9a84c" : j === 1 ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.35)";
+        ctx.fillText(entries[j].pos, x + 8, ey + 10);
+        ctx.font = "13px -apple-system, sans-serif";
+        ctx.fillStyle = entries[j].team ? "#ffffff" : "rgba(255,255,255,0.15)";
+        const label = entries[j].team ? `${fl(entries[j].team)} ${entries[j].team}` : "—";
+        ctx.fillText(label, x + 36, ey + 10);
       }
     }
 
-    /* Helper: draw a connector line between rounds */
-    function drawConnector(x1: number, y1: number, x2: number, y2: number) {
-      ctx.strokeStyle = "rgba(255,255,255,0.15)";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      const midX = (x1 + x2) / 2;
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(midX, y1);
-      ctx.lineTo(midX, y2);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
+    /* Knockout bracket — simplified vertical list */
+    const koTop = gridTop + Math.ceil(groupLetters.length / 4) * (cellH + gridGap) + 30;
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 14px -apple-system, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("KNOCKOUT PICKS", 40, koTop);
+
+    const rounds = [
+      { label: "R32", picks: knockout.r32, count: 16 },
+      { label: "R16", picks: knockout.r16, count: 8 },
+      { label: "QF", picks: knockout.qf, count: 4 },
+      { label: "SF", picks: knockout.sf, count: 2 },
+    ];
+
+    let ky = koTop + 20;
+    for (const round of rounds) {
+      ctx.font = "bold 11px -apple-system, sans-serif";
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.fillText(round.label, 40, ky + 10);
+
+      const cols = Math.min(round.count, 4);
+      const rows = Math.ceil(round.count / cols);
+      const tw = (W - 120) / cols;
+
+      for (let i = 0; i < round.count; i++) {
+        const c = i % cols;
+        const r = Math.floor(i / cols);
+        const tx = 80 + c * tw;
+        const ty = ky + r * 24;
+        const team = round.picks[i];
+
+        ctx.font = "12px -apple-system, sans-serif";
+        ctx.fillStyle = team ? "#ffffff" : "rgba(255,255,255,0.15)";
+        ctx.fillText(team ? `${fl(team)} ${team}` : "—", tx, ty + 10);
+      }
+      ky += rows * 24 + 16;
     }
 
-    /* ── LEFT BRACKET (R32 matches 0-7) ── */
-    const leftR32Y = bracketTop;
-    const r32MatchGap = 12;
-
-    /* R32 left */
-    for (let i = 0; i < 8; i++) {
-      const m = picks.r32[i];
-      const y = leftR32Y + i * (matchH + r32MatchGap);
-      drawSlot(leftX, y, colW - 10, m.a, m.winner === m.a && m.a !== "", false);
-      drawSlot(leftX, y + slotH + slotGap, colW - 10, m.b, m.winner === m.b && m.b !== "", false);
-    }
-
-    /* R16 left (4 matches) */
-    const r16X = leftX + colW + 10;
-    for (let i = 0; i < 4; i++) {
-      const topMatch = i * 2;
-      const botMatch = i * 2 + 1;
-      const topY = leftR32Y + topMatch * (matchH + r32MatchGap) + matchH / 2;
-      const botY = leftR32Y + botMatch * (matchH + r32MatchGap) + matchH / 2;
-      const midY = (topY + botY) / 2;
-
-      /* Connector lines */
-      drawConnector(leftX + colW - 10, topY, r16X, midY - slotH / 2 - slotGap / 2);
-      drawConnector(leftX + colW - 10, botY, r16X, midY + slotH / 2 + slotGap / 2);
-
-      const winner0 = picks.r32[topMatch].winner;
-      const winner1 = picks.r32[botMatch].winner;
-      const r16winner = picks.r16[i];
-      drawSlot(r16X, midY - slotH - slotGap / 2, colW - 10, winner0, r16winner === winner0 && winner0 !== "", false);
-      drawSlot(r16X, midY + slotGap / 2, colW - 10, winner1, r16winner === winner1 && winner1 !== "", false);
-    }
-
-    /* QF left (2 matches) */
-    const qfX = r16X + colW + 10;
-    for (let i = 0; i < 2; i++) {
-      const topR16 = i * 2;
-      const botR16 = i * 2 + 1;
-      const topTopMatch = topR16 * 2;
-      const topBotMatch = topR16 * 2 + 1;
-      const botTopMatch = botR16 * 2;
-      const botBotMatch = botR16 * 2 + 1;
-
-      const topY = (leftR32Y + topTopMatch * (matchH + r32MatchGap) + matchH / 2 + leftR32Y + topBotMatch * (matchH + r32MatchGap) + matchH / 2) / 2;
-      const botY = (leftR32Y + botTopMatch * (matchH + r32MatchGap) + matchH / 2 + leftR32Y + botBotMatch * (matchH + r32MatchGap) + matchH / 2) / 2;
-      const midY = (topY + botY) / 2;
-
-      drawConnector(r16X + colW - 10, topY, qfX, midY - slotH - slotGap / 2);
-      drawConnector(r16X + colW - 10, botY, qfX, midY + slotGap / 2);
-
-      const r16a = picks.r16[topR16];
-      const r16b = picks.r16[botR16];
-      const qfWinner = picks.qf[i];
-      drawSlot(qfX, midY - slotH - slotGap / 2, colW - 10, r16a, qfWinner === r16a && r16a !== "", false);
-      drawSlot(qfX, midY + slotGap / 2, colW - 10, r16b, qfWinner === r16b && r16b !== "", false);
-    }
-
-    /* SF left */
-    const sfX = qfX + colW + 10;
-    const sfLeftY = (bracketTop + 3.5 * (matchH + r32MatchGap)) / 1 + 180;
-    const sfLeftTeam = picks.sf[0];
-    drawSlot(sfX, sfLeftY, colW - 10, picks.qf[0], sfLeftTeam === picks.qf[0] && picks.qf[0] !== "", false);
-    drawSlot(sfX, sfLeftY + slotH + slotGap, colW - 10, picks.qf[1], sfLeftTeam === picks.qf[1] && picks.qf[1] !== "", false);
-
-    /* ── RIGHT BRACKET (R32 matches 8-15) ── */
-    for (let i = 0; i < 8; i++) {
-      const m = picks.r32[i + 8];
-      const y = leftR32Y + i * (matchH + r32MatchGap);
-      drawSlot(rightX + 10, y, colW - 10, m.a, m.winner === m.a && m.a !== "", false);
-      drawSlot(rightX + 10, y + slotH + slotGap, colW - 10, m.b, m.winner === m.b && m.b !== "", false);
-    }
-
-    /* R16 right */
-    const r16RX = rightX - colW + 10;
-    for (let i = 0; i < 4; i++) {
-      const topMatch = i * 2 + 8;
-      const botMatch = i * 2 + 9;
-      const topY = leftR32Y + (topMatch - 8) * (matchH + r32MatchGap) + matchH / 2;
-      const botY = leftR32Y + (botMatch - 8) * (matchH + r32MatchGap) + matchH / 2;
-      const midY = (topY + botY) / 2;
-
-      drawConnector(rightX + 10, topY, r16RX + colW - 10, midY);
-      drawConnector(rightX + 10, botY, r16RX + colW - 10, midY);
-
-      const winner0 = picks.r32[topMatch].winner;
-      const winner1 = picks.r32[botMatch].winner;
-      const r16winner = picks.r16[i + 4];
-      drawSlot(r16RX, midY - slotH - slotGap / 2, colW - 10, winner0, r16winner === winner0 && winner0 !== "", false);
-      drawSlot(r16RX, midY + slotGap / 2, colW - 10, winner1, r16winner === winner1 && winner1 !== "", false);
-    }
-
-    /* QF right */
-    const qfRX = r16RX - colW;
-    for (let i = 0; i < 2; i++) {
-      const topR16 = i * 2 + 4;
-      const botR16 = i * 2 + 5;
-      const topTopMatch = (topR16 - 4) * 2;
-      const topBotMatch = (topR16 - 4) * 2 + 1;
-      const botTopMatch = (botR16 - 4) * 2;
-      const botBotMatch = (botR16 - 4) * 2 + 1;
-
-      const topY = (leftR32Y + topTopMatch * (matchH + r32MatchGap) + matchH / 2 + leftR32Y + topBotMatch * (matchH + r32MatchGap) + matchH / 2) / 2;
-      const botY = (leftR32Y + botTopMatch * (matchH + r32MatchGap) + matchH / 2 + leftR32Y + botBotMatch * (matchH + r32MatchGap) + matchH / 2) / 2;
-      const midY = (topY + botY) / 2;
-
-      const r16a = picks.r16[topR16];
-      const r16b = picks.r16[botR16];
-      const qfWinner = picks.qf[i + 2];
-      drawSlot(qfRX + 10, midY - slotH - slotGap / 2, colW - 10, r16a, qfWinner === r16a && r16a !== "", false);
-      drawSlot(qfRX + 10, midY + slotGap / 2, colW - 10, r16b, qfWinner === r16b && r16b !== "", false);
-    }
-
-    /* SF right */
-    const sfRightTeam = picks.sf[1];
-    drawSlot(sfX, sfLeftY + 80, colW - 10, picks.qf[2], sfRightTeam === picks.qf[2] && picks.qf[2] !== "", false);
-    drawSlot(sfX, sfLeftY + 80 + slotH + slotGap, colW - 10, picks.qf[3], sfRightTeam === picks.qf[3] && picks.qf[3] !== "", false);
-
-    /* ── FINAL ── */
-    const finalY = sfLeftY + 40;
-    const finalX = W / 2 - colW / 2;
-
-    /* Champion crown */
-    if (picks.champion) {
-      ctx.textAlign = "center";
-      ctx.font = "40px -apple-system, sans-serif";
-      ctx.fillText("👑", W / 2, finalY - 20);
-
-      ctx.font = "bold 22px -apple-system, sans-serif";
-      ctx.fillStyle = "#c9a84c";
-      ctx.fillText(picks.champion.toUpperCase(), W / 2, finalY + 6);
-      ctx.fillStyle = "#ffffff";
-    }
-
-    /* Final matchup */
-    drawSlot(finalX, finalY + 16, colW, picks.sf[0], picks.champion === picks.sf[0] && picks.sf[0] !== "", picks.champion === picks.sf[0]);
+    /* Footer */
     ctx.textAlign = "center";
-    ctx.font = "bold 11px -apple-system, sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,0.4)";
-    ctx.fillText("FINAL", W / 2, finalY + 16 + slotH + slotGap + 8);
-    drawSlot(finalX, finalY + 16 + slotH + slotGap + 14, colW, picks.sf[1], picks.champion === picks.sf[1] && picks.sf[1] !== "", picks.champion === picks.sf[1]);
-
-    /* Footer watermark */
-    ctx.textAlign = "center";
-    ctx.font = "13px -apple-system, sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,0.25)";
-    ctx.fillText("wc2026-xi-gray.vercel.app", W / 2, H - 20);
+    ctx.font = "12px -apple-system, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.2)";
+    ctx.fillText("wc2026-xi-gray.vercel.app", W / 2, H - 30);
 
     /* Download */
     canvas.toBlob((blob) => {
@@ -386,253 +373,322 @@ export default function BracketBuilder({ flags, teams }: BracketBuilderProps) {
       URL.revokeObjectURL(url);
       setGenerating(false);
     }, "image/png");
-  }, [picks, flags]);
+  }, [state, flags, gcolor, groupLetters, groupPreds, knockout, fl]);
 
-  /* ── Team picker modal ── */
-  const filteredTeams = search
-    ? teams.filter(t => t.toLowerCase().includes(search.toLowerCase()))
-    : teams;
-
-  /* Already picked teams for visual indicator */
-  const pickedTeams = new Set<string>();
-  picks.r32.forEach(m => { if (m.a) pickedTeams.add(m.a); if (m.b) pickedTeams.add(m.b); });
+  /* ── Render ────────────────────────────────────────────────── */
 
   return (
     <div className="bracket-builder">
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
-      {/* Header */}
       <div className="bb-header">
         <h2 className="bb-title">My Bracket</h2>
-        <p className="bb-sub">Pick your winners from Round of 32 to the Final, then save and share your bracket on Instagram.</p>
-        <div className="bb-progress">
-          <div className="bb-progress__bar" style={{ width: `${(filledCount / totalSlots) * 100}%` }} />
-          <span className="bb-progress__label">{filledCount}/{totalSlots} picks</span>
+        <p className="bb-sub">Predict your groups, then pick knockout winners. Save and share on Instagram.</p>
+
+        {/* Step tabs */}
+        <div className="bb-steps">
+          <button className={`bb-step${step === 0 ? " bb-step--active" : ""}`} onClick={() => goStep(0)}>
+            <span className="bb-step__num">1</span>
+            <span>Groups{allGroupsDone ? " ✓" : ` (${groupsDone}/12)`}</span>
+          </button>
+          {allGroupsDone && (
+            <button className={`bb-step${step === 1 ? " bb-step--active" : ""}`} onClick={() => goStep(1)}>
+              <span className="bb-step__num">2</span>
+              <span>Best 3rds{thirdsDone ? " ✓" : ` (${thirdPlaceAdvancing.length}/8)`}</span>
+            </button>
+          )}
+          {allGroupsDone && thirdsDone && (
+            <button className={`bb-step${step === 2 ? " bb-step--active" : ""}`} onClick={() => goStep(2)}>
+              <span className="bb-step__num">3</span>
+              <span>Knockout{knockout.champion ? " ✓" : ` (${knockoutDone}/${totalKnockout})`}</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Round-by-round picker */}
-      <div className="bb-rounds">
-        {/* R32 */}
-        <div className="bb-round">
-          <div className="bb-round__hd">Round of 32 <span className="bb-round__count">{picks.r32.filter(m => m.winner).length}/16</span></div>
-          <div className="bb-matches">
-            {picks.r32.map((m, i) => (
-              <div key={i} className="bb-match">
-                <div className="bb-match__label">Match {73 + i} · {R32_LABELS[i].join(" vs ")}</div>
-                <button
-                  className={`bb-slot${m.winner === m.a && m.a ? " bb-slot--winner" : ""}`}
-                  onClick={() => { setActiveSlot({ round: "r32", index: i, side: "a" }); setSearch(""); }}
-                >
-                  {m.a ? `${fl(m.a)} ${m.a}` : <span className="bb-slot__empty">Pick team ({R32_LABELS[i][0]})</span>}
-                </button>
-                <button
-                  className={`bb-slot${m.winner === m.b && m.b ? " bb-slot--winner" : ""}`}
-                  onClick={() => { setActiveSlot({ round: "r32", index: i, side: "b" }); setSearch(""); }}
-                >
-                  {m.b ? `${fl(m.b)} ${m.b}` : <span className="bb-slot__empty">Pick team ({R32_LABELS[i][1]})</span>}
-                </button>
-                {m.a && m.b && (
-                  <div className="bb-match__pick">
-                    <span className="bb-match__pick-label">Winner:</span>
-                    <button
-                      className={`bb-pick-btn${m.winner === m.a ? " bb-pick-btn--active" : ""}`}
-                      onClick={() => { setPicks(p => { const n = JSON.parse(JSON.stringify(p)); n.r32[i].winner = m.a; return n; }); }}
-                    >{fl(m.a)} {m.a}</button>
-                    <button
-                      className={`bb-pick-btn${m.winner === m.b ? " bb-pick-btn--active" : ""}`}
-                      onClick={() => { setPicks(p => { const n = JSON.parse(JSON.stringify(p)); n.r32[i].winner = m.b; return n; }); }}
-                    >{fl(m.b)} {m.b}</button>
+      {/* ── Step 0: Group Predictions ── */}
+      {step === 0 && (
+        <div className="bb-groups">
+          <p className="bb-groups__hint">For each group, tap a team to set their predicted finish (1st, 2nd, 3rd). The 4th-place team is eliminated.</p>
+          {groupLetters.map(g => {
+            const pred = groupPreds[g] || { first: "", second: "", third: "" };
+            const teamsList = groups[g];
+            const placed = [pred.first, pred.second, pred.third].filter(Boolean);
+            const unplaced = teamsList.filter(t => !placed.includes(t));
+
+            return (
+              <div key={g} className="bb-group" style={{ borderLeftColor: gcolor[g] || "var(--line)" }}>
+                <div className="bb-group__hd" style={{ color: gcolor[g] }}>Group {g}</div>
+
+                {/* Position slots */}
+                <div className="bb-group__slots">
+                  {(["first", "second", "third"] as const).map((pos, pi) => {
+                    const team = pred[pos];
+                    const posLabel = pi === 0 ? "1st" : pi === 1 ? "2nd" : "3rd";
+                    const posClass = pi === 0 ? "bb-pos--first" : pi === 1 ? "bb-pos--second" : "bb-pos--third";
+                    return (
+                      <div key={pos} className={`bb-pos ${posClass}`}>
+                        <span className="bb-pos__label">{posLabel}</span>
+                        {team ? (
+                          <button
+                            className="bb-pos__team bb-pos__team--filled"
+                            onClick={() => setGroupPos(g, pos, "")}
+                            title="Click to remove"
+                          >
+                            {fl(team)} {team} <span className="bb-pos__x">✕</span>
+                          </button>
+                        ) : (
+                          <span className="bb-pos__team bb-pos__team--empty">Pick {posLabel}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Available teams to place */}
+                {unplaced.length > 0 && (
+                  <div className="bb-group__avail">
+                    {unplaced.map(t => (
+                      <button
+                        key={t}
+                        className="bb-team-pill"
+                        onClick={() => {
+                          /* Auto-place into first empty position */
+                          if (!pred.first) setGroupPos(g, "first", t);
+                          else if (!pred.second) setGroupPos(g, "second", t);
+                          else if (!pred.third) setGroupPos(g, "third", t);
+                        }}
+                      >
+                        {fl(t)} {t}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Group complete indicator */}
+                {placed.length === 3 && (
+                  <div className="bb-group__elim">
+                    <span className="bb-group__elim-label">Eliminated:</span>
+                    <span className="bb-group__elim-team">{fl(unplaced[0])} {unplaced[0]}</span>
                   </div>
                 )}
               </div>
-            ))}
-          </div>
-        </div>
+            );
+          })}
 
-        {/* R16 */}
-        <div className="bb-round">
-          <div className="bb-round__hd">Round of 16 <span className="bb-round__count">{picks.r16.filter(Boolean).length}/8</span></div>
-          <div className="bb-matches">
-            {[0, 1, 2, 3, 4, 5, 6, 7].map(i => {
-              const teamA = picks.r32[i * 2]?.winner || "";
-              const teamB = picks.r32[i * 2 + 1]?.winner || "";
+          {allGroupsDone && (
+            <button className="bb-next-btn" onClick={() => goStep(1)}>
+              Continue to Best 3rd-Place Teams →
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Step 1: Pick 8 best 3rd-place teams ── */}
+      {step === 1 && allGroupsDone && (
+        <div className="bb-thirds">
+          <p className="bb-thirds__hint">8 of 12 third-place teams advance to the Round of 32. Pick which 8 go through.</p>
+          <div className="bb-thirds__count">{thirdPlaceAdvancing.length}/8 selected</div>
+          <div className="bb-thirds__grid">
+            {allThirds.map(t => {
+              const isSelected = thirdPlaceAdvancing.includes(t);
+              const grp = groupLetters.find(g => groupPreds[g]?.third === t) || "";
               return (
-                <div key={i} className="bb-match">
-                  <div className="bb-match__label">Match {89 + i}</div>
-                  <div className="bb-slot bb-slot--readonly">{teamA ? `${fl(teamA)} ${teamA}` : "—"}</div>
-                  <div className="bb-slot bb-slot--readonly">{teamB ? `${fl(teamB)} ${teamB}` : "—"}</div>
-                  {teamA && teamB && (
-                    <div className="bb-match__pick">
-                      <span className="bb-match__pick-label">Winner:</span>
-                      <button
-                        className={`bb-pick-btn${picks.r16[i] === teamA ? " bb-pick-btn--active" : ""}`}
-                        onClick={() => setPicks(p => { const n = JSON.parse(JSON.stringify(p)); n.r16[i] = teamA; return n; })}
-                      >{fl(teamA)} {teamA}</button>
-                      <button
-                        className={`bb-pick-btn${picks.r16[i] === teamB ? " bb-pick-btn--active" : ""}`}
-                        onClick={() => setPicks(p => { const n = JSON.parse(JSON.stringify(p)); n.r16[i] = teamB; return n; })}
-                      >{fl(teamB)} {teamB}</button>
-                    </div>
-                  )}
-                </div>
+                <button
+                  key={t}
+                  className={`bb-third-pill${isSelected ? " bb-third-pill--on" : ""}`}
+                  onClick={() => toggleThirdAdvancing(t)}
+                  disabled={!isSelected && thirdPlaceAdvancing.length >= 8}
+                >
+                  <span className="bb-third-pill__grp">3rd {grp}</span>
+                  <span>{fl(t)} {t}</span>
+                  {isSelected && <span className="bb-third-pill__check">✓</span>}
+                </button>
               );
             })}
           </div>
-        </div>
 
-        {/* QF */}
-        <div className="bb-round">
-          <div className="bb-round__hd">Quarter-finals <span className="bb-round__count">{picks.qf.filter(Boolean).length}/4</span></div>
-          <div className="bb-matches">
-            {[0, 1, 2, 3].map(i => {
-              const teamA = picks.r16[i * 2] || "";
-              const teamB = picks.r16[i * 2 + 1] || "";
-              return (
-                <div key={i} className="bb-match">
-                  <div className="bb-match__label">Match {97 + i}</div>
-                  <div className="bb-slot bb-slot--readonly">{teamA ? `${fl(teamA)} ${teamA}` : "—"}</div>
-                  <div className="bb-slot bb-slot--readonly">{teamB ? `${fl(teamB)} ${teamB}` : "—"}</div>
-                  {teamA && teamB && (
-                    <div className="bb-match__pick">
-                      <span className="bb-match__pick-label">Winner:</span>
-                      <button
-                        className={`bb-pick-btn${picks.qf[i] === teamA ? " bb-pick-btn--active" : ""}`}
-                        onClick={() => setPicks(p => { const n = JSON.parse(JSON.stringify(p)); n.qf[i] = teamA; return n; })}
-                      >{fl(teamA)} {teamA}</button>
-                      <button
-                        className={`bb-pick-btn${picks.qf[i] === teamB ? " bb-pick-btn--active" : ""}`}
-                        onClick={() => setPicks(p => { const n = JSON.parse(JSON.stringify(p)); n.qf[i] = teamB; return n; })}
-                      >{fl(teamB)} {teamB}</button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* SF */}
-        <div className="bb-round">
-          <div className="bb-round__hd">Semi-finals <span className="bb-round__count">{picks.sf.filter(Boolean).length}/2</span></div>
-          <div className="bb-matches">
-            {[0, 1].map(i => {
-              const teamA = picks.qf[i * 2] || "";
-              const teamB = picks.qf[i * 2 + 1] || "";
-              return (
-                <div key={i} className="bb-match">
-                  <div className="bb-match__label">Match {101 + i}</div>
-                  <div className="bb-slot bb-slot--readonly">{teamA ? `${fl(teamA)} ${teamA}` : "—"}</div>
-                  <div className="bb-slot bb-slot--readonly">{teamB ? `${fl(teamB)} ${teamB}` : "—"}</div>
-                  {teamA && teamB && (
-                    <div className="bb-match__pick">
-                      <span className="bb-match__pick-label">Winner:</span>
-                      <button
-                        className={`bb-pick-btn${picks.sf[i] === teamA ? " bb-pick-btn--active" : ""}`}
-                        onClick={() => setPicks(p => { const n = JSON.parse(JSON.stringify(p)); n.sf[i] = teamA; return n; })}
-                      >{fl(teamA)} {teamA}</button>
-                      <button
-                        className={`bb-pick-btn${picks.sf[i] === teamB ? " bb-pick-btn--active" : ""}`}
-                        onClick={() => setPicks(p => { const n = JSON.parse(JSON.stringify(p)); n.sf[i] = teamB; return n; })}
-                      >{fl(teamB)} {teamB}</button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* FINAL */}
-        {picks.sf[0] && picks.sf[1] && (
-          <div className="bb-round bb-round--final">
-            <div className="bb-round__hd">🏆 Final <span className="bb-round__count">{picks.champion ? "1/1" : "0/1"}</span></div>
-            <div className="bb-final">
-              <button
-                className={`bb-final-btn${picks.champion === picks.sf[0] ? " bb-final-btn--active" : ""}`}
-                onClick={() => setPicks(p => ({ ...p, champion: p.sf[0] }))}
-              >
-                <span className="bb-final-flag">{fl(picks.sf[0])}</span>
-                <span className="bb-final-name">{picks.sf[0]}</span>
-              </button>
-              <span className="bb-final-vs">vs</span>
-              <button
-                className={`bb-final-btn${picks.champion === picks.sf[1] ? " bb-final-btn--active" : ""}`}
-                onClick={() => setPicks(p => ({ ...p, champion: p.sf[1] }))}
-              >
-                <span className="bb-final-flag">{fl(picks.sf[1])}</span>
-                <span className="bb-final-name">{picks.sf[1]}</span>
-              </button>
-            </div>
-            {picks.champion && (
-              <div className="bb-champion">
-                <div className="bb-champion__crown">👑</div>
-                <div className="bb-champion__flag">{fl(picks.champion)}</div>
-                <div className="bb-champion__name">{picks.champion}</div>
-                <div className="bb-champion__label">YOUR PREDICTED CHAMPION</div>
-              </div>
+          <div className="bb-step-nav">
+            <button className="bb-back-btn" onClick={() => goStep(0)}>← Back to Groups</button>
+            {thirdsDone && (
+              <button className="bb-next-btn" onClick={() => goStep(2)}>Continue to Knockout →</button>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Action buttons */}
+      {/* ── Step 2: Knockout picks ── */}
+      {step === 2 && allGroupsDone && thirdsDone && (
+        <div className="bb-knockout">
+          {/* R32 */}
+          <div className="bb-round">
+            <div className="bb-round__hd">Round of 32 <span className="bb-round__count">{knockout.r32.filter(Boolean).length}/16</span></div>
+            <div className="bb-matches">
+              {R32_STRUCTURE.map((_, i) => {
+                const [teamA, teamB] = getR32Teams(i, groupPreds, thirdPlaceAdvancing);
+                const winner = knockout.r32[i];
+                if (!teamA || !teamB) return null;
+                return (
+                  <div key={i} className="bb-match">
+                    <div className="bb-match__label">Match {73 + i}</div>
+                    <div className="bb-match__pick">
+                      <button
+                        className={`bb-pick-btn${winner === teamA ? " bb-pick-btn--active" : ""}`}
+                        onClick={() => setKnockoutWinner("r32", i, teamA)}
+                      >{fl(teamA)} {teamA}</button>
+                      <span className="bb-match__vs">vs</span>
+                      <button
+                        className={`bb-pick-btn${winner === teamB ? " bb-pick-btn--active" : ""}`}
+                        onClick={() => setKnockoutWinner("r32", i, teamB)}
+                      >{fl(teamB)} {teamB}</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* R16 */}
+          {knockout.r32.filter(Boolean).length === 16 && (
+            <div className="bb-round">
+              <div className="bb-round__hd">Round of 16 <span className="bb-round__count">{knockout.r16.filter(Boolean).length}/8</span></div>
+              <div className="bb-matches">
+                {Array.from({ length: 8 }, (_, i) => {
+                  const teamA = knockout.r32[i * 2];
+                  const teamB = knockout.r32[i * 2 + 1];
+                  if (!teamA || !teamB) return null;
+                  const winner = knockout.r16[i];
+                  return (
+                    <div key={i} className="bb-match">
+                      <div className="bb-match__label">Match {89 + i}</div>
+                      <div className="bb-match__pick">
+                        <button
+                          className={`bb-pick-btn${winner === teamA ? " bb-pick-btn--active" : ""}`}
+                          onClick={() => setKnockoutWinner("r16", i, teamA)}
+                        >{fl(teamA)} {teamA}</button>
+                        <span className="bb-match__vs">vs</span>
+                        <button
+                          className={`bb-pick-btn${winner === teamB ? " bb-pick-btn--active" : ""}`}
+                          onClick={() => setKnockoutWinner("r16", i, teamB)}
+                        >{fl(teamB)} {teamB}</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* QF */}
+          {knockout.r16.filter(Boolean).length === 8 && (
+            <div className="bb-round">
+              <div className="bb-round__hd">Quarter-finals <span className="bb-round__count">{knockout.qf.filter(Boolean).length}/4</span></div>
+              <div className="bb-matches">
+                {Array.from({ length: 4 }, (_, i) => {
+                  const teamA = knockout.r16[i * 2];
+                  const teamB = knockout.r16[i * 2 + 1];
+                  if (!teamA || !teamB) return null;
+                  const winner = knockout.qf[i];
+                  return (
+                    <div key={i} className="bb-match">
+                      <div className="bb-match__label">Match {97 + i}</div>
+                      <div className="bb-match__pick">
+                        <button
+                          className={`bb-pick-btn${winner === teamA ? " bb-pick-btn--active" : ""}`}
+                          onClick={() => setKnockoutWinner("qf", i, teamA)}
+                        >{fl(teamA)} {teamA}</button>
+                        <span className="bb-match__vs">vs</span>
+                        <button
+                          className={`bb-pick-btn${winner === teamB ? " bb-pick-btn--active" : ""}`}
+                          onClick={() => setKnockoutWinner("qf", i, teamB)}
+                        >{fl(teamB)} {teamB}</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* SF */}
+          {knockout.qf.filter(Boolean).length === 4 && (
+            <div className="bb-round">
+              <div className="bb-round__hd">Semi-finals <span className="bb-round__count">{knockout.sf.filter(Boolean).length}/2</span></div>
+              <div className="bb-matches">
+                {Array.from({ length: 2 }, (_, i) => {
+                  const teamA = knockout.qf[i * 2];
+                  const teamB = knockout.qf[i * 2 + 1];
+                  if (!teamA || !teamB) return null;
+                  const winner = knockout.sf[i];
+                  return (
+                    <div key={i} className="bb-match">
+                      <div className="bb-match__label">Match {101 + i}</div>
+                      <div className="bb-match__pick">
+                        <button
+                          className={`bb-pick-btn${winner === teamA ? " bb-pick-btn--active" : ""}`}
+                          onClick={() => setKnockoutWinner("sf", i, teamA)}
+                        >{fl(teamA)} {teamA}</button>
+                        <span className="bb-match__vs">vs</span>
+                        <button
+                          className={`bb-pick-btn${winner === teamB ? " bb-pick-btn--active" : ""}`}
+                          onClick={() => setKnockoutWinner("sf", i, teamB)}
+                        >{fl(teamB)} {teamB}</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Final */}
+          {knockout.sf[0] && knockout.sf[1] && (
+            <div className="bb-round bb-round--final">
+              <div className="bb-round__hd">🏆 Final</div>
+              <div className="bb-final">
+                <button
+                  className={`bb-final-btn${knockout.champion === knockout.sf[0] ? " bb-final-btn--active" : ""}`}
+                  onClick={() => setKnockoutWinner("champion", 0, knockout.sf[0]!)}
+                >
+                  <span className="bb-final-flag">{fl(knockout.sf[0])}</span>
+                  <span className="bb-final-name">{knockout.sf[0]}</span>
+                </button>
+                <span className="bb-final-vs">vs</span>
+                <button
+                  className={`bb-final-btn${knockout.champion === knockout.sf[1] ? " bb-final-btn--active" : ""}`}
+                  onClick={() => setKnockoutWinner("champion", 0, knockout.sf[1]!)}
+                >
+                  <span className="bb-final-flag">{fl(knockout.sf[1])}</span>
+                  <span className="bb-final-name">{knockout.sf[1]}</span>
+                </button>
+              </div>
+              {knockout.champion && (
+                <div className="bb-champion">
+                  <div className="bb-champion__crown">👑</div>
+                  <div className="bb-champion__flag">{fl(knockout.champion)}</div>
+                  <div className="bb-champion__name">{knockout.champion}</div>
+                  <div className="bb-champion__label">YOUR PREDICTED CHAMPION</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <button className="bb-back-btn" onClick={() => goStep(1)}>← Back to 3rd Place</button>
+        </div>
+      )}
+
+      {/* Actions */}
       <div className="bb-actions">
         <button
           className="bb-share-btn"
           onClick={generateImage}
-          disabled={generating || filledCount < 5}
+          disabled={generating || !allGroupsDone}
         >
           {generating ? "Generating..." : "📸 Save My Bracket"}
         </button>
         <button className="bb-clear-btn" onClick={clearAll}>Clear All</button>
       </div>
-      <p className="bb-share-hint">Downloads a 1080×1350 image perfect for Instagram stories and posts</p>
-
-      {/* Team picker overlay */}
-      {activeSlot && (
-        <div className="bb-overlay" onClick={() => setActiveSlot(null)}>
-          <div className="bb-picker" onClick={e => e.stopPropagation()}>
-            <div className="bb-picker__hd">
-              <span>Pick a team</span>
-              <button className="bb-picker__close" onClick={() => setActiveSlot(null)}>✕</button>
-            </div>
-            <input
-              className="bb-picker__search"
-              placeholder="Search teams..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              autoFocus
-            />
-            <div className="bb-picker__list">
-              {filteredTeams.map(t => (
-                <button
-                  key={t}
-                  className={`bb-picker__team${pickedTeams.has(t) ? " bb-picker__team--used" : ""}`}
-                  onClick={() => pickTeam(t)}
-                >
-                  <span className="bb-picker__flag">{fl(t)}</span>
-                  <span>{t}</span>
-                  {pickedTeams.has(t) && <span className="bb-picker__check">✓</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <p className="bb-share-hint">Downloads a 1080×1920 image for Instagram stories</p>
     </div>
   );
-}
-
-/* Cascade helpers — return the team that should auto-fill the next round slot.
-   Returns empty string if both feeder picks aren't made yet. */
-function cascadeR16(picks: BracketPicks, idx: number): string {
-  /* R16 slot idx is fed by R32 matches idx*2 and idx*2+1 */
-  return picks.r16[idx]; // don't auto-cascade, let user pick
-}
-function cascadeQF(picks: BracketPicks, idx: number): string {
-  return picks.qf[idx];
-}
-function cascadeSF(picks: BracketPicks, idx: number): string {
-  return picks.sf[idx];
 }

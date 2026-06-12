@@ -592,7 +592,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       )}
 
       {view === "bracket" ? (
-        <BracketBuilder flags={data.flags} teams={allTeams} />
+        <BracketBuilder flags={data.flags} groups={data.groups} gcolor={data.gcolor} />
       ) : (
         <main
           ref={mainRef}

@@ -276,7 +276,13 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
   function goalScorers(events: MatchEvent[] | undefined, teamName: string): string {
     if (!events) return "";
-    const goals = events.filter(e => e.type === "Goal" && canon(e.team) === canon(teamName));
+    // Normal goals belong to the scorer's team; own goals belong to the opposing team
+    const goals = events.filter(e => {
+      if (e.type !== "Goal") return false;
+      const isOG = e.detail === "Own Goal";
+      const sameTeam = canon(e.team) === canon(teamName);
+      return isOG ? !sameTeam : sameTeam;
+    });
     if (!goals.length) return "";
     const names = goals.map(g => {
       const surname = g.player.split(" ").pop() || g.player;
@@ -1035,8 +1041,18 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     };
   }, [onClose]);
 
-  const homeGoals = fixture ? (fixture.events || []).filter(e => e.type === "Goal" && canon(e.team) === canon(fixture.home)) : [];
-  const awayGoals = fixture ? (fixture.events || []).filter(e => e.type === "Goal" && canon(e.team) === canon(fixture.away)) : [];
+  const homeGoals = fixture ? (fixture.events || []).filter(e => {
+    if (e.type !== "Goal") return false;
+    const isOG = e.detail === "Own Goal";
+    const sameTeam = canon(e.team) === canon(fixture.home);
+    return isOG ? !sameTeam : sameTeam;
+  }) : [];
+  const awayGoals = fixture ? (fixture.events || []).filter(e => {
+    if (e.type !== "Goal") return false;
+    const isOG = e.detail === "Own Goal";
+    const sameTeam = canon(e.team) === canon(fixture.away);
+    return isOG ? !sameTeam : sameTeam;
+  }) : [];
 
   const statKeys = ["Ball Possession", "Total Shots", "Shots on Goal", "Corner Kicks", "Fouls", "Offsides", "Yellow Cards", "Red Cards", "Goalkeeper Saves", "Total passes", "Passes accurate"];
   const statLabels: Record<string, string> = {
@@ -1455,8 +1471,16 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     const gh = fixture.gh ?? 0;
     const ga = fixture.ga ?? 0;
 
-    const homeGoals = goals.filter(e => canon(e.team) === canon(fixture.home));
-    const awayGoals = goals.filter(e => canon(e.team) === canon(fixture.away));
+    const homeGoals = goals.filter(e => {
+      const isOG = e.detail === "Own Goal";
+      const sameTeam = canon(e.team) === canon(fixture.home);
+      return isOG ? !sameTeam : sameTeam;
+    });
+    const awayGoals = goals.filter(e => {
+      const isOG = e.detail === "Own Goal";
+      const sameTeam = canon(e.team) === canon(fixture.away);
+      return isOG ? !sameTeam : sameTeam;
+    });
     const possession = fixture.stats?.home?.["Ball Possession"];
 
     let narrative = "";

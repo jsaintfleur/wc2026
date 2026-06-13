@@ -56,7 +56,8 @@ body::after {
 }
 
 .wrap {
-  max-width: 560px;
+  width: 100%;
+  max-width: 600px;
   margin: 0 auto;
   min-height: 100vh;
   background:
@@ -75,7 +76,7 @@ body::after {
   -webkit-backdrop-filter: blur(24px) saturate(1.5);
   isolation: isolate;
   color: #fff;
-  padding: calc(12px + var(--safe-t)) 16px 12px;
+  padding: calc(12px + var(--safe-t)) max(16px, env(safe-area-inset-left, 0px)) 12px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -316,7 +317,8 @@ body::after {
   font-size: 12.5px;
   letter-spacing: 1.2px;
   text-transform: uppercase;
-  padding: 12px 14px 10px;
+  padding: 14px 14px 12px;
+  min-height: 44px;
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -324,6 +326,7 @@ body::after {
   cursor: pointer;
   transition: color .2s ease, border-color .2s ease;
   position: relative;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .tab:hover {
@@ -1104,7 +1107,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   margin: 0 4px;
 }
 
-@media (max-width: 360px) {
+@media (max-width: 374px) {
   .hero__title { font-size: 35px; }
   .team .nm { font-size: 17px; }
   .drawer__stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -2783,3 +2786,87 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   margin-top: 8px;
 }
 /* (old picker overlay removed — bracket now uses constrained group-based picks) */
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE — mobile-first, scales up to tablet & desktop
+   ═══════════════════════════════════════════════════════════ */
+
+/* Small phones (iPhone SE, Galaxy S8, etc.) */
+@media (max-width: 374px) {
+  .bar__mark { font-size: 14px; letter-spacing: .5px; }
+  .bar__hosts span { width: 22px; height: 22px; font-size: 12px; }
+  .hero { padding: 18px 14px 18px; min-height: 220px; }
+  .hero__title { font-size: 36px; }
+  .hero__eyebrow { font-size: 10px; letter-spacing: 3px; }
+  .hero__ball { width: 56px; height: 56px; right: 20px; bottom: 20px; }
+  .hero__pitch-lines { width: 160px; height: 160px; right: -50px; }
+  .stat { min-width: 54px; padding: 6px 8px; }
+  .stat b { font-size: 20px; }
+  .stat span { font-size: 9.5px; }
+  .tab { font-size: 11px; padding: 12px 10px 10px; letter-spacing: .8px; }
+  .team .nm { font-size: 16px; }
+  .tix { border-radius: 12px; margin: 7px 0; }
+  .drawer__stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .cd-hero__countdown { font-size: 42px; }
+  .cd-hero__flag { font-size: 26px; }
+  .cd-hero__name { font-size: 13px; }
+}
+
+/* Ensure safe-area insets on notched phones */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .wrap { padding-bottom: env(safe-area-inset-bottom); }
+  .tabs { padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
+  .filters { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+}
+
+/* Tablet landscape and small desktop (≥768px) */
+@media (min-width: 768px) {
+  .wrap { max-width: 700px; }
+  .bar { padding-left: 24px; padding-right: 24px; }
+  .bar__mark { font-size: 18px; }
+  .tabs { padding: 0 16px; justify-content: center; }
+  .tab { font-size: 13px; padding: 14px 20px 12px; letter-spacing: 1.4px; }
+  .hero { padding: 32px 28px 28px; min-height: 280px; }
+  .hero__title { font-size: 56px; }
+  .hero__eyebrow { font-size: 12px; letter-spacing: 5px; }
+  .hero__sub { font-size: 14px; max-width: 400px; }
+  .hero__ball { width: 96px; height: 96px; right: 44px; bottom: 32px; }
+  .hero__pitch-lines { width: 240px; height: 240px; right: -30px; }
+  .hero__stats { gap: 10px; }
+  .stat { min-width: 72px; padding: 10px 12px; }
+  .stat b { font-size: 26px; }
+  .filters { padding: 16px 20px 10px; }
+  .search { font-size: 15px; padding: 13px 16px; }
+  .tix { margin: 10px 0; border-radius: 18px; }
+  .tix__main { padding: 16px; }
+  .team .nm { font-size: 20px; }
+  .score { font-size: 24px; }
+  .gcard { margin: 10px 0; border-radius: 14px; padding: 16px 18px; }
+  .tbl td { padding: 9px 6px; }
+  .tbl .tm .nm { font-size: 15px; }
+  .cd-hero { margin: 14px 12px; border-radius: 20px; padding: 22px 20px; }
+  .cd-hero__countdown { font-size: 64px; }
+  .cd-hero__flag { font-size: 38px; }
+  .cd-hero__name { font-size: 16px; }
+  .md-drawer { max-width: 600px; }
+  .pp-drawer { max-width: 600px; }
+  .vcard { border-radius: 16px; }
+}
+
+/* Desktop (≥1024px) */
+@media (min-width: 1024px) {
+  .wrap { max-width: 760px; box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 60px 160px rgba(0,0,0,0.5); }
+  .bar { padding-left: 28px; padding-right: 28px; }
+  .bar__mark { font-size: 19px; }
+  .tabs { gap: 4px; }
+  .tab { padding: 14px 24px 12px; }
+  .tab:hover { color: #fff; }
+  .hero { padding: 36px 32px 32px; min-height: 300px; }
+  .hero__title { font-size: 60px; }
+  .hero__ball { width: 110px; height: 110px; right: 48px; bottom: 36px; }
+  .hero__pitch-lines { width: 260px; height: 260px; right: -20px; }
+  .tix--clickable:hover { transform: translateY(-2px); box-shadow: 0 20px 48px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1); }
+  .gcard:hover { border-color: rgba(255,255,255,0.12); }
+  .cd-hero__countdown { font-size: 72px; }
+  .md-drawer { max-width: 640px; border-radius: 20px 20px 0 0; }
+}

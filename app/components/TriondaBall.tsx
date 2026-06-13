@@ -16,7 +16,7 @@ export default function TriondaBall({
       aria-label="Adidas Trionda — Official Match Ball of FIFA World Cup 2026"
       style={{
         backgroundImage: "url(/trionda.png)",
-        backgroundSize: "250%",
+        backgroundSize: "190%",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
       }}

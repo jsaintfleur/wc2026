@@ -417,7 +417,7 @@ export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilder
             const unplaced = teamsList.filter(t => !placed.includes(t));
 
             return (
-              <div key={g} className="bb-group" style={{ borderLeftColor: gcolor[g] || "var(--line)" }}>
+              <div key={g} id={`bb-group-${g}`} className={`bb-group${!pred.first || !pred.second || !pred.third ? " bb-group--incomplete" : ""}`} style={{ borderLeftColor: gcolor[g] || "var(--line)" }}>
                 <div className="bb-group__hd" style={{ color: gcolor[g] }}>Group {g}</div>
 
                 {/* Position slots */}
@@ -681,14 +681,31 @@ export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilder
       <div className="bb-actions">
         <button
           className="bb-share-btn"
-          onClick={generateImage}
-          disabled={generating || !allGroupsDone}
+          onClick={() => {
+            if (!allGroupsDone) {
+              const missing = groupLetters.find(g => !groupPreds[g]?.first || !groupPreds[g]?.second || !groupPreds[g]?.third);
+              if (missing) {
+                goStep(0);
+                setTimeout(() => {
+                  const el = document.getElementById(`bb-group-${missing}`);
+                  if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    el.classList.add("bb-group--flash");
+                    setTimeout(() => el.classList.remove("bb-group--flash"), 2000);
+                  }
+                }, 100);
+              }
+              return;
+            }
+            generateImage();
+          }}
+          disabled={generating}
         >
-          {generating ? "Generating..." : "📸 Save My Bracket"}
+          {generating ? "Generating..." : !allGroupsDone ? `⚠ Complete All Groups (${groupsDone}/12)` : "📸 Save My Bracket"}
         </button>
         <button className="bb-clear-btn" onClick={clearAll}>Clear All</button>
       </div>
-      <p className="bb-share-hint">Downloads a 1080×1920 image for Instagram stories</p>
+      <p className="bb-share-hint">{!allGroupsDone ? "Finish predicting all 12 groups to unlock saving" : "Downloads a 1080×1920 image for Instagram stories"}</p>
     </div>
   );
 }

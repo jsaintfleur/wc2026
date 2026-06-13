@@ -2163,6 +2163,17 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   border-radius: 10px;
   padding: 14px 16px;
   margin-bottom: 12px;
+  transition: box-shadow 0.3s;
+}
+.bb-group--incomplete {
+  border-color: rgba(245, 158, 11, 0.25);
+}
+.bb-group--flash {
+  animation: bb-flash 0.6s ease-in-out 3;
+}
+@keyframes bb-flash {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 2px var(--gold), 0 0 16px rgba(245, 158, 11, 0.3); }
 }
 .bb-group__hd {
   font-family: var(--disp);

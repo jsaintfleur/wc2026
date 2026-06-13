@@ -11,7 +11,12 @@ const SEASON = process.env.WC_SEASON || "2026";
 const PRE = 15 * 60000;
 const POST = 155 * 60000;
 
+// worldcup26.ir — free community API, no auth required
+const WC26_URL = "https://worldcup26.ir/get/games";
+const WC26_STADIUMS_URL = "https://worldcup26.ir/get/stadiums";
+
 let LAST: { fixtures: unknown[]; ts: number } | null = null;
+let STADIUM_CACHE: Record<string, string> | null = null;
 
 function sameFixture(a: unknown, b: unknown): boolean {
   const left = a as { ts?: number; home?: string; away?: string };
@@ -26,9 +31,16 @@ function sameFixture(a: unknown, b: unknown): boolean {
 }
 
 function withVerifiedResults(fixtures: unknown[] = []): unknown[] {
-  const merged = [...fixtures];
-  for (const verified of VERIFIED_RESULTS) {
-    if (!merged.some(f => sameFixture(f, verified))) merged.push(verified);
+  // Verified results are manually confirmed and have richer data (full names, assists).
+  // They replace any matching fixture from other sources.
+  const merged: unknown[] = [];
+  for (const f of fixtures) {
+    const verifiedMatch = VERIFIED_RESULTS.find(v => sameFixture(f, v));
+    merged.push(verifiedMatch || f);
+  }
+  // Add any verified results not covered by the fixture list
+  for (const v of VERIFIED_RESULTS) {
+    if (!merged.some(f => sameFixture(f, v))) merged.push(v);
   }
   return merged;
 }
@@ -36,6 +48,166 @@ function withVerifiedResults(fixtures: unknown[] = []): unknown[] {
 function inWindow(now: number): boolean {
   return STARTS.some(s => now >= s - PRE && now <= s + POST);
 }
+
+// ── worldcup26.ir integration ──────────────────────────────────────
+
+type WC26Game = {
+  id: string;
+  home_team_name_en: string;
+  away_team_name_en: string;
+  home_score: string;
+  away_score: string;
+  home_scorers: string;
+  away_scorers: string;
+  group: string;
+  matchday: string;
+  local_date: string;
+  stadium_id: string;
+  finished: string;
+  time_elapsed: string;
+  type: string;
+};
+
+type WC26Stadium = {
+  id: string;
+  name_en: string;
+  city_en: string;
+};
+
+// Parse scorer strings like {"D. Bobadilla 7'(OG)","F. Balogun 31'","F. Balogun 45'+5'"}
+function parseScorers(raw: string, teamName: string): Array<{
+  minute: number; extra: number | null; type: "Goal"; detail: string;
+  player: string; assist: string | null; team: string;
+}> {
+  if (!raw || raw === "null" || raw === '""') return [];
+  // Strip outer braces and split by ","
+  const inner = raw.replace(/^\{/, "").replace(/\}$/, "");
+  if (!inner.trim()) return [];
+  const entries = inner.split(/",\s*"/).map(s => s.replace(/^"|"$/g, ""));
+  return entries.map(entry => {
+    const isOG = /\(OG\)/i.test(entry);
+    const isPen = /\(pen\.?\)/i.test(entry);
+    // Extract minute — patterns like "7'", "45'+5'", "90'+8'"
+    const minMatch = entry.match(/(\d+)'\+?(\d+)?'?/);
+    const minute = minMatch ? parseInt(minMatch[1], 10) : 0;
+    const extra = minMatch?.[2] ? parseInt(minMatch[2], 10) : null;
+    // Player name is everything before the minute
+    const player = entry.replace(/\s*\d+'.*$/, "").trim();
+    return {
+      minute,
+      extra,
+      type: "Goal" as const,
+      detail: isOG ? "Own Goal" : isPen ? "Penalty" : "Normal Goal",
+      player,
+      assist: null,
+      team: teamName,
+    };
+  }).filter(e => e.player);
+}
+
+// Map worldcup26.ir time_elapsed to our status codes
+function mapStatus(timeElapsed: string, finished: string): { status: string; elapsed: number | null } {
+  if (finished === "TRUE") return { status: "FT", elapsed: 90 };
+  switch (timeElapsed) {
+    case "finished": return { status: "FT", elapsed: 90 };
+    case "halftime": return { status: "HT", elapsed: 45 };
+    case "notstarted": return { status: "NS", elapsed: null };
+    default: {
+      // During live play, time_elapsed may be a minute number like "34" or "67"
+      const min = parseInt(timeElapsed, 10);
+      if (!isNaN(min)) {
+        if (min <= 45) return { status: "1H", elapsed: min };
+        if (min <= 90) return { status: "2H", elapsed: min };
+        return { status: "ET", elapsed: min };
+      }
+      return { status: "NS", elapsed: null };
+    }
+  }
+}
+
+// Build a lookup from canon'd team pair → schedule match for correct timestamps/venues
+const SCHEDULE_BY_PAIR: Map<string, { ts: number; venue: string; round: string }> = new Map();
+for (const m of DATA.gs) {
+  const key = [canon(m.t1), canon(m.t2)].sort().join("|");
+  const v = DATA.venues[m.v];
+  SCHEDULE_BY_PAIR.set(key, { ts: m.ts, venue: v?.common || "", round: `Group Stage - ${m.g}` });
+}
+for (const m of DATA.ko) {
+  SCHEDULE_BY_PAIR.set(m.mr, { ts: m.ts, venue: DATA.venues[m.v]?.common || "", round: m.round });
+}
+
+async function fetchStadiumMap(): Promise<Record<string, string>> {
+  if (STADIUM_CACHE) return STADIUM_CACHE;
+  try {
+    const r = await fetch(WC26_STADIUMS_URL, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return {};
+    const data = await r.json();
+    const map: Record<string, string> = {};
+    for (const s of (data.stadiums || [])) {
+      map[s.id] = s.name_en || s.fifa_name || "";
+    }
+    STADIUM_CACHE = map;
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+// Round label from group + matchday + type
+function roundLabel(game: WC26Game): string {
+  if (game.type === "group") return `Group Stage - ${game.matchday}`;
+  const labels: Record<string, string> = {
+    r32: "Round of 32", r16: "Round of 16",
+    qf: "Quarter-finals", sf: "Semi-finals",
+    third: "Third-place", final: "Final",
+  };
+  return labels[game.type] || game.type;
+}
+
+async function fetchWC26(): Promise<{ ok: boolean; fixtures: unknown[] }> {
+  const [gamesRes, stadiums] = await Promise.all([
+    fetch(WC26_URL, { signal: AbortSignal.timeout(8000) }),
+    fetchStadiumMap(),
+  ]);
+  if (!gamesRes.ok) return { ok: false, fixtures: [] };
+  const data = await gamesRes.json();
+  const games: WC26Game[] = data.games || [];
+
+  // Only include matches that have kicked off or finished
+  const active = games.filter(g => g.finished === "TRUE" || g.time_elapsed !== "notstarted");
+
+  const fixtures = active.map(g => {
+    const { status, elapsed } = mapStatus(g.time_elapsed, g.finished);
+    const homeEvents = parseScorers(g.home_scorers, g.home_team_name_en);
+    const awayEvents = parseScorers(g.away_scorers, g.away_team_name_en);
+    const events = [...homeEvents, ...awayEvents].sort((a, b) => {
+      const aMin = a.minute + (a.extra || 0) * 0.01;
+      const bMin = b.minute + (b.extra || 0) * 0.01;
+      return aMin - bMin;
+    });
+
+    // Look up correct timestamp and venue from our schedule using team pair
+    const pairKey = [canon(g.home_team_name_en), canon(g.away_team_name_en)].sort().join("|");
+    const scheduled = SCHEDULE_BY_PAIR.get(pairKey);
+
+    return {
+      ts: scheduled?.ts || 0,
+      status,
+      elapsed,
+      venue: scheduled?.venue || stadiums[g.stadium_id] || "",
+      round: scheduled?.round || roundLabel(g),
+      home: g.home_team_name_en,
+      away: g.away_team_name_en,
+      gh: parseInt(g.home_score, 10) || 0,
+      ga: parseInt(g.away_score, 10) || 0,
+      events: events.length ? events : undefined,
+    };
+  });
+
+  return { ok: true, fixtures };
+}
+
+// ── API-Football (legacy vendor) ───────────────────────────────────
 
 interface FixtureResponse {
   ok: boolean;
@@ -84,7 +256,6 @@ type VendorFixture = {
 };
 
 async function fetchFixtures(key: string): Promise<FixtureResponse> {
-  /* Try league+season first; fall back to date-based query if no fixtures returned */
   let url = `https://v3.football.api-sports.io/fixtures?league=${LEAGUE}&season=${SEASON}`;
   let r = await fetch(url, { headers: { "x-apisports-key": key } });
   let body = await r.json().catch(() => ({}));
@@ -182,58 +353,66 @@ async function fetchFixtures(key: string): Promise<FixtureResponse> {
   return { ok: true, fixtures, quota };
 }
 
+// ── Route handler ──────────────────────────────────────────────────
+
 export async function GET(request: NextRequest) {
-  const key = process.env.APIFOOTBALL_KEY;
+  const apiFootballKey = process.env.APIFOOTBALL_KEY;
   const now = Date.now();
   const debug = request.nextUrl.searchParams.has("debug");
-
-  if (!key) {
-    const fixtures = withVerifiedResults();
-    return NextResponse.json(
-      { configured: false, active: inWindow(now), ts: now, fixtures },
-      { headers: { "Cache-Control": "public, s-maxage=120" } }
-    );
-  }
-
   const active = inWindow(now);
 
   if (debug) {
-    const r = await fetchFixtures(key).catch(e => ({
-      ok: false, http: 0, errors: String(e),
-    } as FixtureResponse));
+    const wc26 = await fetchWC26().catch(() => ({ ok: false, fixtures: [] }));
+    const apif = apiFootballKey
+      ? await fetchFixtures(apiFootballKey).catch(e => ({ ok: false, http: 0, errors: String(e) } as FixtureResponse))
+      : null;
+    const merged = withVerifiedResults(wc26.ok ? wc26.fixtures : (apif?.fixtures || []));
     return NextResponse.json({
-      configured: true, debug: true, active, league: LEAGUE, season: SEASON,
-      upstreamOk: r.ok, http: r.http || 200, quota: r.quota || null,
-      fixtureCount: r.ok ? withVerifiedResults(r.fixtures).length : VERIFIED_RESULTS.length,
-      upstreamFixtureCount: r.ok ? (r.fixtures?.length ?? 0) : 0,
-      verifiedFixtureCount: VERIFIED_RESULTS.length,
-      errors: r.errors || null,
-      sample: r.ok ? withVerifiedResults(r.fixtures).slice(0, 3) : VERIFIED_RESULTS.slice(0, 3),
+      active, ts: now,
+      wc26: { ok: wc26.ok, fixtureCount: wc26.fixtures.length },
+      apiFootball: apif ? { ok: apif.ok, fixtureCount: apif.fixtures?.length ?? 0, quota: apif.quota } : "not configured",
+      verifiedCount: VERIFIED_RESULTS.length,
+      mergedCount: merged.length,
+      sample: merged.slice(0, 3),
     }, { headers: { "Cache-Control": "no-store" } });
   }
 
-  if (!active) {
-    const fixtures = withVerifiedResults(LAST ? LAST.fixtures : []);
+  // Fetch from worldcup26.ir (primary) and optionally API-Football (enrichment)
+  const wc26 = await fetchWC26().catch(() => ({ ok: false, fixtures: [] as unknown[] }));
+
+  let apifFixtures: unknown[] = [];
+  if (apiFootballKey && active) {
+    const apif = await fetchFixtures(apiFootballKey).catch(() => ({ ok: false, fixtures: [] } as FixtureResponse));
+    if (apif.ok && apif.fixtures && apif.fixtures.length > 0) apifFixtures = apif.fixtures;
+  }
+
+  // Merge strategy: start with API-Football (richer data with stats/lineups),
+  // then fill in any missing matches from worldcup26.ir, then verified results
+  let base: unknown[] = [];
+  if (apifFixtures.length > 0) {
+    base = [...apifFixtures];
+    // Add wc26 matches not already covered by API-Football
+    for (const wf of wc26.fixtures) {
+      if (!base.some(f => sameFixture(f, wf))) base.push(wf);
+    }
+  } else if (wc26.ok) {
+    base = wc26.fixtures;
+  }
+
+  const fixtures = withVerifiedResults(base);
+  const hasLiveData = wc26.ok || apifFixtures.length > 0;
+
+  if (!active && !hasLiveData) {
     return NextResponse.json(
       { configured: true, active: false, ts: LAST ? LAST.ts : now, fixtures },
       { headers: { "Cache-Control": `public, s-maxage=${IDLE_TTL}, stale-while-revalidate=${IDLE_TTL * 2}` } }
     );
   }
 
-  try {
-    const r = await fetchFixtures(key);
-    if (!r.ok) throw new Error("upstream " + r.http);
-    const fixtures = withVerifiedResults(r.fixtures);
-    LAST = { fixtures, ts: now };
-    return NextResponse.json(
-      { configured: true, active: true, ts: now, fixtures, quota: r.quota },
-      { headers: { "Cache-Control": `public, s-maxage=${LIVE_TTL}, stale-while-revalidate=${LIVE_TTL * 2}` } }
-    );
-  } catch {
-    const fixtures = withVerifiedResults(LAST ? LAST.fixtures : []);
-    return NextResponse.json(
-      { configured: true, active: true, stale: true, ts: LAST ? LAST.ts : now, fixtures },
-      { headers: { "Cache-Control": "public, s-maxage=120" } }
-    );
-  }
+  LAST = { fixtures, ts: now };
+
+  return NextResponse.json(
+    { configured: true, active, ts: now, fixtures, source: apifFixtures.length > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only" },
+    { headers: { "Cache-Control": `public, s-maxage=${active ? LIVE_TTL : IDLE_TTL}, stale-while-revalidate=${active ? LIVE_TTL * 2 : IDLE_TTL * 2}` } }
+  );
 }

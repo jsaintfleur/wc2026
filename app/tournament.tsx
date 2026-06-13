@@ -514,13 +514,13 @@ export default function Tournament({ data }: { data: TournamentData }) {
     window.scrollTo({ top: 0 });
   }
 
-  const tabs: { key: ViewType; label: string; icon: string }[] = [
-    { key: "schedule", label: "Schedule", icon: "📅" },
-    { key: "groups", label: "Tables", icon: "📊" },
-    { key: "knockout", label: "Knockout", icon: "🏆" },
-    { key: "bracket", label: "Bracket", icon: "🎯" },
-    { key: "venues", label: "Venues", icon: "🏟️" },
-    { key: "about", label: "About", icon: "ℹ️" },
+  const tabs: { key: ViewType; label: string }[] = [
+    { key: "schedule", label: "Schedule" },
+    { key: "groups", label: "Tables" },
+    { key: "knockout", label: "Knockout" },
+    { key: "bracket", label: "Bracket" },
+    { key: "venues", label: "Venues" },
+    { key: "about", label: "About" },
   ];
 
   return (
@@ -558,8 +558,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
             aria-selected={view === t.key}
             onClick={() => handleTab(t.key)}
           >
-            <span className="tab__icon" aria-hidden="true">{t.icon}</span>
-            <span>{t.label}</span>
+            {t.label}
           </button>
         ))}
       </nav>

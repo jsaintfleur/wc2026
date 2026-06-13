@@ -992,7 +992,7 @@ function eventIcon(type: string, detail: string): string {
   return "•";
 }
 
-type MdTab = "summary" | "stats" | "lineups" | "h2h" | "report";
+type MdTab = "summary" | "stats" | "lineups" | "report";
 
 function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gcolor, allMatches, vName: _vName, findLive, onClose, onTeamClick, onPlayerClick }: {
   match: GroupStageMatch;
@@ -1121,9 +1121,9 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
 
         {!isUpcoming && !isStale && (
           <div className="md-tabs" role="tablist">
-            {(["summary", "stats", "lineups", "h2h", "report"] as MdTab[]).map(t => {
-              const disabled = (t === "stats" && !hasStats) || (t === "lineups" && !hasLineups);
-              const label: Record<MdTab, string> = { summary: "Summary", stats: "Stats", lineups: "Lineups", h2h: "H2H", report: "Report" };
+            {(["summary", ...(hasStats ? ["stats" as MdTab] : []), ...(hasLineups ? ["lineups" as MdTab] : []), ...(isDone ? ["report" as MdTab] : [])] as MdTab[]).map(t => {
+              const disabled = false;
+              const label: Record<MdTab, string> = { summary: "Summary", stats: "Stats", lineups: "Lineups", report: "Report" };
               return (
                 <button key={t} role="tab" aria-selected={tab === t} className={`md-tab${tab === t ? " md-tab--active" : ""}${disabled ? " md-tab--disabled" : ""}`}
                   onClick={() => { if (!disabled) setTab(t); }}>
@@ -1370,97 +1370,6 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     );
   }
 
-  function renderH2HTab() {
-    const h2hMatches = allMatches.filter(m => {
-      if (m.no === match.no) return false;
-      const pair = [m.t1, m.t2].sort().join("|");
-      const thisPair = [match.t1, match.t2].sort().join("|");
-      return pair === thisPair;
-    });
-
-    const h2hFixtures = h2hMatches.map(m => {
-      const f = findLive(m, fixtures);
-      const hasKickedOff = m.ts <= nowMs + 5 * 60000;
-      const done = hasKickedOff && (
-        (f && DONE_STATUSES.has(f.status)) ||
-        (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null)
-      );
-      let gh: number | null = null, ga: number | null = null;
-      if (done && f) {
-        const gg = goalsFor(m, f);
-        gh = gg.t1; ga = gg.t2;
-      } else if (done && m.dbGh != null && m.dbGa != null) {
-        gh = m.dbGh; ga = m.dbGa;
-      }
-      return { match: m, gh, ga, done: !!done };
-    });
-
-    const completed = h2hFixtures.filter(h => h.done && h.gh != null && h.ga != null);
-    let w1 = 0, w2 = 0, draws = 0;
-    for (const h of completed) {
-      if (h.gh! > h.ga!) w1++;
-      else if (h.gh! < h.ga!) w2++;
-      else draws++;
-    }
-
-    return (
-      <div className="drawer__section" style={{ marginTop: 0 }}>
-        <div className="h2h-header">
-          <button className="h2h-team" onClick={() => onTeamClick(match.t1)}>
-            <span className="h2h-flag">{flags[match.t1] || "⚽"}</span>
-            <span>{match.t1}</span>
-          </button>
-          <div className="h2h-vs">vs</div>
-          <button className="h2h-team" onClick={() => onTeamClick(match.t2)}>
-            <span className="h2h-flag">{flags[match.t2] || "⚽"}</span>
-            <span>{match.t2}</span>
-          </button>
-        </div>
-
-        {completed.length > 0 && (
-          <div className="h2h-record">
-            <div className="h2h-record__item h2h-record__item--w">
-              <div className="h2h-record__num">{w1}</div>
-              <div className="h2h-record__label">Wins</div>
-            </div>
-            <div className="h2h-record__item h2h-record__item--d">
-              <div className="h2h-record__num">{draws}</div>
-              <div className="h2h-record__label">Draws</div>
-            </div>
-            <div className="h2h-record__item h2h-record__item--w">
-              <div className="h2h-record__num">{w2}</div>
-              <div className="h2h-record__label">Wins</div>
-            </div>
-          </div>
-        )}
-
-        <h3 className="drawer__h3">{h2hMatches.length > 0 ? "Tournament Meetings" : "No Previous Meetings"}</h3>
-
-        {h2hMatches.length === 0 && (
-          <p className="h2h-empty">This is the first meeting between {match.t1} and {match.t2} in this tournament.</p>
-        )}
-
-        {h2hFixtures.map(h => {
-          const d = parseISO(h.match.iso);
-          const vn = venues[h.match.v] || { common: "", city: "", country: "" };
-          return (
-            <div key={h.match.no} className="h2h-match">
-              <div className="h2h-match__date">{d.getDate()} {MON[d.getMonth()]} · Group {h.match.g}</div>
-              <div className="h2h-match__row">
-                <span>{flags[h.match.t1] || "⚽"} {h.match.t1}</span>
-                <span className="h2h-match__score">
-                  {h.done && h.gh != null ? `${h.gh} – ${h.ga}` : h.match.et}
-                </span>
-                <span>{h.match.t2} {flags[h.match.t2] || "⚽"}</span>
-              </div>
-              <div className="h2h-match__venue">{vn.common}, {vn.city}</div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
   function renderReportTab() {
     if (!fixture || !isDone) return <div className="md-drawer__empty">Match report will be available after the final whistle.</div>;
 
@@ -1666,7 +1575,6 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
           {!isUpcoming && !isStale && tab === "summary" && renderSummaryTab()}
           {!isUpcoming && !isStale && tab === "stats" && renderStatsTab()}
           {!isUpcoming && !isStale && tab === "lineups" && renderLineupsTab()}
-          {!isUpcoming && !isStale && tab === "h2h" && renderH2HTab()}
           {!isUpcoming && !isStale && tab === "report" && renderReportTab()}
         </div>
       </div>

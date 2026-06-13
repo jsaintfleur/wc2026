@@ -1,6 +1,7 @@
 /**
  * Adidas Trionda match ball — uses the official product image
- * from the FIFA Store with transparent background.
+ * rendered as a CSS background so we can scale/position to
+ * crop the light background from the product photo.
  */
 export default function TriondaBall({
   className,
@@ -9,11 +10,16 @@ export default function TriondaBall({
   className?: string;
 }) {
   return (
-    <img
-      src="/trionda.png"
-      alt="Adidas Trionda — Official Match Ball of FIFA World Cup 2026"
+    <div
       className={className}
-      draggable={false}
+      role="img"
+      aria-label="Adidas Trionda — Official Match Ball of FIFA World Cup 2026"
+      style={{
+        backgroundImage: "url(/trionda.png)",
+        backgroundSize: "250%",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      }}
     />
   );
 }

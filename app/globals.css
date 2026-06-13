@@ -103,13 +103,17 @@ body::after {
   background-clip: text;
 }
 
-.bar__ball {
-  width: 22px;
-  height: 22px;
+/* WC26 logo in the sticky header bar */
+.bar__logo {
+  height: 36px;
+  width: auto;
   flex: 0 0 auto;
-  border-radius: 50%;
-  object-fit: cover;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+
+/* Ball image — hidden in header, visible in hero */
+.bar__ball {
+  display: none;
 }
 
 .bar__hosts {
@@ -191,6 +195,7 @@ body::after {
   border-width: 0 0 0 2px;
 }
 
+/* Trionda ball in hero — background-image zoomed in to crop the product photo edges */
 .hero__ball {
   position: absolute;
   right: 16px;
@@ -200,8 +205,8 @@ body::after {
   z-index: 1;
   opacity: .85;
   border-radius: 50%;
-  object-fit: cover;
   filter: drop-shadow(0 12px 24px rgba(0,0,0,0.35));
+  box-shadow: inset 0 0 4px 3px rgba(6, 9, 16, 0.6);
 }
 
 .hero__eyebrow {
@@ -2791,6 +2796,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 /* Small phones (iPhone SE, Galaxy S8, etc.) */
 @media (max-width: 374px) {
   .bar__mark { font-size: 14px; letter-spacing: .5px; }
+  .bar__logo { height: 28px; }
   .bar__hosts span { width: 26px; height: 26px; font-size: 14px; }
   .hero { padding: 18px 14px 18px; min-height: 220px; }
   .hero__title { font-size: 36px; }
@@ -2821,6 +2827,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .wrap { max-width: 700px; }
   .bar { padding-left: 24px; padding-right: 24px; }
   .bar__mark { font-size: 18px; }
+  .bar__logo { height: 42px; }
   .tabs { padding: 0 16px; justify-content: center; }
   .tab { font-size: 13px; padding: 14px 20px 12px; letter-spacing: 1.4px; }
   .hero { padding: 32px 28px 28px; min-height: 280px; }
@@ -2855,6 +2862,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .wrap { max-width: 760px; box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 60px 160px rgba(0,0,0,0.5); }
   .bar { padding-left: 28px; padding-right: 28px; }
   .bar__mark { font-size: 19px; }
+  .bar__logo { height: 48px; }
   .tabs { gap: 4px; }
   .tab { padding: 14px 24px 12px; }
   .tab:hover { color: #fff; }

@@ -2862,3 +2862,145 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .cd-hero__countdown { font-size: 72px; }
   .md-drawer { max-width: 640px; border-radius: 20px 20px 0 0; }
 }
+
+/* ═══════════════════════════════════════
+   STATS VIEW — trophy, scorers, assists
+   ═══════════════════════════════════════ */
+
+.stats-view { padding-bottom: 32px; }
+
+/* Trophy hero area */
+.stats-trophy {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 8px;
+}
+.stats-trophy__svg {
+  width: 140px;
+  height: auto;
+  filter: drop-shadow(0 8px 24px rgba(212, 168, 67, 0.25));
+}
+
+/* Empty state */
+.stats-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--muted);
+}
+.stats-empty p { margin: 0 0 8px; font-size: 14px; }
+.stats-empty__sub { font-size: 12px; opacity: 0.6; }
+
+/* Table section */
+.stats-table-wrap {
+  margin: 0 0 24px;
+}
+.stats-heading {
+  font-family: var(--disp);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+  padding: 0 4px;
+}
+
+/* The table itself */
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.stats-table thead th {
+  font-family: var(--disp);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  text-align: left;
+}
+.stats-table tbody tr {
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s ease;
+}
+.stats-table tbody tr:hover {
+  background: rgba(255,255,255,0.03);
+}
+.stats-table td {
+  padding: 10px 8px;
+  vertical-align: middle;
+}
+
+/* Rank column */
+.stats-rank {
+  width: 32px;
+  text-align: center;
+  font-weight: 700;
+  font-family: var(--disp);
+  color: var(--muted);
+}
+
+/* Player cell */
+.stats-player {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.stats-flag { font-size: 16px; flex: 0 0 auto; }
+.stats-name {
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+.stats-team {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+/* Numeric columns */
+.stats-num {
+  width: 36px;
+  text-align: center;
+  font-family: var(--disp);
+  font-weight: 700;
+}
+.stats-goals { color: #fff; font-size: 15px; }
+.stats-pen { color: var(--muted); font-size: 12px; }
+th.stats-num { text-align: center; }
+
+/* Medal rows */
+.stats-gold .stats-rank { color: #f5d77a; }
+.stats-gold .stats-name { color: #f5d77a; }
+.stats-gold { background: rgba(245, 215, 122, 0.06); }
+
+.stats-silver .stats-rank { color: #c0c0c0; }
+.stats-silver .stats-name { color: #d4d4d8; }
+.stats-silver { background: rgba(192, 192, 192, 0.04); }
+
+.stats-bronze .stats-rank { color: #cd7f32; }
+.stats-bronze .stats-name { color: #d4a06a; }
+.stats-bronze { background: rgba(205, 127, 50, 0.04); }
+
+/* Legend below table */
+.stats-legend {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.5;
+  padding: 6px 4px 0;
+}
+
+/* Responsive — tablet+ */
+@media (min-width: 768px) {
+  .stats-trophy__svg { width: 180px; }
+  .stats-table { font-size: 14px; }
+  .stats-name { font-size: 14px; }
+}
+@media (min-width: 1024px) {
+  .stats-trophy__svg { width: 200px; }
+}

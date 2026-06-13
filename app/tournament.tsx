@@ -6,6 +6,7 @@ import { nrm, canon } from "@/lib/merge";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import BracketBuilder from "@/app/components/BracketBuilder";
 import TriondaBall from "@/app/components/TriondaBall";
+import WorldCupTrophy from "@/app/components/WorldCupTrophy";
 
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -21,7 +22,7 @@ function isStaleStatus(ts: number, status: string, now = Date.now()): boolean {
   return now - ts > STALE_LIVE_THRESHOLD;
 }
 
-type ViewType = "schedule" | "groups" | "knockout" | "bracket" | "venues" | "about";
+type ViewType = "schedule" | "groups" | "knockout" | "bracket" | "stats" | "venues" | "about";
 type LiveStatus = "init" | "off" | "idle" | "active" | "paused" | "nofix";
 
 function parseISO(iso: string): Date {
@@ -485,6 +486,53 @@ export default function Tournament({ data }: { data: TournamentData }) {
     }).join("");
   }
 
+  /** Aggregate goal and assist tallies from all finished match events */
+  function computeLeaders() {
+    const scorers: Record<string, { name: string; team: string; goals: number; penalties: number }> = {};
+    const assisters: Record<string, { name: string; team: string; assists: number }> = {};
+
+    const allEvents: { events: MatchEvent[]; team?: string }[] = [];
+
+    // From live fixtures (primary source — includes DB-enriched data)
+    for (const f of fixtures) {
+      if (f.events) allEvents.push({ events: f.events });
+    }
+
+    // From DB-stored events on group stage matches (fallback for matches not in current live feed)
+    for (const m of data.gs) {
+      if (m.dbEvents && m.dbEvents.length > 0) {
+        // Avoid double-counting: skip if we already have a fixture with matching timestamp
+        const already = fixtures.some(f => Math.abs(f.ts - m.ts) < 60000 && f.events && f.events.length > 0);
+        if (!already) allEvents.push({ events: m.dbEvents });
+      }
+    }
+
+    for (const { events } of allEvents) {
+      for (const ev of events) {
+        if (ev.type !== "Goal") continue;
+
+        const isPen = ev.detail === "Penalty";
+        const isOG = ev.detail === "Own Goal";
+        if (isOG) continue; // own goals don't count for the scorer
+
+        const pKey = `${ev.player}|${ev.team}`;
+        if (!scorers[pKey]) scorers[pKey] = { name: ev.player, team: ev.team, goals: 0, penalties: 0 };
+        scorers[pKey].goals += 1;
+        if (isPen) scorers[pKey].penalties += 1;
+
+        if (ev.assist) {
+          const aKey = `${ev.assist}|${ev.team}`;
+          if (!assisters[aKey]) assisters[aKey] = { name: ev.assist, team: ev.team, assists: 0 };
+          assisters[aKey].assists += 1;
+        }
+      }
+    }
+
+    const topScorers = Object.values(scorers).sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, 20);
+    const topAssisters = Object.values(assisters).sort((a, b) => b.assists - a.assists || a.name.localeCompare(b.name)).slice(0, 20);
+    return { topScorers, topAssisters };
+  }
+
   function renderAbout(): string {
     return `<div class="about">
       <h3>About this app</h3>
@@ -505,6 +553,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     if (view === "groups") return renderGroups(animate);
     if (view === "knockout") return renderKnockout(animate);
     if (view === "venues") return renderVenues(animate);
+    if (view === "stats") return ""; // stats rendered as React, not HTML string
     return renderAbout();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, group, team, query, fixtures, liveStatus, liveTs, liveEnrichmentIssue, animate, nowMs]);
@@ -520,6 +569,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     { key: "groups", label: "Tables" },
     { key: "knockout", label: "Knockout" },
     { key: "bracket", label: "Bracket" },
+    { key: "stats", label: "Stats" },
     { key: "venues", label: "Venues" },
     { key: "about", label: "About" },
   ];
@@ -618,6 +668,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
       {view === "bracket" ? (
         <BracketBuilder flags={data.flags} groups={data.groups} gcolor={data.gcolor} />
+      ) : view === "stats" ? (
+        <StatsView data={data} fixtures={fixtures} fl={fl} computeLeaders={computeLeaders} />
       ) : (
         <main
           ref={mainRef}
@@ -1665,5 +1717,95 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
         </div>
       </div>
     </div>
+  );
+}
+
+/** Stats view — top scorers, top assisters, trophy display */
+function StatsView({ data, fixtures, fl, computeLeaders }: {
+  data: TournamentData;
+  fixtures: LiveFixture[];
+  fl: (t: string) => string;
+  computeLeaders: () => {
+    topScorers: { name: string; team: string; goals: number; penalties: number }[];
+    topAssisters: { name: string; team: string; assists: number }[];
+  };
+}) {
+  const { topScorers, topAssisters } = useMemo(() => computeLeaders(), [fixtures, computeLeaders]);
+  const hasData = topScorers.length > 0 || topAssisters.length > 0;
+
+  return (
+    <main className="section stats-view">
+      {/* Trophy hero */}
+      <div className="stats-trophy">
+        <WorldCupTrophy id="st" className="stats-trophy__svg" />
+      </div>
+
+      {!hasData && (
+        <div className="stats-empty">
+          <p>Goal and assist tallies appear here once matches finish.</p>
+          <p className="stats-empty__sub">Data updates automatically from live match events.</p>
+        </div>
+      )}
+
+      {topScorers.length > 0 && (
+        <section className="stats-table-wrap">
+          <h3 className="stats-heading">Top Scorers</h3>
+          <table className="stats-table">
+            <thead>
+              <tr>
+                <th className="stats-rank">#</th>
+                <th className="stats-player">Player</th>
+                <th className="stats-num">G</th>
+                <th className="stats-num">P</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topScorers.map((s, i) => (
+                <tr key={`${s.name}-${s.team}`} className={i === 0 ? "stats-gold" : i === 1 ? "stats-silver" : i === 2 ? "stats-bronze" : ""}>
+                  <td className="stats-rank">{i + 1}</td>
+                  <td className="stats-player">
+                    <span className="stats-flag">{fl(s.team)}</span>
+                    <span className="stats-name">{s.name}</span>
+                    <span className="stats-team">{s.team}</span>
+                  </td>
+                  <td className="stats-num stats-goals">{s.goals}</td>
+                  <td className="stats-num stats-pen">{s.penalties > 0 ? s.penalties : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="stats-legend">G = Goals &middot; P = Penalties (included in G)</div>
+        </section>
+      )}
+
+      {topAssisters.length > 0 && (
+        <section className="stats-table-wrap">
+          <h3 className="stats-heading">Top Assists</h3>
+          <table className="stats-table">
+            <thead>
+              <tr>
+                <th className="stats-rank">#</th>
+                <th className="stats-player">Player</th>
+                <th className="stats-num">A</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topAssisters.map((a, i) => (
+                <tr key={`${a.name}-${a.team}`} className={i === 0 ? "stats-gold" : i === 1 ? "stats-silver" : i === 2 ? "stats-bronze" : ""}>
+                  <td className="stats-rank">{i + 1}</td>
+                  <td className="stats-player">
+                    <span className="stats-flag">{fl(a.team)}</span>
+                    <span className="stats-name">{a.name}</span>
+                    <span className="stats-team">{a.team}</span>
+                  </td>
+                  <td className="stats-num stats-goals">{a.assists}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="stats-legend">A = Assists</div>
+        </section>
+      )}
+    </main>
   );
 }

@@ -1018,6 +1018,20 @@ function eventIcon(type: string, detail: string): string {
 
 type MdTab = "summary" | "stats" | "lineups" | "report";
 
+function mergeRichFixture(primary: LiveFixture | null, fallback: LiveFixture | null): LiveFixture | null {
+  if (!primary) return fallback;
+  if (!fallback) return primary;
+  return {
+    ...primary,
+    events: primary.events?.length ? primary.events : fallback.events,
+    stats: primary.stats && (Object.keys(primary.stats.home).length || Object.keys(primary.stats.away).length) ? primary.stats : fallback.stats,
+    lineups: (primary.lineups?.length || 0) >= 2 ? primary.lineups : (fallback.lineups || primary.lineups),
+    players: primary.players?.length ? primary.players : fallback.players,
+    referee: primary.referee || fallback.referee,
+    fixtureId: primary.fixtureId || fallback.fixtureId,
+  };
+}
+
 function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gcolor, allMatches, vName: _vName, findLive, onClose, onTeamClick, onPlayerClick }: {
   match: GroupStageMatch;
   initialFixture: LiveFixture | null;
@@ -1056,7 +1070,8 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     referee: match.dbReferee || undefined,
     fixtureId: match.dbFixtureId || undefined,
   } : null;
-  const fixture = findLive(match, fixtures) || initialFixture || persistedFixture;
+  const liveFixture = findLive(match, fixtures) || initialFixture;
+  const fixture = mergeRichFixture(liveFixture, persistedFixture);
 
   const hasKickedOff = match.ts <= nowMs + 5 * 60000;
   const hasDbScore = match.dbStatus && match.dbGh != null && match.dbGa != null;
@@ -1104,8 +1119,6 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   };
 
   const hasStats = fixture?.stats && (Object.keys(fixture.stats.home).length > 0);
-  const hasLineups = fixture?.lineups && fixture.lineups.length === 2;
-
   function renderScoreHeader() {
     return (
       <div className="md-drawer__header" style={{ borderTopColor: gcolor[match.g] || "#0A5C3E" }}>
@@ -1118,7 +1131,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
             <span className="md-drawer__team-name">{match.t1}</span>
           </button>
           <div className="md-drawer__score">
-            {(isUpcoming || isStale) ? (
+            {isUpcoming ? (
               <span className="md-drawer__time-display">{match.et}</span>
             ) : (
               <>
@@ -1160,7 +1173,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
           </div>
         )}
 
-        {!isUpcoming && !isStale && (
+        {!isUpcoming && (
           <div className="md-tabs" role="tablist">
             {(["summary", "stats", "lineups", "report"] as MdTab[]).map(t => {
               const label: Record<MdTab, string> = { summary: "Summary", stats: "Stats", lineups: "Lineups", report: "Report" };
@@ -1251,6 +1264,11 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
         <div className="md-drawer__empty-desc">Possession, shots, passes, fouls, and more will appear here {isDone ? "once data is synced" : "once the match kicks off"}.</div>
       </div>
     );
+    const visibleStatKeys = [
+      ...statKeys,
+      ...Object.keys(fixture.stats.home),
+      ...Object.keys(fixture.stats.away),
+    ].filter((key, index, arr) => arr.indexOf(key) === index);
     return (
       <div className="drawer__section" style={{ marginTop: 0 }}>
         <div className="md-drawer__stats-header">
@@ -1258,7 +1276,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
           <span>{match.t2} {flags[match.t2] || "⚽"}</span>
         </div>
         <div className="md-drawer__stats">
-          {statKeys.filter(k => fixture.stats!.home[k] != null || fixture.stats!.away[k] != null).map(k => {
+          {visibleStatKeys.filter(k => fixture.stats!.home[k] != null || fixture.stats!.away[k] != null).map(k => {
             const hv = fixture.stats!.home[k];
             const av = fixture.stats!.away[k];
             const hNum = typeof hv === "string" ? parseInt(hv) : (hv ?? 0);
@@ -1398,14 +1416,18 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   }
 
   function renderLineupsTab() {
-    if (!fixture?.lineups || fixture.lineups.length < 2) return (
-      <div className="md-drawer__empty-section">
-        <div className="md-drawer__empty-icon">👥</div>
-        <div className="md-drawer__empty-title">Team Lineups</div>
-        <div className="md-drawer__empty-desc">Starting XIs, formations, and substitutes will appear here {isDone ? "once data is synced" : "when lineups are announced (typically 1 hour before kickoff)"}.</div>
+    if (!fixture?.lineups || fixture.lineups.length === 0) return (
+      <div className="drawer__section" style={{ marginTop: 0 }}>
+        <div className="md-drawer__empty-section">
+          <div className="md-drawer__empty-icon">👥</div>
+          <div className="md-drawer__empty-title">Confirmed Lineups Pending</div>
+          <div className="md-drawer__empty-desc">Starting XIs and substitutions will sync from live enrichment. Until then, the available squad lists are shown below.</div>
+        </div>
+        {renderSquadColumn(match.t1)}
+        {renderSquadColumn(match.t2)}
       </div>
     );
-    const hasGrid = fixture.lineups[0].startXI.some(p => p.grid) && fixture.lineups[1].startXI.some(p => p.grid);
+    const hasGrid = fixture.lineups.length >= 2 && fixture.lineups[0].startXI.some(p => p.grid) && fixture.lineups[1].startXI.some(p => p.grid);
     return (
       <div className="drawer__section" style={{ marginTop: 0 }}>
         {hasGrid && (
@@ -1415,9 +1437,12 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
             {renderFormation(fixture.lineups[1], fixture.lineups[1].team, true)}
           </div>
         )}
-        {renderLineupTeam(fixture.lineups[0], fixture.lineups[0].team)}
-        <div style={{ height: 16 }} />
-        {renderLineupTeam(fixture.lineups[1], fixture.lineups[1].team)}
+        {fixture.lineups.map((lineup, index) => (
+          <div key={`${lineup.team}-${index}`}>
+            {index > 0 && <div style={{ height: 16 }} />}
+            {renderLineupTeam(lineup, lineup.team)}
+          </div>
+        ))}
       </div>
     );
   }
@@ -1629,11 +1654,11 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
       <div className="drawer md-drawer" onClick={e => e.stopPropagation()}>
         {renderScoreHeader()}
         <div className="drawer__body">
-          {(isUpcoming || isStale) && renderUpcomingBody()}
-          {!isUpcoming && !isStale && tab === "summary" && renderSummaryTab()}
-          {!isUpcoming && !isStale && tab === "stats" && renderStatsTab()}
-          {!isUpcoming && !isStale && tab === "lineups" && renderLineupsTab()}
-          {!isUpcoming && !isStale && tab === "report" && renderReportTab()}
+          {isUpcoming && renderUpcomingBody()}
+          {!isUpcoming && tab === "summary" && renderSummaryTab()}
+          {!isUpcoming && tab === "stats" && renderStatsTab()}
+          {!isUpcoming && tab === "lineups" && renderLineupsTab()}
+          {!isUpcoming && tab === "report" && renderReportTab()}
         </div>
       </div>
     </div>

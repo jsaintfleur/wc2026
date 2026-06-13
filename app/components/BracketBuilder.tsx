@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 
 /* ── types ─────────────────────────────────────────────────────── */
 
@@ -21,21 +21,55 @@ interface KnockoutPicks {
   champion: string | null;
 }
 
-/* R32 bracket slots — maps each match to the group positions that feed it.
-   Format: [topSeed, bottomSeed]. Seeds like "1A" mean "winner of Group A".
-   "3*" slots are best-third wildcards — filled after user picks 8 advancing 3rds. */
-const R32_STRUCTURE: [string, string][] = [
-  ["1A", "3C/D/E"],  ["2C", "2A"],
-  ["1E", "2D"],      ["1F", "3A/B/F"],
-  ["1B", "3A/D/F"],  ["2D", "2F"],
-  ["1C", "3B/C/E"],  ["2B", "2E"],
-  ["1G", "3I/J/K"],  ["2I", "2G"],
-  ["1K", "2J"],      ["1L", "3H/I/K"],
-  ["1H", "3G/J/L"],  ["2J", "2L"],
-  ["1I", "3G/H/L"],  ["2H", "2K"],
+type ThirdPlaceSlot = "1A" | "1B" | "1D" | "1E" | "1G" | "1I" | "1K" | "1L";
+type Seed = `${1 | 2}${string}` | `3@${ThirdPlaceSlot}`;
+
+interface R32Match {
+  no: number;
+  seeds: [Seed, Seed];
+}
+
+/* Official FIFA bracket path. The order below pairs adjacent R32 winners into R16 matches:
+   M89 = W73/W75, M90 = W74/W77, M91 = W76/W78, M92 = W79/W80,
+   M93 = W83/W84, M94 = W81/W82, M95 = W86/W88, M96 = W85/W87. */
+const R32_MATCHES: R32Match[] = [
+  { no: 73, seeds: ["2A", "2B"] },
+  { no: 75, seeds: ["1F", "2C"] },
+  { no: 74, seeds: ["1E", "3@1E"] },
+  { no: 77, seeds: ["1I", "3@1I"] },
+  { no: 76, seeds: ["1C", "2F"] },
+  { no: 78, seeds: ["2E", "2I"] },
+  { no: 79, seeds: ["1A", "3@1A"] },
+  { no: 80, seeds: ["1L", "3@1L"] },
+  { no: 83, seeds: ["2K", "2L"] },
+  { no: 84, seeds: ["1H", "2J"] },
+  { no: 81, seeds: ["1D", "3@1D"] },
+  { no: 82, seeds: ["1G", "3@1G"] },
+  { no: 86, seeds: ["1J", "2H"] },
+  { no: 88, seeds: ["2D", "2G"] },
+  { no: 85, seeds: ["1B", "3@1B"] },
+  { no: 87, seeds: ["1K", "3@1K"] },
 ];
 
-const STORAGE_KEY = "wc2026-bracket-v2";
+const R16_MATCH_NUMBERS = [89, 90, 91, 92, 93, 94, 95, 96];
+const QF_MATCH_NUMBERS = [97, 98, 99, 100];
+const SF_MATCH_NUMBERS = [101, 102];
+const QF_SOURCE_PAIRS = [[0, 1], [4, 5], [2, 3], [6, 7]] as const;
+const SF_SOURCE_PAIRS = [[0, 1], [2, 3]] as const;
+
+/* FIFA Annex C / third-place combination table. Each row is:
+   selected third-place groups -> opponents for 1A, 1B, 1D, 1E, 1G, 1I, 1K, 1L. */
+const THIRD_PLACE_ASSIGNMENT_DATA = "EFGHIJKL:EJIFHGLK|DFGHIJKL:HGIDJFLK|DEGHIJKL:EJIDHGLK|DEFHIJKL:EJIDHFLK|DEFGIJKL:EGIDJFLK|DEFGHJKL:EGJDHFLK|DEFGHIKL:EGIDHFLK|DEFGHIJL:EGJDHFLI|DEFGHIJK:EGJDHFIK|CFGHIJKL:HGICJFLK|CEGHIJKL:EJICHGLK|CEFHIJKL:EJICHFLK|CEFGIJKL:EGICJFLK|CEFGHJKL:EGJCHFLK|CEFGHIKL:EGICHFLK|CEFGHIJL:EGJCHFLI|CEFGHIJK:EGJCHFIK|CDGHIJKL:HGICJDLK|CDFHIJKL:CJIDHFLK|CDFGIJKL:CGIDJFLK|CDFGHJKL:CGJDHFLK|CDFGHIKL:CGIDHFLK|CDFGHIJL:CGJDHFLI|CDFGHIJK:CGJDHFIK|CDEHIJKL:EJICHDLK|CDEGIJKL:EGICJDLK|CDEGHJKL:EGJCHDLK|CDEGHIKL:EGICHDLK|CDEGHIJL:EGJCHDLI|CDEGHIJK:EGJCHDIK|CDEFIJKL:CJEDIFLK|CDEFHJKL:CJEDHFLK|CDEFHIKL:CEIDHFLK|CDEFHIJL:CJEDHFLI|CDEFHIJK:CJEDHFIK|CDEFGJKL:CGEDJFLK|CDEFGIKL:CGEDIFLK|CDEFGIJL:CGEDJFLI|CDEFGIJK:CGEDJFIK|CDEFGHKL:CGEDHFLK|CDEFGHJL:CGJDHFLE|CDEFGHJK:CGJDHFEK|CDEFGHIL:CGEDHFLI|CDEFGHIK:CGEDHFIK|CDEFGHIJ:CGJDHFEI|BFGHIJKL:HJBFIGLK|BEGHIJKL:EJIBHGLK|BEFHIJKL:EJBFIHLK|BEFGIJKL:EJBFIGLK|BEFGHJKL:EJBFHGLK|BEFGHIKL:EGBFIHLK|BEFGHIJL:EJBFHGLI|BEFGHIJK:EJBFHGIK|BDGHIJKL:HJBDIGLK|BDFHIJKL:HJBDIFLK|BDFGIJKL:IGBDJFLK|BDFGHJKL:HGBDJFLK|BDFGHIKL:HGBDIFLK|BDFGHIJL:HGBDJFLI|BDFGHIJK:HGBDJFIK|BDEHIJKL:EJBDIHLK|BDEGIJKL:EJBDIGLK|BDEGHJKL:EJBDHGLK|BDEGHIKL:EGBDIHLK|BDEGHIJL:EJBDHGLI|BDEGHIJK:EJBDHGIK|BDEFIJKL:EJBDIFLK|BDEFHJKL:EJBDHFLK|BDEFHIKL:EIBDHFLK|BDEFHIJL:EJBDHFLI|BDEFHIJK:EJBDHFIK|BDEFGJKL:EGBDJFLK|BDEFGIKL:EGBDIFLK|BDEFGIJL:EGBDJFLI|BDEFGIJK:EGBDJFIK|BDEFGHKL:EGBDHFLK|BDEFGHJL:HGBDJFLE|BDEFGHJK:HGBDJFEK|BDEFGHIL:EGBDHFLI|BDEFGHIK:EGBDHFIK|BDEFGHIJ:HGBDJFEI|BCGHIJKL:HJBCIGLK|BCFHIJKL:HJBCIFLK|BCFGIJKL:IGBCJFLK|BCFGHJKL:HGBCJFLK|BCFGHIKL:HGBCIFLK|BCFGHIJL:HGBCJFLI|BCFGHIJK:HGBCJFIK|BCEHIJKL:EJBCIHLK|BCEGIJKL:EJBCIGLK|BCEGHJKL:EJBCHGLK|BCEGHIKL:EGBCIHLK|BCEGHIJL:EJBCHGLI|BCEGHIJK:EJBCHGIK|BCEFIJKL:EJBCIFLK|BCEFHJKL:EJBCHFLK|BCEFHIKL:EIBCHFLK|BCEFHIJL:EJBCHFLI|BCEFHIJK:EJBCHFIK|BCEFGJKL:EGBCJFLK|BCEFGIKL:EGBCIFLK|BCEFGIJL:EGBCJFLI|BCEFGIJK:EGBCJFIK|BCEFGHKL:EGBCHFLK|BCEFGHJL:HGBCJFLE|BCEFGHJK:HGBCJFEK|BCEFGHIL:EGBCHFLI|BCEFGHIK:EGBCHFIK|BCEFGHIJ:HGBCJFEI|BCDHIJKL:HJBCIDLK|BCDGIJKL:IGBCJDLK|BCDGHJKL:HGBCJDLK|BCDGHIKL:HGBCIDLK|BCDGHIJL:HGBCJDLI|BCDGHIJK:HGBCJDIK|BCDFIJKL:CJBDIFLK|BCDFHJKL:CJBDHFLK|BCDFHIKL:CIBDHFLK|BCDFHIJL:CJBDHFLI|BCDFHIJK:CJBDHFIK|BCDFGJKL:CGBDJFLK|BCDFGIKL:CGBDIFLK|BCDFGIJL:CGBDJFLI|BCDFGIJK:CGBDJFIK|BCDFGHKL:CGBDHFLK|BCDFGHJL:CGBDHFLJ|BCDFGHJK:HGBCJFDK|BCDFGHIL:CGBDHFLI|BCDFGHIK:CGBDHFIK|BCDFGHIJ:HGBCJFDI|BCDEIJKL:EJBCIDLK|BCDEHJKL:EJBCHDLK|BCDEHIKL:EIBCHDLK|BCDEHIJL:EJBCHDLI|BCDEHIJK:EJBCHDIK|BCDEGJKL:EGBCJDLK|BCDEGIKL:EGBCIDLK|BCDEGIJL:EGBCJDLI|BCDEGIJK:EGBCJDIK|BCDEGHKL:EGBCHDLK|BCDEGHJL:HGBCJDLE|BCDEGHJK:HGBCJDEK|BCDEGHIL:EGBCHDLI|BCDEGHIK:EGBCHDIK|BCDEGHIJ:HGBCJDEI|BCDEFJKL:CJBDEFLK|BCDEFIKL:CEBDIFLK|BCDEFIJL:CJBDEFLI|BCDEFIJK:CJBDEFIK|BCDEFHKL:CEBDHFLK|BCDEFHJL:CJBDHFLE|BCDEFHJK:CJBDHFEK|BCDEFHIL:CEBDHFLI|BCDEFHIK:CEBDHFIK|BCDEFHIJ:CJBDHFEI|BCDEFGKL:CGBDEFLK|BCDEFGJL:CGBDJFLE|BCDEFGJK:CGBDJFEK|BCDEFGIL:CGBDEFLI|BCDEFGIK:CGBDEFIK|BCDEFGIJ:CGBDJFEI|BCDEFGHL:CGBDHFLE|BCDEFGHK:CGBDHFEK|BCDEFGHJ:HGBCJFDE|BCDEFGHI:CGBDHFEI|AFGHIJKL:HJIFAGLK|AEGHIJKL:EJIAHGLK|AEFHIJKL:EJIFAHLK|AEFGIJKL:EJIFAGLK|AEFGHJKL:EGJFAHLK|AEFGHIKL:EGIFAHLK|AEFGHIJL:EGJFAHLI|AEFGHIJK:EGJFAHIK|ADGHIJKL:HJIDAGLK|ADFHIJKL:HJIDAFLK|ADFGIJKL:IGJDAFLK|ADFGHJKL:HGJDAFLK|ADFGHIKL:HGIDAFLK|ADFGHIJL:HGJDAFLI|ADFGHIJK:HGJDAFIK|ADEHIJKL:EJIDAHLK|ADEGIJKL:EJIDAGLK|ADEGHJKL:EGJDAHLK|ADEGHIKL:EGIDAHLK|ADEGHIJL:EGJDAHLI|ADEGHIJK:EGJDAHIK|ADEFIJKL:EJIDAFLK|ADEFHJKL:HJEDAFLK|ADEFHIKL:HEIDAFLK|ADEFHIJL:HJEDAFLI|ADEFHIJK:HJEDAFIK|ADEFGJKL:EGJDAFLK|ADEFGIKL:EGIDAFLK|ADEFGIJL:EGJDAFLI|ADEFGIJK:EGJDAFIK|ADEFGHKL:HGEDAFLK|ADEFGHJL:HGJDAFLE|ADEFGHJK:HGJDAFEK|ADEFGHIL:HGEDAFLI|ADEFGHIK:HGEDAFIK|ADEFGHIJ:HGJDAFEI|ACGHIJKL:HJICAGLK|ACFHIJKL:HJICAFLK|ACFGIJKL:IGJCAFLK|ACFGHJKL:HGJCAFLK|ACFGHIKL:HGICAFLK|ACFGHIJL:HGJCAFLI|ACFGHIJK:HGJCAFIK|ACEHIJKL:EJICAHLK|ACEGIJKL:EJICAGLK|ACEGHJKL:EGJCAHLK|ACEGHIKL:EGICAHLK|ACEGHIJL:EGJCAHLI|ACEGHIJK:EGJCAHIK|ACEFIJKL:EJICAFLK|ACEFHJKL:HJECAFLK|ACEFHIKL:HEICAFLK|ACEFHIJL:HJECAFLI|ACEFHIJK:HJECAFIK|ACEFGJKL:EGJCAFLK|ACEFGIKL:EGICAFLK|ACEFGIJL:EGJCAFLI|ACEFGIJK:EGJCAFIK|ACEFGHKL:HGECAFLK|ACEFGHJL:HGJCAFLE|ACEFGHJK:HGJCAFEK|ACEFGHIL:HGECAFLI|ACEFGHIK:HGECAFIK|ACEFGHIJ:HGJCAFEI|ACDHIJKL:HJICADLK|ACDGIJKL:IGJCADLK|ACDGHJKL:HGJCADLK|ACDGHIKL:HGICADLK|ACDGHIJL:HGJCADLI|ACDGHIJK:HGJCADIK|ACDFIJKL:CJIDAFLK|ACDFHJKL:HJFCADLK|ACDFHIKL:HFICADLK|ACDFHIJL:HJFCADLI|ACDFHIJK:HJFCADIK|ACDFGJKL:CGJDAFLK|ACDFGIKL:CGIDAFLK|ACDFGIJL:CGJDAFLI|ACDFGIJK:CGJDAFIK|ACDFGHKL:HGFCADLK|ACDFGHJL:CGJDAFLH|ACDFGHJK:HGJCAFDK|ACDFGHIL:HGFCADLI|ACDFGHIK:HGFCADIK|ACDFGHIJ:HGJCAFDI|ACDEIJKL:EJICADLK|ACDEHJKL:HJECADLK|ACDEHIKL:HEICADLK|ACDEHIJL:HJECADLI|ACDEHIJK:HJECADIK|ACDEGJKL:EGJCADLK|ACDEGIKL:EGICADLK|ACDEGIJL:EGJCADLI|ACDEGIJK:EGJCADIK|ACDEGHKL:HGECADLK|ACDEGHJL:HGJCADLE|ACDEGHJK:HGJCADEK|ACDEGHIL:HGECADLI|ACDEGHIK:HGECADIK|ACDEGHIJ:HGJCADEI|ACDEFJKL:CJEDAFLK|ACDEFIKL:CEIDAFLK|ACDEFIJL:CJEDAFLI|ACDEFIJK:CJEDAFIK|ACDEFHKL:HEFCADLK|ACDEFHJL:HJFCADLE|ACDEFHJK:HJECAFDK|ACDEFHIL:HEFCADLI|ACDEFHIK:HEFCADIK|ACDEFHIJ:HJECAFDI|ACDEFGKL:CGEDAFLK|ACDEFGJL:CGJDAFLE|ACDEFGJK:CGJDAFEK|ACDEFGIL:CGEDAFLI|ACDEFGIK:CGEDAFIK|ACDEFGIJ:CGJDAFEI|ACDEFGHL:HGFCADLE|ACDEFGHK:HGECAFDK|ACDEFGHJ:HGJCAFDE|ACDEFGHI:HGECAFDI|ABGHIJKL:HJBAIGLK|ABFHIJKL:HJBAIFLK|ABFGIJKL:IJBFAGLK|ABFGHJKL:HJBFAGLK|ABFGHIKL:HGBAIFLK|ABFGHIJL:HJBFAGLI|ABFGHIJK:HJBFAGIK|ABEHIJKL:EJBAIHLK|ABEGIJKL:EJBAIGLK|ABEGHJKL:EJBAHGLK|ABEGHIKL:EGBAIHLK|ABEGHIJL:EJBAHGLI|ABEGHIJK:EJBAHGIK|ABEFIJKL:EJBAIFLK|ABEFHJKL:EJBFAHLK|ABEFHIKL:EIBFAHLK|ABEFHIJL:EJBFAHLI|ABEFHIJK:EJBFAHIK|ABEFGJKL:EJBFAGLK|ABEFGIKL:EGBAIFLK|ABEFGIJL:EJBFAGLI|ABEFGIJK:EJBFAGIK|ABEFGHKL:EGBFAHLK|ABEFGHJL:HJBFAGLE|ABEFGHJK:HJBFAGEK|ABEFGHIL:EGBFAHLI|ABEFGHIK:EGBFAHIK|ABEFGHIJ:HJBFAGEI|ABDHIJKL:IJBDAHLK|ABDGIJKL:IJBDAGLK|ABDGHJKL:HJBDAGLK|ABDGHIKL:IGBDAHLK|ABDGHIJL:HJBDAGLI|ABDGHIJK:HJBDAGIK|ABDFIJKL:IJBDAFLK|ABDFHJKL:HJBDAFLK|ABDFHIKL:HIBDAFLK|ABDFHIJL:HJBDAFLI|ABDFHIJK:HJBDAFIK|ABDFGJKL:FJBDAGLK|ABDFGIKL:IGBDAFLK|ABDFGIJL:FJBDAGLI|ABDFGIJK:FJBDAGIK|ABDFGHKL:HGBDAFLK|ABDFGHJL:HGBDAFLJ|ABDFGHJK:HGBDAFJK|ABDFGHIL:HGBDAFLI|ABDFGHIK:HGBDAFIK|ABDFGHIJ:HGBDAFIJ|ABDEIJKL:EJBAIDLK|ABDEHJKL:EJBDAHLK|ABDEHIKL:EIBDAHLK|ABDEHIJL:EJBDAHLI|ABDEHIJK:EJBDAHIK|ABDEGJKL:EJBDAGLK|ABDEGIKL:EGBAIDLK|ABDEGIJL:EJBDAGLI|ABDEGIJK:EJBDAGIK|ABDEGHKL:EGBDAHLK|ABDEGHJL:HJBDAGLE|ABDEGHJK:HJBDAGEK|ABDEGHIL:EGBDAHLI|ABDEGHIK:EGBDAHIK|ABDEGHIJ:HJBDAGEI|ABDEFJKL:EJBDAFLK|ABDEFIKL:EIBDAFLK|ABDEFIJL:EJBDAFLI|ABDEFIJK:EJBDAFIK|ABDEFHKL:HEBDAFLK|ABDEFHJL:HJBDAFLE|ABDEFHJK:HJBDAFEK|ABDEFHIL:HEBDAFLI|ABDEFHIK:HEBDAFIK|ABDEFHIJ:HJBDAFEI|ABDEFGKL:EGBDAFLK|ABDEFGJL:EGBDAFLJ|ABDEFGJK:EGBDAFJK|ABDEFGIL:EGBDAFLI|ABDEFGIK:EGBDAFIK|ABDEFGIJ:EGBDAFIJ|ABDEFGHL:HGBDAFLE|ABDEFGHK:HGBDAFEK|ABDEFGHJ:HGBDAFEJ|ABDEFGHI:HGBDAFEI|ABCHIJKL:IJBCAHLK|ABCGIJKL:IJBCAGLK|ABCGHJKL:HJBCAGLK|ABCGHIKL:IGBCAHLK|ABCGHIJL:HJBCAGLI|ABCGHIJK:HJBCAGIK|ABCFIJKL:IJBCAFLK|ABCFHJKL:HJBCAFLK|ABCFHIKL:HIBCAFLK|ABCFHIJL:HJBCAFLI|ABCFHIJK:HJBCAFIK|ABCFGJKL:CJBFAGLK|ABCFGIKL:IGBCAFLK|ABCFGIJL:CJBFAGLI|ABCFGIJK:CJBFAGIK|ABCFGHKL:HGBCAFLK|ABCFGHJL:HGBCAFLJ|ABCFGHJK:HGBCAFJK|ABCFGHIL:HGBCAFLI|ABCFGHIK:HGBCAFIK|ABCFGHIJ:HGBCAFIJ|ABCEIJKL:EJBAICLK|ABCEHJKL:EJBCAHLK|ABCEHIKL:EIBCAHLK|ABCEHIJL:EJBCAHLI|ABCEHIJK:EJBCAHIK|ABCEGJKL:EJBCAGLK|ABCEGIKL:EGBAICLK|ABCEGIJL:EJBCAGLI|ABCEGIJK:EJBCAGIK|ABCEGHKL:EGBCAHLK|ABCEGHJL:HJBCAGLE|ABCEGHJK:HJBCAGEK|ABCEGHIL:EGBCAHLI|ABCEGHIK:EGBCAHIK|ABCEGHIJ:HJBCAGEI|ABCEFJKL:EJBCAFLK|ABCEFIKL:EIBCAFLK|ABCEFIJL:EJBCAFLI|ABCEFIJK:EJBCAFIK|ABCEFHKL:HEBCAFLK|ABCEFHJL:HJBCAFLE|ABCEFHJK:HJBCAFEK|ABCEFHIL:HEBCAFLI|ABCEFHIK:HEBCAFIK|ABCEFHIJ:HJBCAFEI|ABCEFGKL:EGBCAFLK|ABCEFGJL:EGBCAFLJ|ABCEFGJK:EGBCAFJK|ABCEFGIL:EGBCAFLI|ABCEFGIK:EGBCAFIK|ABCEFGIJ:EGBCAFIJ|ABCEFGHL:HGBCAFLE|ABCEFGHK:HGBCAFEK|ABCEFGHJ:HGBCAFEJ|ABCEFGHI:HGBCAFEI|ABCDIJKL:IJBCADLK|ABCDHJKL:HJBCADLK|ABCDHIKL:HIBCADLK|ABCDHIJL:HJBCADLI|ABCDHIJK:HJBCADIK|ABCDGJKL:CJBDAGLK|ABCDGIKL:IGBCADLK|ABCDGIJL:CJBDAGLI|ABCDGIJK:CJBDAGIK|ABCDGHKL:HGBCADLK|ABCDGHJL:HGBCADLJ|ABCDGHJK:HGBCADJK|ABCDGHIL:HGBCADLI|ABCDGHIK:HGBCADIK|ABCDGHIJ:HGBCADIJ|ABCDFJKL:CJBDAFLK|ABCDFIKL:CIBDAFLK|ABCDFIJL:CJBDAFLI|ABCDFIJK:CJBDAFIK|ABCDFHKL:HFBCADLK|ABCDFHJL:CJBDAFLH|ABCDFHJK:HJBCAFDK|ABCDFHIL:HFBCADLI|ABCDFHIK:HFBCADIK|ABCDFHIJ:HJBCAFDI|ABCDFGKL:CGBDAFLK|ABCDFGJL:CGBDAFLJ|ABCDFGJK:CGBDAFJK|ABCDFGIL:CGBDAFLI|ABCDFGIK:CGBDAFIK|ABCDFGIJ:CGBDAFIJ|ABCDFGHL:CGBDAFLH|ABCDFGHK:HGBCAFDK|ABCDFGHJ:HGBCAFDJ|ABCDFGHI:HGBCAFDI|ABCDEJKL:EJBCADLK|ABCDEIKL:EIBCADLK|ABCDEIJL:EJBCADLI|ABCDEIJK:EJBCADIK|ABCDEHKL:HEBCADLK|ABCDEHJL:HJBCADLE|ABCDEHJK:HJBCADEK|ABCDEHIL:HEBCADLI|ABCDEHIK:HEBCADIK|ABCDEHIJ:HJBCADEI|ABCDEGKL:EGBCADLK|ABCDEGJL:EGBCADLJ|ABCDEGJK:EGBCADJK|ABCDEGIL:EGBCADLI|ABCDEGIK:EGBCADIK|ABCDEGIJ:EGBCADIJ|ABCDEGHL:HGBCADLE|ABCDEGHK:HGBCADEK|ABCDEGHJ:HGBCADEJ|ABCDEGHI:HGBCADEI|ABCDEFKL:CEBDAFLK|ABCDEFJL:CJBDAFLE|ABCDEFJK:CJBDAFEK|ABCDEFIL:CEBDAFLI|ABCDEFIK:CEBDAFIK|ABCDEFIJ:CJBDAFEI|ABCDEFHL:HFBCADLE|ABCDEFHK:HEBCAFDK|ABCDEFHJ:HJBCAFDE|ABCDEFHI:HEBCAFDI|ABCDEFGL:CGBDAFLE|ABCDEFGK:CGBDAFEK|ABCDEFGJ:CGBDAFEJ|ABCDEFGI:CGBDAFEI|ABCDEFGH:HGBCAFDE";
+const THIRD_PLACE_SLOTS: ThirdPlaceSlot[] = ["1A", "1B", "1D", "1E", "1G", "1I", "1K", "1L"];
+const THIRD_PLACE_ASSIGNMENTS: Record<string, Record<ThirdPlaceSlot, string>> = Object.fromEntries(
+  THIRD_PLACE_ASSIGNMENT_DATA.split("|").map(row => {
+    const [key, values] = row.split(":");
+    const assignment = Object.fromEntries(THIRD_PLACE_SLOTS.map((slot, i) => [slot, values[i] || ""])) as Record<ThirdPlaceSlot, string>;
+    return [key, assignment];
+  })
+);
+
+const STORAGE_KEY = "wc2026-bracket-v3";
 
 /* ── helpers ────────────────────────────────────────────────────── */
 
@@ -90,32 +124,52 @@ function resolveSeed(seed: string, groupPreds: GroupPredictions): string {
   return "";
 }
 
-/* Resolve a 3rd-place wildcard slot like "3C/D/E" to the team,
-   given the user's picks for which 3rd-place teams advance */
-function resolveThirdPlace(slot: string, groupPreds: GroupPredictions, advancing: string[]): string {
-  /* slot is like "3C/D/E" — the 3rd-place team from one of groups C, D, or E */
-  const groups = slot.slice(1).split("/");
-  for (const g of groups) {
-    const third = groupPreds[g]?.third;
-    if (third && advancing.includes(third)) return third;
-  }
-  return "";
+function getThirdPlaceGroups(groupPreds: GroupPredictions, advancing: string[], groupLetters: string[]): string {
+  return groupLetters
+    .filter(g => {
+      const third = groupPreds[g]?.third;
+      return third && advancing.includes(third);
+    })
+    .join("");
+}
+
+function getThirdPlaceAssignments(groupPreds: GroupPredictions, advancing: string[], groupLetters: string[]) {
+  return THIRD_PLACE_ASSIGNMENTS[getThirdPlaceGroups(groupPreds, advancing, groupLetters)] || null;
+}
+
+function seedLabel(seed: Seed, assignments: Record<ThirdPlaceSlot, string> | null): string {
+  if (!seed.startsWith("3@")) return seed;
+  const slot = seed.slice(2) as ThirdPlaceSlot;
+  const group = assignments?.[slot];
+  return group ? `3${group}` : "3rd";
+}
+
+function resolveBracketSeed(
+  seed: Seed,
+  groupPreds: GroupPredictions,
+  assignments: Record<ThirdPlaceSlot, string> | null,
+): string {
+  if (!seed.startsWith("3@")) return resolveSeed(seed, groupPreds);
+  const slot = seed.slice(2) as ThirdPlaceSlot;
+  const group = assignments?.[slot];
+  return group ? resolveSeed(`3${group}`, groupPreds) : "";
 }
 
 /* Get the two teams in an R32 matchup */
 function getR32Teams(
   matchIdx: number,
   groupPreds: GroupPredictions,
-  advancing: string[],
+  assignments: Record<ThirdPlaceSlot, string> | null,
 ): [string, string] {
-  const [topSeed, botSeed] = R32_STRUCTURE[matchIdx];
-  const top = topSeed.startsWith("3")
-    ? resolveThirdPlace(topSeed, groupPreds, advancing)
-    : resolveSeed(topSeed, groupPreds);
-  const bot = botSeed.startsWith("3")
-    ? resolveThirdPlace(botSeed, groupPreds, advancing)
-    : resolveSeed(botSeed, groupPreds);
-  return [top, bot];
+  const match = R32_MATCHES[matchIdx];
+  return [
+    resolveBracketSeed(match.seeds[0], groupPreds, assignments),
+    resolveBracketSeed(match.seeds[1], groupPreds, assignments),
+  ];
+}
+
+function qfIndexForR16(r16Idx: number): number {
+  return QF_SOURCE_PAIRS.findIndex(pair => pair[0] === r16Idx || pair[1] === r16Idx);
 }
 
 /* ── component ─────────────────────────────────────────────────── */
@@ -186,14 +240,19 @@ export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilder
         /* Clear downstream when upstream changes */
         if (round === "r32") {
           const r16Idx = Math.floor(idx / 2);
+          const qfIdx = qfIndexForR16(r16Idx);
           next.knockout.r16[r16Idx] = null;
-          next.knockout.qf[Math.floor(r16Idx / 2)] = null;
-          next.knockout.sf[Math.floor(r16Idx / 4)] = null;
+          if (qfIdx >= 0) {
+            next.knockout.qf[qfIdx] = null;
+            next.knockout.sf[Math.floor(qfIdx / 2)] = null;
+          }
           next.knockout.champion = null;
         } else if (round === "r16") {
-          const qfIdx = Math.floor(idx / 2);
-          next.knockout.qf[qfIdx] = null;
-          next.knockout.sf[Math.floor(qfIdx / 2)] = null;
+          const qfIdx = qfIndexForR16(idx);
+          if (qfIdx >= 0) {
+            next.knockout.qf[qfIdx] = null;
+            next.knockout.sf[Math.floor(qfIdx / 2)] = null;
+          }
           next.knockout.champion = null;
         } else if (round === "qf") {
           next.knockout.sf[Math.floor(idx / 2)] = null;
@@ -219,160 +278,240 @@ export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilder
 
   /* ── Image generation ──────────────────────────────────────── */
 
-  const generateImage = useCallback(async () => {
+  async function generateCarousel() {
     setGenerating(true);
     await new Promise(r => setTimeout(r, 50));
 
-    const W = 1080, H = 1920;
+    const W = 1080, H = 1350;
     const canvas = canvasRef.current;
     if (!canvas) { setGenerating(false); return; }
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext("2d")!;
+    const assignments = getThirdPlaceAssignments(groupPreds, thirdPlaceAdvancing, groupLetters);
 
-    /* Background */
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, "#0a0f1a");
-    grad.addColorStop(0.5, "#0d1520");
-    grad.addColorStop(1, "#0a0a12");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
-
-    /* Subtle grid */
-    ctx.strokeStyle = "rgba(255,255,255,0.02)";
-    ctx.lineWidth = 1;
-    for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-    for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-
-    /* Title */
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 44px -apple-system, BlinkMacSystemFont, sans-serif";
-    ctx.fillText("MY WORLD CUP 2026", W / 2, 70);
-    ctx.font = "bold 24px -apple-system, sans-serif";
-    ctx.fillStyle = "#c9a84c";
-    ctx.fillText("B R A C K E T", W / 2, 104);
-    ctx.font = "14px -apple-system, sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,0.4)";
-    ctx.fillText("🇨🇦  🇲🇽  🇺🇸   Canada · Mexico · United States", W / 2, 134);
-
-    /* Champion at top */
-    if (knockout.champion) {
-      ctx.font = "48px -apple-system, sans-serif";
-      ctx.fillText("👑", W / 2, 190);
-      ctx.font = "bold 28px -apple-system, sans-serif";
-      ctx.fillStyle = "#c9a84c";
-      ctx.fillText(`${fl(knockout.champion)} ${knockout.champion.toUpperCase()}`, W / 2, 226);
-      ctx.font = "10px -apple-system, sans-serif";
-      ctx.fillStyle = "rgba(255,255,255,0.4)";
-      ctx.fillText("PREDICTED CHAMPION", W / 2, 246);
-    }
-
-    /* Group predictions grid */
-    const gridTop = knockout.champion ? 280 : 170;
-    const cellW = (W - 80) / 4;
-    const cellH = 115;
-    const gridGap = 8;
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 14px -apple-system, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("GROUP PREDICTIONS", 40, gridTop - 10);
-
-    for (let i = 0; i < groupLetters.length; i++) {
-      const g = groupLetters[i];
-      const col = i % 4;
-      const row = Math.floor(i / 4);
-      const x = 40 + col * (cellW + gridGap);
-      const y = gridTop + row * (cellH + gridGap);
-
-      /* Cell bg */
-      ctx.fillStyle = "rgba(255,255,255,0.04)";
-      ctx.beginPath();
-      ctx.roundRect(x, y, cellW, cellH, 6);
-      ctx.fill();
-
-      /* Group label */
-      ctx.fillStyle = gcolor[g] || "#666";
-      ctx.font = "bold 13px -apple-system, sans-serif";
+    const drawBg = (title: string, kicker: string, slide: number) => {
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, "#07130d");
+      grad.addColorStop(0.55, "#101820");
+      grad.addColorStop(1, "#111111");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = "rgba(255,255,255,0.035)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < W; x += 54) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+      for (let y = 0; y < H; y += 54) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
       ctx.textAlign = "left";
-      ctx.fillText(`Group ${g}`, x + 8, y + 18);
+      ctx.fillStyle = "#d6b55d";
+      ctx.font = "700 24px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillText(kicker.toUpperCase(), 64, 72);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "800 54px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillText(title, 64, 132);
+      ctx.textAlign = "right";
+      ctx.font = "700 20px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.fillText(`${slide}/6`, W - 64, 72);
+      ctx.textAlign = "left";
+    };
 
-      /* 1st, 2nd, 3rd */
+    const drawFooter = () => {
+      ctx.textAlign = "center";
+      ctx.font = "600 18px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillStyle = "rgba(255,255,255,0.38)";
+      ctx.fillText("wc2026-xi-gray.vercel.app", W / 2, H - 42);
+      ctx.textAlign = "left";
+    };
+
+    const truncate = (text: string, maxWidth: number) => {
+      if (ctx.measureText(text).width <= maxWidth) return text;
+      let out = text;
+      while (out.length > 1 && ctx.measureText(out + "…").width > maxWidth) out = out.slice(0, -1);
+      return out + "…";
+    };
+
+    const teamText = (team: string | null | undefined) => team ? `${fl(team)} ${team}` : "—";
+
+    const drawPill = (x: number, y: number, w: number, h: number, text: string, active = false) => {
+      ctx.fillStyle = active ? "rgba(214,181,93,0.2)" : "rgba(255,255,255,0.07)";
+      ctx.strokeStyle = active ? "rgba(214,181,93,0.55)" : "rgba(255,255,255,0.11)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 12);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#fff";
+      ctx.font = "700 25px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillText(truncate(text, w - 34), x + 17, y + h / 2 + 9);
+    };
+
+    const drawGroupCard = (g: string, x: number, y: number, w: number, h: number) => {
       const pred = groupPreds[g];
-      const entries = [
-        { pos: "1st", team: pred?.first },
-        { pos: "2nd", team: pred?.second },
-        { pos: "3rd", team: pred?.third },
-      ];
-      for (let j = 0; j < 3; j++) {
-        const ey = y + 30 + j * 26;
-        ctx.font = "bold 10px -apple-system, sans-serif";
-        ctx.fillStyle = j === 0 ? "#c9a84c" : j === 1 ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.35)";
-        ctx.fillText(entries[j].pos, x + 8, ey + 10);
-        ctx.font = "13px -apple-system, sans-serif";
-        ctx.fillStyle = entries[j].team ? "#ffffff" : "rgba(255,255,255,0.15)";
-        const label = entries[j].team ? `${fl(entries[j].team)} ${entries[j].team}` : "—";
-        ctx.fillText(label, x + 36, ey + 10);
-      }
-    }
+      ctx.fillStyle = "rgba(255,255,255,0.055)";
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 18);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = gcolor[g] || "#d6b55d";
+      ctx.font = "800 26px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillText(`Group ${g}`, x + 22, y + 40);
+      const rows = [["1", pred?.first], ["2", pred?.second], ["3", pred?.third]];
+      rows.forEach(([pos, team], i) => {
+        const yy = y + 78 + i * 54;
+        ctx.fillStyle = pos === "1" ? "#d6b55d" : pos === "2" ? "rgba(255,255,255,0.68)" : "rgba(255,255,255,0.45)";
+        ctx.font = "800 22px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillText(pos, x + 22, yy);
+        ctx.fillStyle = "#fff";
+        ctx.font = "700 24px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillText(truncate(teamText(team), w - 75), x + 58, yy);
+      });
+    };
 
-    /* Knockout bracket — simplified vertical list */
-    const koTop = gridTop + Math.ceil(groupLetters.length / 4) * (cellH + gridGap) + 30;
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 14px -apple-system, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("KNOCKOUT PICKS", 40, koTop);
+    const drawGroups = (range: string[], slide: number) => {
+      drawBg(slide === 2 ? "Groups A–F" : "Groups G–L", "My World Cup 2026", slide);
+      const cardW = 456, cardH = 230;
+      range.forEach((g, i) => drawGroupCard(g, 64 + (i % 2) * 496, 190 + Math.floor(i / 2) * 282, cardW, cardH));
+      drawFooter();
+    };
 
-    const rounds = [
-      { label: "R32", picks: knockout.r32, count: 16 },
-      { label: "R16", picks: knockout.r16, count: 8 },
-      { label: "QF", picks: knockout.qf, count: 4 },
-      { label: "SF", picks: knockout.sf, count: 2 },
+    const drawThirds = () => {
+      drawBg("Best Thirds", "Round of 32 qualifiers", 4);
+      ctx.fillStyle = "rgba(255,255,255,0.62)";
+      ctx.font = "600 24px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillText("Eight third-place teams advance. FIFA's Annex C table assigns", 64, 185);
+      ctx.fillText("them into the bracket slots below.", 64, 217);
+      const selected = groupLetters.filter(g => thirdPlaceAdvancing.includes(groupPreds[g]?.third));
+      selected.forEach((g, i) => {
+        const team = groupPreds[g]?.third;
+        drawPill(64 + (i % 2) * 496, 260 + Math.floor(i / 2) * 86, 456, 62, `3${g}  ${teamText(team)}`, true);
+      });
+      ctx.fillStyle = "#d6b55d";
+      ctx.font = "800 30px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillText("Third-place slots", 64, 690);
+      THIRD_PLACE_SLOTS.forEach((slot, i) => {
+        const group = assignments?.[slot];
+        const team = group ? groupPreds[group]?.third : "";
+        drawPill(64 + (i % 2) * 496, 730 + Math.floor(i / 2) * 86, 456, 62, `${slot} vs 3${group || "?"}  ${teamText(team)}`);
+      });
+      drawFooter();
+    };
+
+    const drawMatch = (x: number, y: number, w: number, label: string, teamA: string, teamB: string, winner: string | null) => {
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      ctx.strokeStyle = "rgba(255,255,255,0.12)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, 112, 14);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.45)";
+      ctx.font = "800 17px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillText(label, x + 16, y + 26);
+      ctx.font = "700 22px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillStyle = winner === teamA ? "#d6b55d" : "#fff";
+      ctx.fillText(truncate(teamText(teamA), w - 32), x + 16, y + 61);
+      ctx.fillStyle = winner === teamB ? "#d6b55d" : "#fff";
+      ctx.fillText(truncate(teamText(teamB), w - 32), x + 16, y + 94);
+    };
+
+    const drawR32 = () => {
+      drawBg("Round of 32", "Official bracket path", 5);
+      R32_MATCHES.forEach((match, i) => {
+        const [teamA, teamB] = getR32Teams(i, groupPreds, assignments);
+        const seeds = match.seeds.map(seed => seedLabel(seed, assignments)).join(" vs ");
+        drawMatch(52 + (i % 2) * 500, 178 + Math.floor(i / 2) * 132, 476, `M${match.no} · ${seeds}`, teamA, teamB, knockout.r32[i]);
+      });
+      drawFooter();
+    };
+
+    const drawFinalPath = () => {
+      drawBg("Final Path", "Round of 16 to champion", 6);
+      const drawSection = (
+        title: string,
+        nums: number[],
+        picks: (string | null)[],
+        sources: (string | null)[],
+        top: number,
+        pairs?: readonly (readonly [number, number])[],
+      ) => {
+        ctx.fillStyle = "#d6b55d";
+        ctx.font = "800 28px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillText(title, 64, top - 22);
+        nums.forEach((no, i) => {
+          const [aIdx, bIdx] = pairs?.[i] || [i * 2, i * 2 + 1];
+          const teamA = sources[aIdx] || "";
+          const teamB = sources[bIdx] || "";
+          drawMatch(64 + (i % 2) * 496, top + Math.floor(i / 2) * 124, 456, `M${no}`, teamA, teamB, picks[i]);
+        });
+      };
+      drawSection("Round of 16", R16_MATCH_NUMBERS, knockout.r16, knockout.r32, 178);
+      drawSection("Quarter-finals", QF_MATCH_NUMBERS, knockout.qf, knockout.r16, 728, QF_SOURCE_PAIRS);
+      drawSection("Semi-finals", SF_MATCH_NUMBERS, knockout.sf, knockout.qf, 992, SF_SOURCE_PAIRS);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(214,181,93,0.16)";
+      ctx.strokeStyle = "rgba(214,181,93,0.55)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(250, 1162, 580, 108, 22);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#d6b55d";
+      ctx.font = "800 24px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillText("PREDICTED CHAMPION", W / 2, 1206);
+      ctx.fillStyle = "#fff";
+      ctx.font = "900 34px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillText(teamText(knockout.champion), W / 2, 1248);
+      ctx.textAlign = "left";
+      drawFooter();
+    };
+
+    const slides = [
+      () => {
+        drawBg("My Bracket", "World Cup 2026", 1);
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#fff";
+        ctx.font = "900 78px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillText(teamText(knockout.champion || ""), W / 2, 430);
+        ctx.fillStyle = "#d6b55d";
+        ctx.font = "800 30px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillText("Predicted Champion", W / 2, 480);
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        ctx.font = "700 30px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillText("12 groups · 8 best thirds · 32-team knockout", W / 2, 610);
+        ctx.fillStyle = "rgba(255,255,255,0.42)";
+        ctx.font = "600 24px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillText("Swipe for groups, third-place slots, and the full bracket path", W / 2, 656);
+        ctx.textAlign = "left";
+        drawFooter();
+      },
+      () => drawGroups(groupLetters.slice(0, 6), 2),
+      () => drawGroups(groupLetters.slice(6), 3),
+      drawThirds,
+      drawR32,
+      drawFinalPath,
     ];
 
-    let ky = koTop + 20;
-    for (const round of rounds) {
-      ctx.font = "bold 11px -apple-system, sans-serif";
-      ctx.fillStyle = "rgba(255,255,255,0.5)";
-      ctx.fillText(round.label, 40, ky + 10);
-
-      const cols = Math.min(round.count, 4);
-      const rows = Math.ceil(round.count / cols);
-      const tw = (W - 120) / cols;
-
-      for (let i = 0; i < round.count; i++) {
-        const c = i % cols;
-        const r = Math.floor(i / cols);
-        const tx = 80 + c * tw;
-        const ty = ky + r * 24;
-        const team = round.picks[i];
-
-        ctx.font = "12px -apple-system, sans-serif";
-        ctx.fillStyle = team ? "#ffffff" : "rgba(255,255,255,0.15)";
-        ctx.fillText(team ? `${fl(team)} ${team}` : "—", tx, ty + 10);
-      }
-      ky += rows * 24 + 16;
+    for (let i = 0; i < slides.length; i++) {
+      slides[i]();
+      await new Promise<void>(resolve => {
+        canvas.toBlob(blob => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `wc2026-bracket-carousel-${String(i + 1).padStart(2, "0")}.png`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }
+          resolve();
+        }, "image/png");
+      });
+      await new Promise(r => setTimeout(r, 140));
     }
-
-    /* Footer */
-    ctx.textAlign = "center";
-    ctx.font = "12px -apple-system, sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,0.2)";
-    ctx.fillText("wc2026-xi-gray.vercel.app", W / 2, H - 30);
-
-    /* Download */
-    canvas.toBlob((blob) => {
-      if (!blob) { setGenerating(false); return; }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "my-wc2026-bracket.png";
-      a.click();
-      URL.revokeObjectURL(url);
-      setGenerating(false);
-    }, "image/png");
-  }, [state, flags, gcolor, groupLetters, groupPreds, knockout, fl]);
+    setGenerating(false);
+  }
 
   /* ── Render ────────────────────────────────────────────────── */
 
@@ -523,13 +662,14 @@ export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilder
           <div className="bb-round">
             <div className="bb-round__hd">Round of 32 <span className="bb-round__count">{knockout.r32.filter(Boolean).length}/16</span></div>
             <div className="bb-matches">
-              {R32_STRUCTURE.map((_, i) => {
-                const [teamA, teamB] = getR32Teams(i, groupPreds, thirdPlaceAdvancing);
+              {R32_MATCHES.map((match, i) => {
+                const assignments = getThirdPlaceAssignments(groupPreds, thirdPlaceAdvancing, groupLetters);
+                const [teamA, teamB] = getR32Teams(i, groupPreds, assignments);
                 const winner = knockout.r32[i];
                 if (!teamA || !teamB) return null;
                 return (
                   <div key={i} className="bb-match">
-                    <div className="bb-match__label">Match {73 + i}</div>
+                    <div className="bb-match__label">Match {match.no} · {match.seeds.map(seed => seedLabel(seed, assignments)).join(" vs ")}</div>
                     <div className="bb-match__pick">
                       <button
                         className={`bb-pick-btn${winner === teamA ? " bb-pick-btn--active" : ""}`}
@@ -559,7 +699,7 @@ export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilder
                   const winner = knockout.r16[i];
                   return (
                     <div key={i} className="bb-match">
-                      <div className="bb-match__label">Match {89 + i}</div>
+                      <div className="bb-match__label">Match {R16_MATCH_NUMBERS[i]}</div>
                       <div className="bb-match__pick">
                         <button
                           className={`bb-pick-btn${winner === teamA ? " bb-pick-btn--active" : ""}`}
@@ -584,13 +724,14 @@ export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilder
               <div className="bb-round__hd">Quarter-finals <span className="bb-round__count">{knockout.qf.filter(Boolean).length}/4</span></div>
               <div className="bb-matches">
                 {Array.from({ length: 4 }, (_, i) => {
-                  const teamA = knockout.r16[i * 2];
-                  const teamB = knockout.r16[i * 2 + 1];
+                  const [aIdx, bIdx] = QF_SOURCE_PAIRS[i];
+                  const teamA = knockout.r16[aIdx];
+                  const teamB = knockout.r16[bIdx];
                   if (!teamA || !teamB) return null;
                   const winner = knockout.qf[i];
                   return (
                     <div key={i} className="bb-match">
-                      <div className="bb-match__label">Match {97 + i}</div>
+                      <div className="bb-match__label">Match {QF_MATCH_NUMBERS[i]}</div>
                       <div className="bb-match__pick">
                         <button
                           className={`bb-pick-btn${winner === teamA ? " bb-pick-btn--active" : ""}`}
@@ -621,7 +762,7 @@ export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilder
                   const winner = knockout.sf[i];
                   return (
                     <div key={i} className="bb-match">
-                      <div className="bb-match__label">Match {101 + i}</div>
+                      <div className="bb-match__label">Match {SF_MATCH_NUMBERS[i]}</div>
                       <div className="bb-match__pick">
                         <button
                           className={`bb-pick-btn${winner === teamA ? " bb-pick-btn--active" : ""}`}
@@ -696,15 +837,19 @@ export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilder
               }
               return;
             }
-            generateImage();
+            if (!thirdsDone) {
+              goStep(1);
+              return;
+            }
+            generateCarousel();
           }}
           disabled={generating}
         >
-          {generating ? "Generating..." : !allGroupsDone ? `⚠ Complete All Groups (${groupsDone}/12)` : "📸 Save My Bracket"}
+          {generating ? "Generating..." : !allGroupsDone ? `⚠ Complete All Groups (${groupsDone}/12)` : !thirdsDone ? `⚠ Pick Best 3rds (${thirdPlaceAdvancing.length}/8)` : "📸 Save IG Carousel"}
         </button>
         <button className="bb-clear-btn" onClick={clearAll}>Clear All</button>
       </div>
-      <p className="bb-share-hint">{!allGroupsDone ? "Finish predicting all 12 groups to unlock saving" : "Downloads a 1080×1920 image for Instagram stories"}</p>
+      <p className="bb-share-hint">{!allGroupsDone ? "Finish predicting all 12 groups to unlock saving" : !thirdsDone ? "Pick the 8 best third-place teams to unlock the bracket carousel" : "Downloads six 1080×1350 PNG slides for an Instagram carousel"}</p>
     </div>
   );
 }

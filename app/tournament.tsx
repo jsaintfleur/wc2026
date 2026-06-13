@@ -1121,12 +1121,11 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
 
         {!isUpcoming && !isStale && (
           <div className="md-tabs" role="tablist">
-            {(["summary", ...(hasStats ? ["stats" as MdTab] : []), ...(hasLineups ? ["lineups" as MdTab] : []), ...(isDone ? ["report" as MdTab] : [])] as MdTab[]).map(t => {
-              const disabled = false;
+            {(["summary", "stats", "lineups", "report"] as MdTab[]).map(t => {
               const label: Record<MdTab, string> = { summary: "Summary", stats: "Stats", lineups: "Lineups", report: "Report" };
               return (
-                <button key={t} role="tab" aria-selected={tab === t} className={`md-tab${tab === t ? " md-tab--active" : ""}${disabled ? " md-tab--disabled" : ""}`}
-                  onClick={() => { if (!disabled) setTab(t); }}>
+                <button key={t} role="tab" aria-selected={tab === t} className={`md-tab${tab === t ? " md-tab--active" : ""}`}
+                  onClick={() => setTab(t)}>
                   {label[t]}
                 </button>
               );
@@ -1204,7 +1203,13 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   }
 
   function renderStatsTab() {
-    if (!fixture?.stats) return <div className="md-drawer__empty">Statistics not available yet.</div>;
+    if (!fixture?.stats) return (
+      <div className="md-drawer__empty-section">
+        <div className="md-drawer__empty-icon">📊</div>
+        <div className="md-drawer__empty-title">Match Statistics</div>
+        <div className="md-drawer__empty-desc">Possession, shots, passes, fouls, and more will appear here {isDone ? "once data is synced" : "once the match kicks off"}.</div>
+      </div>
+    );
     return (
       <div className="drawer__section" style={{ marginTop: 0 }}>
         <div className="md-drawer__stats-header">
@@ -1352,7 +1357,13 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   }
 
   function renderLineupsTab() {
-    if (!fixture?.lineups || fixture.lineups.length < 2) return <div className="md-drawer__empty">Lineups not available yet.</div>;
+    if (!fixture?.lineups || fixture.lineups.length < 2) return (
+      <div className="md-drawer__empty-section">
+        <div className="md-drawer__empty-icon">👥</div>
+        <div className="md-drawer__empty-title">Team Lineups</div>
+        <div className="md-drawer__empty-desc">Starting XIs, formations, and substitutes will appear here {isDone ? "once data is synced" : "when lineups are announced (typically 1 hour before kickoff)"}.</div>
+      </div>
+    );
     const hasGrid = fixture.lineups[0].startXI.some(p => p.grid) && fixture.lineups[1].startXI.some(p => p.grid);
     return (
       <div className="drawer__section" style={{ marginTop: 0 }}>
@@ -1371,7 +1382,13 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   }
 
   function renderReportTab() {
-    if (!fixture || !isDone) return <div className="md-drawer__empty">Match report will be available after the final whistle.</div>;
+    if (!fixture || !isDone) return (
+      <div className="md-drawer__empty-section">
+        <div className="md-drawer__empty-icon">📝</div>
+        <div className="md-drawer__empty-title">Match Report</div>
+        <div className="md-drawer__empty-desc">A full match summary with goals, cards, and key moments will be generated after the final whistle.</div>
+      </div>
+    );
 
     const events = fixture.events || [];
     const goals = events.filter(e => e.type === "Goal");

@@ -1213,6 +1213,35 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   color: var(--muted);
   font-size: 14px;
 }
+.md-drawer__empty-section {
+  text-align: center;
+  padding: 48px 24px;
+  border: 1px dashed var(--glass-border);
+  border-radius: 12px;
+  margin: 16px;
+  background: var(--glass);
+}
+.md-drawer__empty-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+  opacity: 0.7;
+}
+.md-drawer__empty-title {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+.md-drawer__empty-desc {
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  max-width: 280px;
+  margin: 0 auto;
+}
 
 /* Stats header */
 .md-drawer__stats-header {

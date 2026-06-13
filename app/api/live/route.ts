@@ -68,12 +68,6 @@ type WC26Game = {
   type: string;
 };
 
-type WC26Stadium = {
-  id: string;
-  name_en: string;
-  city_en: string;
-};
-
 // Parse scorer strings like {"D. Bobadilla 7'(OG)","F. Balogun 31'","F. Balogun 45'+5'"}
 function parseScorers(raw: string, teamName: string): Array<{
   minute: number; extra: number | null; type: "Goal"; detail: string;
@@ -368,11 +362,13 @@ export async function GET(request: NextRequest) {
       : null;
     const merged = withVerifiedResults(wc26.ok ? wc26.fixtures : (apif?.fixtures || []));
     return NextResponse.json({
+      configured: true,
       active, ts: now,
       wc26: { ok: wc26.ok, fixtureCount: wc26.fixtures.length },
       apiFootball: apif ? { ok: apif.ok, fixtureCount: apif.fixtures?.length ?? 0, quota: apif.quota } : "not configured",
       verifiedCount: VERIFIED_RESULTS.length,
       mergedCount: merged.length,
+      source: apif?.ok && (apif.fixtures?.length ?? 0) > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
       sample: merged.slice(0, 3),
     }, { headers: { "Cache-Control": "no-store" } });
   }

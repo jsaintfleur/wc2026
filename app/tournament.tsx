@@ -100,7 +100,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [liveTs, setLiveTs] = useState(0);
   const [, setLiveStale] = useState(false);
   const [animate, setAnimate] = useState(true);
-  const [nowMs, setNowMs] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
   const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture | null } | null>(null);
@@ -624,7 +624,7 @@ function CountdownHero({ data, fixtures, findLive }: {
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
 }) {
-  const [now, setNow] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     queueMicrotask(() => setNow(Date.now()));
     const id = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 1000);

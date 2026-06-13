@@ -126,7 +126,6 @@ export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilder
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [generating, setGenerating] = useState(false);
 
-  useEffect(() => { setState(loadState(groups)); }, [groups]);
   useEffect(() => { saveState(state); }, [state]);
 
   const fl = (t: string) => flags[t] || "⚽";

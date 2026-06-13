@@ -526,13 +526,65 @@ export default function Tournament({ data }: { data: TournamentData }) {
   return (
     <div className="wrap">
       <header className="bar">
-        <div className="bar__mark"><span className="bar__ball" aria-hidden="true" />FIFA <b>WORLD CUP</b> 26</div>
+        <div className="bar__mark">
+          <svg className="bar__ball" aria-hidden="true" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <radialGradient id="hb-bg" cx="40%" cy="35%" r="60%">
+                <stop offset="0%" stopColor="#f8f8f8" />
+                <stop offset="100%" stopColor="#d0d4dc" />
+              </radialGradient>
+              <clipPath id="hb-clip"><circle cx="60" cy="60" r="56" /></clipPath>
+            </defs>
+            <circle cx="60" cy="60" r="56" fill="url(#hb-bg)" />
+            <g clipPath="url(#hb-clip)">
+              <path d="M10,85 Q35,55 60,50 T110,30" stroke="#e63946" strokeWidth="16" fill="none" opacity=".7" />
+              <path d="M0,70 Q40,40 70,45 T120,15" stroke="#2563eb" strokeWidth="14" fill="none" opacity=".6" />
+              <path d="M5,105 Q30,75 55,72 T105,55" stroke="#16a34a" strokeWidth="12" fill="none" opacity=".65" />
+              <path d="M15,115 Q45,80 75,78 T120,70" stroke="#9333ea" strokeWidth="10" fill="none" opacity=".4" />
+            </g>
+            <circle cx="45" cy="40" r="20" fill="white" opacity=".15" />
+            <circle cx="60" cy="60" r="56" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+          </svg>
+          FIFA <b>WORLD CUP</b> 26
+        </div>
         <div className="bar__hosts" aria-label="Hosts: Canada, Mexico, United States"><span>🇨🇦</span><span>🇲🇽</span><span>🇺🇸</span></div>
       </header>
 
       <section className="hero">
         <div className="hero__pitch-lines" aria-hidden="true" />
-        <div className="hero__ball" aria-hidden="true" />
+        <svg className="hero__ball" aria-hidden="true" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="ball-bg" cx="40%" cy="35%" r="60%">
+              <stop offset="0%" stopColor="#f8f8f8" />
+              <stop offset="100%" stopColor="#d8dce4" />
+            </radialGradient>
+            <radialGradient id="ball-shadow" cx="50%" cy="100%" r="60%">
+              <stop offset="0%" stopColor="rgba(0,0,0,0.25)" />
+              <stop offset="100%" stopColor="transparent" />
+            </radialGradient>
+            <clipPath id="ball-clip"><circle cx="60" cy="60" r="56" /></clipPath>
+          </defs>
+          <circle cx="60" cy="60" r="56" fill="url(#ball-bg)" />
+          <g clipPath="url(#ball-clip)">
+            {/* Trionda-inspired flowing color bands */}
+            <path d="M10,85 Q35,55 60,50 T110,30" stroke="#e63946" strokeWidth="14" fill="none" opacity=".7" />
+            <path d="M0,70 Q40,40 70,45 T120,15" stroke="#2563eb" strokeWidth="12" fill="none" opacity=".6" />
+            <path d="M5,105 Q30,75 55,72 T105,55" stroke="#16a34a" strokeWidth="10" fill="none" opacity=".65" />
+            <path d="M15,115 Q45,80 75,78 T120,70" stroke="#9333ea" strokeWidth="8" fill="none" opacity=".45" />
+            <path d="M0,50 Q25,30 50,28 T100,5" stroke="#c2410c" strokeWidth="6" fill="none" opacity=".4" />
+            {/* Stars accent */}
+            <g fill="#2563eb" opacity=".35">
+              <polygon points="95,22 97,28 103,28 98,32 100,38 95,34 90,38 92,32 87,28 93,28" />
+              <polygon points="82,38 83.5,42 87,42 84,44.5 85.5,48 82,46 78.5,48 80,44.5 77,42 80.5,42" />
+            </g>
+            {/* 26 text */}
+            <text x="60" y="68" textAnchor="middle" fontFamily="'Barlow Condensed',sans-serif" fontSize="30" fontWeight="800" fill="rgba(255,255,255,0.85)" letterSpacing="-1">26</text>
+          </g>
+          {/* Highlight and shadow for 3D depth */}
+          <circle cx="60" cy="60" r="56" fill="url(#ball-shadow)" />
+          <circle cx="45" cy="40" r="24" fill="white" opacity=".12" />
+          <circle cx="60" cy="60" r="56" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" />
+        </svg>
         <div className="hero__eyebrow">Canada &middot; Mexico &middot; United States</div>
         <h1 className="hero__title">WORLD CUP<br />2026</h1>
         <div className="hero__sub">Live scores, fixtures, tables and bracket picks</div>

@@ -104,14 +104,10 @@ body::after {
 }
 
 .bar__ball {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: inline-block;
-  background:
-    radial-gradient(circle at 50% 50%, #121826 0 18%, transparent 19%),
-    conic-gradient(from 18deg, #f8fafc 0 20%, #111827 20% 31%, #f8fafc 31% 49%, #111827 49% 60%, #f8fafc 60% 80%, #111827 80% 91%, #f8fafc 91% 100%);
-  box-shadow: 0 0 0 1.5px rgba(255,255,255,0.1), 0 4px 12px rgba(0,0,0,0.3);
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
 }
 
 .bar__hosts {
@@ -194,17 +190,13 @@ body::after {
 
 .hero__ball {
   position: absolute;
-  right: 34px;
-  bottom: 28px;
-  width: 76px;
-  height: 76px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 50%, #111827 0 18%, transparent 19%),
-    conic-gradient(from 18deg, #f8fafc 0 20%, #111827 20% 31%, #f8fafc 31% 49%, #111827 49% 60%, #f8fafc 60% 80%, #111827 80% 91%, #f8fafc 91% 100%);
-  box-shadow: 0 18px 34px rgba(0,0,0,0.35);
-  transform: rotate(-12deg);
+  right: 16px;
+  top: 16px;
+  width: 80px;
+  height: 80px;
   z-index: 1;
+  opacity: .85;
+  filter: drop-shadow(0 12px 24px rgba(0,0,0,0.35));
 }
 
 .hero__eyebrow {
@@ -2798,7 +2790,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .hero { padding: 18px 14px 18px; min-height: 220px; }
   .hero__title { font-size: 36px; }
   .hero__eyebrow { font-size: 10px; letter-spacing: 3px; }
-  .hero__ball { width: 56px; height: 56px; right: 20px; bottom: 20px; }
+  .hero__ball { width: 52px; height: 52px; right: 10px; top: 12px; }
   .hero__pitch-lines { width: 160px; height: 160px; right: -50px; }
   .stat { min-width: 54px; padding: 6px 8px; }
   .stat b { font-size: 20px; }
@@ -2830,7 +2822,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .hero__title { font-size: 56px; }
   .hero__eyebrow { font-size: 12px; letter-spacing: 5px; }
   .hero__sub { font-size: 14px; max-width: 400px; }
-  .hero__ball { width: 96px; height: 96px; right: 44px; bottom: 32px; }
+  .hero__ball { width: 100px; height: 100px; right: 24px; top: 20px; }
   .hero__pitch-lines { width: 240px; height: 240px; right: -30px; }
   .hero__stats { gap: 10px; }
   .stat { min-width: 72px; padding: 10px 12px; }
@@ -2863,7 +2855,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .tab:hover { color: #fff; }
   .hero { padding: 36px 32px 32px; min-height: 300px; }
   .hero__title { font-size: 60px; }
-  .hero__ball { width: 110px; height: 110px; right: 48px; bottom: 36px; }
+  .hero__ball { width: 120px; height: 120px; right: 32px; top: 24px; }
   .hero__pitch-lines { width: 260px; height: 260px; right: -20px; }
   .tix--clickable:hover { transform: translateY(-2px); box-shadow: 0 20px 48px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1); }
   .gcard:hover { border-color: rgba(255,255,255,0.12); }

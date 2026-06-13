@@ -121,7 +121,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       const j = await r.json();
       if (j.configured === false) {
         setLiveStatus("off");
-        setFixtures([]);
+        setFixtures(Array.isArray(j.fixtures) ? j.fixtures : []);
         return;
       }
       setFixtures(Array.isArray(j.fixtures) ? j.fixtures : []);

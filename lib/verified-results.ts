@@ -49,4 +49,22 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
       { minute: 78, extra: null, type: "Goal", detail: "Normal Goal", player: "Cyle Larin", assist: "Promise David", team: "Canada" },
     ],
   },
+  {
+    ts: 1781312400000,
+    status: "FT",
+    elapsed: 90,
+    venue: "SoFi Stadium",
+    round: "Group Stage - 1",
+    home: "United States",
+    away: "Paraguay",
+    gh: 4,
+    ga: 1,
+    events: [
+      { minute: 7, extra: null, type: "Goal", detail: "Own Goal", player: "Damián Bobadilla", assist: null, team: "Paraguay" },
+      { minute: 31, extra: null, type: "Goal", detail: "Normal Goal", player: "Folarin Balogun", assist: "Christian Pulisic", team: "United States" },
+      { minute: 45, extra: 5, type: "Goal", detail: "Normal Goal", player: "Folarin Balogun", assist: "Tyler Adams", team: "United States" },
+      { minute: 73, extra: null, type: "Goal", detail: "Normal Goal", player: "Mauricio", assist: "Julio Enciso", team: "Paraguay" },
+      { minute: 90, extra: 8, type: "Goal", detail: "Normal Goal", player: "Gio Reyna", assist: "Timothy Weah", team: "United States" },
+    ],
+  },
 ];

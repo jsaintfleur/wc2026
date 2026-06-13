@@ -579,6 +579,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       <header className="bar">
         <div className="bar__mark">
           <img src="/wc26-logo.png" alt="FIFA World Cup 26" className="bar__logo" draggable={false} />
+          <TriondaBall id="hb" className="bar__ball" />
         </div>
         <div className="bar__hosts" aria-label="Hosts: Canada, Mexico, United States"><span>🇨🇦</span><span>🇲🇽</span><span>🇺🇸</span></div>
       </header>

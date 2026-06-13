@@ -1,6 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "./generated/prisma/client";
-import { DATA, type TournamentData, type GroupStageMatch, type KnockoutMatch, type Venue } from "./data";
+import { DATA, type TournamentData, type GroupStageMatch, type KnockoutMatch, type Venue, type MatchEvent, type MatchStats, type TeamLineup, type PlayerMatchStat } from "./data";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
@@ -81,6 +81,7 @@ export async function loadTournamentData(): Promise<{ data: TournamentData; sour
       const state = m.state;
 
       if (m.stage === "group") {
+        const dbFixtureId = state?.vendorFixtureId == null ? null : Number(state.vendorFixtureId);
         gs.push({
           no: m.matchNumber,
           iso,
@@ -91,7 +92,18 @@ export async function loadTournamentData(): Promise<{ data: TournamentData; sour
           t2: m.awayTeam?.name || "TBD",
           v: m.venueCode,
           ts,
-          ...(state ? { dbStatus: state.status, dbGh: state.homeGoals, dbGa: state.awayGoals } : {}),
+          ...(state ? {
+            dbStatus: state.status,
+            dbElapsed: state.elapsed,
+            dbGh: state.homeGoals,
+            dbGa: state.awayGoals,
+            dbEvents: state.events as unknown as MatchEvent[] | undefined,
+            dbStats: state.stats as unknown as MatchStats | undefined,
+            dbLineups: state.lineups as unknown as TeamLineup[] | undefined,
+            dbPlayers: state.players as unknown as PlayerMatchStat[] | undefined,
+            dbReferee: state.referee,
+            dbFixtureId,
+          } : {}),
         });
       } else {
         ko.push({

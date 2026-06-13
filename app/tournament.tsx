@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
@@ -507,26 +507,33 @@ export default function Tournament({ data }: { data: TournamentData }) {
     window.scrollTo({ top: 0 });
   }
 
-  const tabs: { key: ViewType; label: string }[] = [
-    { key: "schedule", label: "Schedule" },
-    { key: "groups", label: "Groups & tables" },
-    { key: "knockout", label: "Knockout" },
-    { key: "bracket", label: "My Bracket" },
-    { key: "venues", label: "Venues" },
-    { key: "about", label: "About" },
+  const tabs: { key: ViewType; label: string; icon: string }[] = [
+    { key: "schedule", label: "Schedule", icon: "📅" },
+    { key: "groups", label: "Tables", icon: "📊" },
+    { key: "knockout", label: "Knockout", icon: "🏆" },
+    { key: "bracket", label: "Bracket", icon: "🎯" },
+    { key: "venues", label: "Venues", icon: "🏟️" },
+    { key: "about", label: "About", icon: "ℹ️" },
   ];
 
   return (
     <div className="wrap">
       <header className="bar">
-        <div className="bar__mark">FIFA <b>WORLD CUP</b> 26</div>
-        <div className="bar__hosts" aria-label="Hosts: Canada, Mexico, United States">{"🇨🇦 🇲🇽 🇺🇸"}</div>
+        <div className="bar__mark"><span className="bar__ball" aria-hidden="true" />FIFA <b>WORLD CUP</b> 26</div>
+        <div className="bar__hosts" aria-label="Hosts: Canada, Mexico, United States"><span>🇨🇦</span><span>🇲🇽</span><span>🇺🇸</span></div>
       </header>
 
       <section className="hero">
+        <div className="hero__pitch-lines" aria-hidden="true" />
+        <div className="hero__ball" aria-hidden="true" />
         <div className="hero__eyebrow">Canada &middot; Mexico &middot; United States</div>
-        <h1 className="hero__title">LIVE<br />SCHEDULE</h1>
-        <div className="hero__sub">11 June &ndash; 19 July 2026</div>
+        <h1 className="hero__title">WORLD CUP<br />2026</h1>
+        <div className="hero__sub">Live scores, fixtures, tables and bracket picks</div>
+        <div className="hero__host-row" aria-label="Host nations">
+          <span>🇨🇦 Canada</span>
+          <span>🇲🇽 Mexico</span>
+          <span>🇺🇸 United States</span>
+        </div>
         <div className="hero__stats">
           <div className="stat"><b>48</b><span>Teams</span></div>
           <div className="stat"><b>104</b><span>Matches</span></div>
@@ -544,7 +551,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
             aria-selected={view === t.key}
             onClick={() => handleTab(t.key)}
           >
-            {t.label}
+            <span className="tab__icon" aria-hidden="true">{t.icon}</span>
+            <span>{t.label}</span>
           </button>
         ))}
       </nav>
@@ -632,6 +640,15 @@ function CountdownHero({ data, fixtures, findLive }: {
   }, []);
 
   const fl = (t: string) => data.flags[t] || "⚽";
+  const jumpToNext = () => {
+    document.getElementById("next-match-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const handleKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      jumpToNext();
+    }
+  };
 
   const liveMatches: { match: GroupStageMatch; fixture: LiveFixture }[] = [];
   for (const m of data.gs) {
@@ -683,8 +700,8 @@ function CountdownHero({ data, fixtures, findLive }: {
   const v = data.venues[venCode];
 
   return (
-    <div className="cd-hero">
-      <div className="cd-hero__label">NEXT MATCH</div>
+    <div className="cd-hero" role="button" tabIndex={0} onClick={jumpToNext} onKeyDown={handleKey} aria-label="Jump to next match">
+      <div className="cd-hero__label">NEXT MATCH <span className="cd-hero__tap" aria-hidden="true">↘</span></div>
       <div className="cd-hero__countdown">
         <span className="cd-hero__digit">{pad(h)}</span>
         <span className="cd-hero__colon">:</span>
@@ -1015,7 +1032,24 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     const id = setInterval(() => { if (!document.hidden) setNowMs(Date.now()); }, 60000);
     return () => clearInterval(id);
   }, []);
-  const fixture = findLive(match, fixtures) || initialFixture;
+  const persistedFixture: LiveFixture | null = match.dbStatus ? {
+    ts: match.ts,
+    status: match.dbStatus,
+    elapsed: match.dbElapsed ?? null,
+    venue: venues[match.v]?.common || "",
+    round: `Group Stage - ${match.g}`,
+    home: match.t1,
+    away: match.t2,
+    gh: match.dbGh ?? null,
+    ga: match.dbGa ?? null,
+    events: match.dbEvents,
+    stats: match.dbStats,
+    lineups: match.dbLineups,
+    players: match.dbPlayers,
+    referee: match.dbReferee || undefined,
+    fixtureId: match.dbFixtureId || undefined,
+  } : null;
+  const fixture = findLive(match, fixtures) || initialFixture || persistedFixture;
 
   const hasKickedOff = match.ts <= nowMs + 5 * 60000;
   const hasDbScore = match.dbStatus && match.dbGh != null && match.dbGa != null;

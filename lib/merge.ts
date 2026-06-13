@@ -1,6 +1,8 @@
 // Shared team-name normalization and strict fixture-to-match merge logic.
 // Used by both the client (tournament.tsx) and the server (ingestion worker).
 
+import type { MatchEvent, MatchStats, PlayerMatchStat, TeamLineup } from "./data";
+
 export const TEAM_NORM: Record<string, string> = {
   turkey: "Türkiye", czechrepublic: "Czechia", czechia: "Czechia",
   korearepublic: "South Korea", southkorea: "South Korea",
@@ -33,6 +35,11 @@ export interface VendorFixture {
   gh: number | null;
   ga: number | null;
   fixtureId?: number;
+  events?: MatchEvent[];
+  stats?: MatchStats;
+  lineups?: TeamLineup[];
+  players?: PlayerMatchStat[];
+  referee?: string;
 }
 
 export interface ScheduleMatch {

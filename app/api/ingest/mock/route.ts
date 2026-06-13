@@ -2,11 +2,18 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { MOCK_FIXTURES } from "@/lib/data";
 import { mergeFixtures, type VendorFixture, type ScheduleMatch } from "@/lib/merge";
+import type { Prisma } from "@/lib/generated/prisma/client";
 
 const LIVE_OR_DONE = new Set([
   "1H", "2H", "HT", "ET", "BT", "P", "LIVE", "SUSP", "INT",
   "FT", "AET", "PEN", "WO", "AWD",
 ]);
+
+function toJson(value: unknown): Prisma.InputJsonValue | undefined {
+  return value == null
+    ? undefined
+    : JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
 
 export async function GET() {
   const fixtures: VendorFixture[] = MOCK_FIXTURES.map(f => ({ ...f, fixtureId: undefined }));
@@ -43,6 +50,11 @@ export async function GET() {
         homeGoals: typeof fixture.gh === "number" ? fixture.gh : null,
         awayGoals: typeof fixture.ga === "number" ? fixture.ga : null,
         vendorFixtureId: null,
+        events: toJson(fixture.events),
+        stats: toJson(fixture.stats),
+        lineups: toJson(fixture.lineups),
+        players: toJson(fixture.players),
+        referee: fixture.referee || null,
         updatedAt: new Date(),
       },
       create: {
@@ -52,6 +64,11 @@ export async function GET() {
         homeGoals: typeof fixture.gh === "number" ? fixture.gh : null,
         awayGoals: typeof fixture.ga === "number" ? fixture.ga : null,
         vendorFixtureId: null,
+        events: toJson(fixture.events),
+        stats: toJson(fixture.stats),
+        lineups: toJson(fixture.lineups),
+        players: toJson(fixture.players),
+        referee: fixture.referee || null,
       },
     });
     upserted++;

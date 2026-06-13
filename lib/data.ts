@@ -17,8 +17,15 @@ export interface GroupStageMatch {
   v: string;
   ts: number;
   dbStatus?: string;
+  dbElapsed?: number | null;
   dbGh?: number | null;
   dbGa?: number | null;
+  dbEvents?: MatchEvent[];
+  dbStats?: MatchStats;
+  dbLineups?: TeamLineup[];
+  dbPlayers?: PlayerMatchStat[];
+  dbReferee?: string | null;
+  dbFixtureId?: number | null;
 }
 
 export interface KnockoutMatch {

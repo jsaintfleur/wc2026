@@ -89,6 +89,11 @@ model MatchState {
   homeGoals       Int?     @map("home_goals") @db.SmallInt
   awayGoals       Int?     @map("away_goals") @db.SmallInt
   vendorFixtureId BigInt?  @map("vendor_fixture_id")
+  events          Json?    @map("events_json")
+  stats           Json?    @map("stats_json")
+  lineups         Json?    @map("lineups_json")
+  players         Json?    @map("players_json")
+  referee         String?
   updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz()
 
   match Match @relation(fields: [matchId], references: [id])

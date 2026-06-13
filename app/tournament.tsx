@@ -99,6 +99,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [liveStatus, setLiveStatus] = useState<LiveStatus>("init");
   const [liveTs, setLiveTs] = useState(0);
   const [, setLiveStale] = useState(false);
+  const [liveEnrichmentIssue, setLiveEnrichmentIssue] = useState("");
   const [animate, setAnimate] = useState(true);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -113,6 +114,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       setFixtures(MOCK_FIXTURES as LiveFixture[]);
       setLiveStatus("active");
       setLiveTs(Date.now());
+      setLiveEnrichmentIssue("");
       return;
     }
     try {
@@ -122,16 +124,20 @@ export default function Tournament({ data }: { data: TournamentData }) {
       if (j.configured === false) {
         setLiveStatus("off");
         setFixtures(Array.isArray(j.fixtures) ? j.fixtures : []);
+        setLiveEnrichmentIssue(j.active ? "Live enrichment is not configured" : "");
         return;
       }
       setFixtures(Array.isArray(j.fixtures) ? j.fixtures : []);
       setLiveTs(j.ts || Date.now());
       setLiveStale(!!j.stale);
-      if (j.stale) setLiveStatus("paused");
+      const enrichmentUnhealthy = !!(j.enrichment?.required && !j.enrichment?.healthy);
+      setLiveEnrichmentIssue(enrichmentUnhealthy ? "Live enrichment needs attention" : "");
+      if (j.stale || enrichmentUnhealthy) setLiveStatus("paused");
       else if (j.active && (!j.fixtures || j.fixtures.length === 0)) setLiveStatus("nofix");
       else if (j.active) setLiveStatus("active");
       else setLiveStatus("idle");
     } catch {
+      setLiveEnrichmentIssue("Live enrichment fetch failed");
       setLiveStatus(prev => prev === "init" ? "off" : "paused");
     }
   }, []);
@@ -264,6 +270,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
   function liveIndicatorHtml(): string {
     const n = fixtures.filter(f => LIVE_STATUSES.has(f.status)).length;
+    if (liveEnrichmentIssue) return `<div class="livebar paused" role="status"><span class="dotlive" style="background:#b58900"></span>${esc(liveEnrichmentIssue)}</div>`;
     if (n > 0) return `<div class="livebar on" role="status" aria-live="polite"><span class="dotlive"></span>${n} match${n > 1 ? "es" : ""} in play</div>`;
     if (liveStatus === "paused") return `<div class="livebar paused" role="status"><span class="dotlive" style="background:#b58900"></span>Showing latest scores</div>`;
     return "";
@@ -499,7 +506,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     if (view === "venues") return renderVenues(animate);
     return renderAbout();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, group, team, query, fixtures, liveStatus, liveTs, animate, nowMs]);
+  }, [view, group, team, query, fixtures, liveStatus, liveTs, liveEnrichmentIssue, animate, nowMs]);
 
   function handleTab(v: ViewType) {
     setAnimate(true);

@@ -22,6 +22,11 @@ If API-Football no longer returns enriched details after the live window, the ap
 
 ## Proposed Change Set
 
+0. Treat API-Football rich live enrichment as mandatory during match windows.
+   - `/api/live` now reports explicit enrichment health metadata.
+   - The UI shows a live enrichment warning instead of silently treating basic score fallback as good enough.
+   - The admin quality page flags missing API-Football fixture IDs and missing rich snapshots.
+
 1. Persist rich match snapshots in `match_state`.
    - `events_json`
    - `stats_json`
@@ -44,6 +49,10 @@ If API-Football no longer returns enriched details after the live window, the ap
    - Route still skips outside match windows.
    - Ingest window starts 90 minutes before kickoff and continues 6 hours after kickoff to capture lineups and corrected final stats.
    - Daily quota cap remains in place.
+
+5. Keep the basic community score feed as fallback only.
+   - It can help avoid a blank score surface during an upstream issue.
+   - It is not considered a healthy live-enrichment state because it does not guarantee Starting XI, substitutions, team stats, or player stats.
 
 ## Deployment Requirement
 

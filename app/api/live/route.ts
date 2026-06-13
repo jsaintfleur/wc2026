@@ -8,8 +8,8 @@ const LIVE_TTL = parseInt(process.env.LIVE_TTL || "420", 10);
 const IDLE_TTL = parseInt(process.env.IDLE_TTL || "1800", 10);
 const LEAGUE = process.env.WC_LEAGUE || "1";
 const SEASON = process.env.WC_SEASON || "2026";
-const PRE = 15 * 60000;
-const POST = 155 * 60000;
+const PRE = 90 * 60000;
+const POST = 6 * 60 * 60000;
 
 // worldcup26.ir — free community API, no auth required
 const WC26_URL = "https://worldcup26.ir/get/games";
@@ -17,6 +17,25 @@ const WC26_STADIUMS_URL = "https://worldcup26.ir/get/stadiums";
 
 let LAST: { fixtures: unknown[]; ts: number } | null = null;
 let STADIUM_CACHE: Record<string, string> | null = null;
+
+function hasRichDetails(fixture: unknown): boolean {
+  const f = fixture as {
+    events?: unknown[];
+    stats?: { home?: Record<string, unknown>; away?: Record<string, unknown> };
+    lineups?: unknown[];
+    players?: unknown[];
+    referee?: string;
+    fixtureId?: number | null;
+  };
+  return !!(
+    f.fixtureId ||
+    (Array.isArray(f.events) && f.events.length > 0) ||
+    (f.stats && (Object.keys(f.stats.home || {}).length > 0 || Object.keys(f.stats.away || {}).length > 0)) ||
+    (Array.isArray(f.lineups) && f.lineups.length === 2) ||
+    (Array.isArray(f.players) && f.players.length > 0) ||
+    f.referee
+  );
+}
 
 function sameFixture(a: unknown, b: unknown): boolean {
   const left = a as { ts?: number; home?: string; away?: string };
@@ -47,6 +66,10 @@ function withVerifiedResults(fixtures: unknown[] = []): unknown[] {
 
 function inWindow(now: number): boolean {
   return STARTS.some(s => now >= s - PRE && now <= s + POST);
+}
+
+function activeWindowCount(now: number): number {
+  return STARTS.filter(s => now >= s - PRE && now <= s + POST).length;
 }
 
 // ── worldcup26.ir integration ──────────────────────────────────────
@@ -354,6 +377,7 @@ export async function GET(request: NextRequest) {
   const now = Date.now();
   const debug = request.nextUrl.searchParams.has("debug");
   const active = inWindow(now);
+  const activeMatches = activeWindowCount(now);
 
   if (debug) {
     const wc26 = await fetchWC26().catch(() => ({ ok: false, fixtures: [] }));
@@ -361,11 +385,19 @@ export async function GET(request: NextRequest) {
       ? await fetchFixtures(apiFootballKey).catch(e => ({ ok: false, http: 0, errors: String(e) } as FixtureResponse))
       : null;
     const merged = withVerifiedResults(wc26.ok ? wc26.fixtures : (apif?.fixtures || []));
+    const richFixtureCount = (apif?.fixtures || []).filter(hasRichDetails).length;
     return NextResponse.json({
-      configured: true,
+      configured: !!apiFootballKey,
       active, ts: now,
       wc26: { ok: wc26.ok, fixtureCount: wc26.fixtures.length },
-      apiFootball: apif ? { ok: apif.ok, fixtureCount: apif.fixtures?.length ?? 0, quota: apif.quota } : "not configured",
+      apiFootball: apif ? { ok: apif.ok, fixtureCount: apif.fixtures?.length ?? 0, richFixtureCount, quota: apif.quota } : "not configured",
+      enrichment: {
+        required: active,
+        healthy: active ? !!(apiFootballKey && apif?.ok && (apif.fixtures?.length ?? 0) > 0) : true,
+        activeMatches,
+        source: apif?.ok && (apif.fixtures?.length ?? 0) > 0 ? "api-football" : "missing",
+        richFixtureCount,
+      },
       verifiedCount: VERIFIED_RESULTS.length,
       mergedCount: merged.length,
       source: apif?.ok && (apif.fixtures?.length ?? 0) > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
@@ -376,11 +408,23 @@ export async function GET(request: NextRequest) {
   // Fetch from worldcup26.ir (primary) and optionally API-Football (enrichment)
   const wc26 = await fetchWC26().catch(() => ({ ok: false, fixtures: [] as unknown[] }));
 
+  let apif: FixtureResponse | null = null;
   let apifFixtures: unknown[] = [];
   if (apiFootballKey && active) {
-    const apif = await fetchFixtures(apiFootballKey).catch(() => ({ ok: false, fixtures: [] } as FixtureResponse));
+    apif = await fetchFixtures(apiFootballKey).catch(() => ({ ok: false, fixtures: [] } as FixtureResponse));
     if (apif.ok && apif.fixtures && apif.fixtures.length > 0) apifFixtures = apif.fixtures;
   }
+  const richFixtureCount = apifFixtures.filter(hasRichDetails).length;
+  const enrichment = {
+    required: active,
+    healthy: active ? !!(apiFootballKey && apif?.ok && apifFixtures.length > 0) : true,
+    activeMatches,
+    source: apifFixtures.length > 0 ? "api-football" : wc26.ok ? "basic-fallback" : "none",
+    richFixtureCount,
+    apiFootballConfigured: !!apiFootballKey,
+    apiFootballOk: !!apif?.ok,
+    quota: apif?.quota,
+  };
 
   // Merge strategy: start with API-Football (richer data with stats/lineups),
   // then fill in any missing matches from worldcup26.ir, then verified results
@@ -400,7 +444,7 @@ export async function GET(request: NextRequest) {
 
   if (!active && !hasLiveData) {
     return NextResponse.json(
-      { configured: true, active: false, ts: LAST ? LAST.ts : now, fixtures },
+      { configured: !!apiFootballKey, active: false, ts: LAST ? LAST.ts : now, fixtures, enrichment },
       { headers: { "Cache-Control": `public, s-maxage=${IDLE_TTL}, stale-while-revalidate=${IDLE_TTL * 2}` } }
     );
   }
@@ -408,7 +452,14 @@ export async function GET(request: NextRequest) {
   LAST = { fixtures, ts: now };
 
   return NextResponse.json(
-    { configured: true, active, ts: now, fixtures, source: apifFixtures.length > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only" },
+    {
+      configured: !!apiFootballKey,
+      active,
+      ts: now,
+      fixtures,
+      source: apifFixtures.length > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
+      enrichment,
+    },
     { headers: { "Cache-Control": `public, s-maxage=${active ? LIVE_TTL : IDLE_TTL}, stale-while-revalidate=${active ? LIVE_TTL * 2 : IDLE_TTL * 2}` } }
   );
 }

@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/db";
-import { DATA } from "@/lib/data";
 
 export const revalidate = 60;
 export const dynamic = "force-dynamic";
@@ -7,6 +6,7 @@ export const dynamic = "force-dynamic";
 const LIVE_STATUSES = new Set(["1H", "2H", "HT", "ET", "BT", "P", "LIVE", "SUSP", "INT"]);
 const DONE_STATUSES = new Set(["FT", "AET", "PEN", "WO", "AWD"]);
 const STALE_THRESHOLD_MS = 4 * 60 * 60 * 1000;
+const LINEUP_CAPTURE_WINDOW_MS = 90 * 60 * 1000;
 
 interface QualityIssue {
   matchNumber: number;
@@ -16,6 +16,16 @@ interface QualityIssue {
   status: string;
   issue: string;
   severity: "critical" | "warning" | "info";
+}
+
+function jsonArrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function jsonObjectKeys(value: unknown): number {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? Object.keys(value).length
+    : 0;
 }
 
 async function audit(): Promise<{ issues: QualityIssue[]; summary: Record<string, number>; total: number }> {
@@ -44,9 +54,15 @@ async function audit(): Promise<{ issues: QualityIssue[]; summary: Record<string
     const kickoff = new Date(m.kickoffUtc).getTime();
     const elapsed = now - kickoff;
     const isPast = elapsed > 0;
+    const inLineupWindow = now >= kickoff - LINEUP_CAPTURE_WINDOW_MS && now <= kickoff + STALE_THRESHOLD_MS;
     const home = m.homeTeam?.name || "TBD";
     const away = m.awayTeam?.name || "TBD";
     const kickoffStr = m.kickoffUtc.toISOString();
+
+    if (!m.state && inLineupWindow) {
+      issues.push({ matchNumber: m.matchNumber, home, away, kickoff: kickoffStr, status: "NO_STATE", issue: "Lineup/live enrichment window is open but no vendor state has been captured", severity: "warning" });
+      summary.warning++;
+    }
 
     if (isPast && elapsed > STALE_THRESHOLD_MS && !m.state) {
       issues.push({ matchNumber: m.matchNumber, home, away, kickoff: kickoffStr, status: "NO_STATE", issue: "Past match with no state record", severity: "critical" });
@@ -73,6 +89,33 @@ async function audit(): Promise<{ issues: QualityIssue[]; summary: Record<string
       if (LIVE_STATUSES.has(m.state.status) && stateAge > 10 * 60 * 1000) {
         issues.push({ matchNumber: m.matchNumber, home, away, kickoff: kickoffStr, status: m.state.status, issue: `State not updated in ${Math.round(stateAge / 60000)}min`, severity: "warning" });
         summary.warning++;
+      }
+
+      if ((LIVE_STATUSES.has(m.state.status) || DONE_STATUSES.has(m.state.status)) && !m.state.vendorFixtureId) {
+        issues.push({ matchNumber: m.matchNumber, home, away, kickoff: kickoffStr, status: m.state.status, issue: "Missing API-Football fixture ID for live enrichment", severity: "critical" });
+        summary.critical++;
+      }
+
+      if (LIVE_STATUSES.has(m.state.status) || DONE_STATUSES.has(m.state.status)) {
+        const missing: string[] = [];
+        if (jsonArrayLength(m.state.lineups) < 2) missing.push("lineups/substitutes");
+        if (jsonObjectKeys(m.state.stats) === 0) missing.push("team stats");
+        if (DONE_STATUSES.has(m.state.status) && jsonArrayLength(m.state.events) === 0) missing.push("events");
+        if (DONE_STATUSES.has(m.state.status) && jsonArrayLength(m.state.players) === 0) missing.push("player stats");
+
+        if (missing.length > 0) {
+          const done = DONE_STATUSES.has(m.state.status);
+          issues.push({
+            matchNumber: m.matchNumber,
+            home,
+            away,
+            kickoff: kickoffStr,
+            status: m.state.status,
+            issue: `Missing rich live enrichment: ${missing.join(", ")}`,
+            severity: done ? "critical" : "warning",
+          });
+          summary[done ? "critical" : "warning"]++;
+        }
       }
     }
   }

@@ -599,7 +599,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
           <div className="stat"><b>48</b><span>Teams</span></div>
           <div className="stat"><b>104</b><span>Matches</span></div>
           <div className="stat"><b>16</b><span>Venues</span></div>
-          <div className="stat"><b>3</b><span>Nations</span></div>
+          <div className="stat"><b>3</b><span>Hosts</span></div>
         </div>
       </section>
 

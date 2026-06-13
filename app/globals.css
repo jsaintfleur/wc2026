@@ -116,14 +116,15 @@ body::after {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .bar__hosts span {
   display: inline-grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
   border-radius: 50%;
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.06);
@@ -2790,7 +2791,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 /* Small phones (iPhone SE, Galaxy S8, etc.) */
 @media (max-width: 374px) {
   .bar__mark { font-size: 14px; letter-spacing: .5px; }
-  .bar__hosts span { width: 22px; height: 22px; font-size: 12px; }
+  .bar__hosts span { width: 26px; height: 26px; font-size: 14px; }
   .hero { padding: 18px 14px 18px; min-height: 220px; }
   .hero__title { font-size: 36px; }
   .hero__eyebrow { font-size: 10px; letter-spacing: 3px; }

@@ -1,12 +1,12 @@
 {
   "crons": [
     {
-      "path": "/api/ingest",
-      "schedule": "0 6 * * *"
+      "path": "/api/ingest?force=1",
+      "schedule": "0 4 * * *"
     },
     {
       "path": "/api/reconcile",
-      "schedule": "30 6 * * *"
+      "schedule": "0 10 * * *"
     }
   ]
 }

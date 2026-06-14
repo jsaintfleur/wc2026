@@ -57,48 +57,43 @@ export interface MergeResult {
   confidence: "high" | "low";
 }
 
-// Strict merge: time window (75 min) + venue OR team-pair match.
+// Strict merge: time window + team-pair match required.
+// Each vendor fixture can only be claimed by one schedule match (closest dt wins).
 // Returns only high-confidence merges — never writes a low-confidence match.
 export function mergeFixtures(
   matches: ScheduleMatch[],
   fixtures: VendorFixture[],
 ): MergeResult[] {
-  const results: MergeResult[] = [];
+  const claimed = new Set<number>();
+  const candidates: { m: ScheduleMatch; f: VendorFixture; dt: number; fi: number }[] = [];
 
   for (const m of matches) {
-    let best: VendorFixture | null = null;
-    let bestDt = WINDOW_MS;
-    let bestConfidence: "high" | "low" = "low";
-
-    for (const f of fixtures) {
+    for (let fi = 0; fi < fixtures.length; fi++) {
+      const f = fixtures[fi];
       const dt = Math.abs((f.ts || 0) - m.kickoffTs);
       if (dt > WINDOW_MS) continue;
 
-      const fv = nrm(f.venue);
-      const mv = nrm(m.venueCommon);
-      const venOK = mv && fv && (fv === mv || fv.includes(mv) || mv.includes(fv));
+      if (!m.homeTeam || !m.awayTeam) continue;
+      const a = canon(f.home);
+      const b = canon(f.away);
+      const teamOK = (a === m.homeTeam && b === m.awayTeam) || (a === m.awayTeam && b === m.homeTeam);
+      if (!teamOK) continue;
 
-      let teamOK = false;
-      if (m.homeTeam && m.awayTeam) {
-        const a = canon(f.home);
-        const b = canon(f.away);
-        teamOK = (a === m.homeTeam && b === m.awayTeam) || (a === m.awayTeam && b === m.homeTeam);
-      }
-
-      if (!venOK && !teamOK) continue;
-
-      const confidence = teamOK ? "high" : (venOK ? "high" : "low");
-
-      if (dt < bestDt || (dt === bestDt && confidence === "high" && bestConfidence === "low")) {
-        bestDt = dt;
-        best = f;
-        bestConfidence = confidence;
-      }
+      candidates.push({ m, f, dt, fi });
     }
+  }
 
-    if (best && bestConfidence === "high") {
-      results.push({ match: m, fixture: best, confidence: "high" });
-    }
+  // Sort by smallest dt so closest kickoff wins each vendor fixture
+  candidates.sort((a, b) => a.dt - b.dt);
+
+  const results: MergeResult[] = [];
+  const usedMatches = new Set<number>();
+
+  for (const c of candidates) {
+    if (claimed.has(c.fi) || usedMatches.has(c.m.id)) continue;
+    claimed.add(c.fi);
+    usedMatches.add(c.m.id);
+    results.push({ match: c.m, fixture: c.f, confidence: "high" });
   }
 
   return results;

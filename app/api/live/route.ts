@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DATA } from "@/lib/data";
-import { canon } from "@/lib/merge";
+import { canon, mergeFixtures, type VendorFixture as MergeVendorFixture, type ScheduleMatch } from "@/lib/merge";
 import { VERIFIED_RESULTS } from "@/lib/verified-results";
+import { prisma } from "@/lib/db";
+import type { Prisma } from "@/lib/generated/prisma/client";
 
 const STARTS = DATA.starts;
 const LIVE_TTL = parseInt(process.env.LIVE_TTL || "420", 10);
@@ -370,6 +372,75 @@ async function fetchFixtures(key: string): Promise<FixtureResponse> {
   return { ok: true, fixtures, quota };
 }
 
+// ── Opportunistic DB persistence ──────────────────────────────────
+// Writes finished match results to the DB so the ISR-rendered page
+// shows scores even when the live feed is idle.
+
+const DONE_STATUSES = new Set(["FT", "AET", "PEN", "WO", "AWD"]);
+
+function toJson(value: unknown): Prisma.InputJsonValue | undefined {
+  return value == null
+    ? undefined
+    : JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+async function persistFinished(fixtures: unknown[]): Promise<number> {
+  const finished = fixtures.filter(f => {
+    const fix = f as { status?: string; gh?: number | null; ga?: number | null };
+    return DONE_STATUSES.has(fix.status || "") && fix.gh != null && fix.ga != null;
+  }) as MergeVendorFixture[];
+  if (!finished.length) return 0;
+
+  let scheduleMatches: ScheduleMatch[];
+  try {
+    const rows = await prisma.match.findMany({
+      include: { homeTeam: true, awayTeam: true, venue: true },
+      orderBy: { matchNumber: "asc" },
+    });
+    scheduleMatches = rows.map(m => ({
+      id: m.id,
+      matchNumber: m.matchNumber,
+      kickoffTs: new Date(m.kickoffUtc).getTime(),
+      venueCommon: m.venue.commonName,
+      homeTeam: m.homeTeam?.name || null,
+      awayTeam: m.awayTeam?.name || null,
+    }));
+  } catch {
+    return 0;
+  }
+
+  const merged = mergeFixtures(scheduleMatches, finished);
+  let written = 0;
+
+  for (const { match, fixture } of merged) {
+    try {
+      await prisma.matchState.upsert({
+        where: { matchId: match.id },
+        update: {
+          status: fixture.status as string,
+          elapsed: typeof fixture.elapsed === "number" ? fixture.elapsed : 90,
+          homeGoals: typeof fixture.gh === "number" ? fixture.gh : null,
+          awayGoals: typeof fixture.ga === "number" ? fixture.ga : null,
+          events: toJson(fixture.events),
+          updatedAt: new Date(),
+        },
+        create: {
+          matchId: match.id,
+          status: fixture.status as string,
+          elapsed: typeof fixture.elapsed === "number" ? fixture.elapsed : 90,
+          homeGoals: typeof fixture.gh === "number" ? fixture.gh : null,
+          awayGoals: typeof fixture.ga === "number" ? fixture.ga : null,
+          events: toJson(fixture.events),
+        },
+      });
+      written++;
+    } catch {
+      // Non-critical — don't fail the live response
+    }
+  }
+  return written;
+}
+
 // ── Route handler ──────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -441,6 +512,11 @@ export async function GET(request: NextRequest) {
 
   const fixtures = withVerifiedResults(base);
   const hasLiveData = wc26.ok || apifFixtures.length > 0;
+
+  // Opportunistically persist finished results to DB so ISR pages show scores
+  if (fixtures.length > 0) {
+    persistFinished(fixtures).catch(() => {});
+  }
 
   if (!active && !hasLiveData) {
     return NextResponse.json(

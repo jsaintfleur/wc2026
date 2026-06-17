@@ -129,7 +129,7 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
   },
   // ── June 14 ──────────────────────────────────────────────────────
   {
-    ts: 1781463600000,
+    ts: 1781456400000,
     status: "FT",
     elapsed: 90,
     venue: "Lincoln Financial Field",
@@ -150,7 +150,7 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     ],
   },
   {
-    ts: 1781474400000,
+    ts: 1781467200000,
     status: "FT",
     elapsed: 90,
     venue: "Hard Rock Stadium",
@@ -167,7 +167,7 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     ],
   },
   {
-    ts: 1781485200000,
+    ts: 1781478000000,
     status: "FT",
     elapsed: 90,
     venue: "Inter&Co Stadium",
@@ -181,7 +181,7 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     ],
   },
   {
-    ts: 1781496000000,
+    ts: 1781488800000,
     status: "FT",
     elapsed: 90,
     venue: "Mercedes-Benz Stadium",
@@ -201,7 +201,7 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
   },
   // ── June 15 ──────────────────────────────────────────────────────
   {
-    ts: 1781550000000,
+    ts: 1781539200000,
     status: "FT",
     elapsed: 90,
     venue: "BMO Field",
@@ -213,7 +213,7 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     events: [],
   },
   {
-    ts: 1781560800000,
+    ts: 1781550000000,
     status: "FT",
     elapsed: 90,
     venue: "GEODIS Park",
@@ -228,7 +228,7 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     ],
   },
   {
-    ts: 1781571600000,
+    ts: 1781560800000,
     status: "FT",
     elapsed: 90,
     venue: "NRG Stadium",
@@ -243,7 +243,7 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     ],
   },
   {
-    ts: 1781582400000,
+    ts: 1781571600000,
     status: "FT",
     elapsed: 90,
     venue: "BC Place",
@@ -326,6 +326,22 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
       { minute: 50, extra: null, type: "Goal", detail: "Normal Goal", player: "Ali Olwan", assist: null, team: "Jordan" },
       { minute: 76, extra: null, type: "Goal", detail: "Own Goal", player: "Yazan Al-Arab", assist: null, team: "Jordan" },
       { minute: 90, extra: 12, type: "Goal", detail: "Penalty", player: "Marko Arnautović", assist: null, team: "Austria" },
+    ],
+  },
+  // ── June 17 ──────────────────────────────────────────────────────
+  {
+    ts: 1781715600000,
+    status: "FT",
+    elapsed: 90,
+    venue: "NRG Stadium",
+    round: "Group Stage - 1",
+    home: "Portugal",
+    away: "DR Congo",
+    gh: 1,
+    ga: 1,
+    events: [
+      { minute: 6, extra: null, type: "Goal", detail: "Normal Goal", player: "João Neves", assist: "Pedro Neto", team: "Portugal" },
+      { minute: 45, extra: 4, type: "Goal", detail: "Normal Goal", player: "Yoane Wissa", assist: "Arthur Masuaku", team: "DR Congo" },
     ],
   },
 ];

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="cGrad192" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="40%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+    <clipPath id="roundRect192">
+      <rect x="8" y="8" width="176" height="176" rx="36" ry="36"/>
+    </clipPath>
+  </defs>
+  <!-- Dark background card with rounded corners -->
+  <rect x="8" y="8" width="176" height="176" rx="36" ry="36" fill="#080c15"/>
+  <rect x="12" y="12" width="168" height="168" rx="33" ry="33" fill="#0d1220"/>
+  <!-- Bold condensed "C" lettermark via path -->
+  <path d="
+    M 116 56
+    C 108 48, 97 44, 85 44
+    C 60 44, 44 62, 44 88
+    L 44 104
+    C 44 130, 60 148, 85 148
+    C 97 148, 108 144, 116 136
+    L 116 120
+    C 110 126, 100 130, 88 130
+    C 72 130, 64 118, 64 104
+    L 64 88
+    C 64 74, 72 62, 88 62
+    C 100 62, 110 66, 116 72
+    Z
+  " fill="url(#cGrad192)"/>
+  <!-- Gold accent line below the C -->
+  <rect x="60" y="156" width="72" height="3" rx="1.5" fill="#f59e0b"/>
+</svg>

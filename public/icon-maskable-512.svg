@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="cGradMask" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="40%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+  <!-- Full-bleed background for maskable icon -->
+  <rect x="0" y="0" width="512" height="512" fill="#0d1220"/>
+  <!-- Content within 80% safe zone (inner ~410px area, centered) -->
+  <!-- Safe zone: 51 to 461 (410px), center at 256 -->
+  <!-- Bold condensed "C" lettermark via path — scaled to fit safe zone -->
+  <path d="
+    M 328 180
+    C 314 162, 290 152, 260 152
+    C 204 152, 160 194, 160 256
+    L 160 272
+    C 160 334, 204 376, 260 376
+    C 290 376, 314 366, 328 348
+    L 328 310
+    C 316 324, 294 334, 264 334
+    C 224 334, 206 306, 206 272
+    L 206 256
+    C 206 222, 224 194, 264 194
+    C 294 194, 316 204, 328 218
+    Z
+  " fill="url(#cGradMask)"/>
+  <!-- Gold accent line below the C -->
+  <rect x="190" y="390" width="132" height="7" rx="3.5" fill="#f59e0b"/>
+</svg>

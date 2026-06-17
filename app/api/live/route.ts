@@ -513,9 +513,11 @@ export async function GET(request: NextRequest) {
   const fixtures = withVerifiedResults(base);
   const hasLiveData = wc26.ok || apifFixtures.length > 0;
 
-  // Opportunistically persist finished results to DB so ISR pages show scores
-  if (fixtures.length > 0) {
-    persistFinished(fixtures).catch(() => {});
+  // Opportunistically persist finished results to DB so ISR pages show scores.
+  // Only persist vendor-sourced fixtures, not verified results — verified data
+  // is manually curated and may be added before a match truly finishes.
+  if (base.length > 0) {
+    persistFinished(base).catch(() => {});
   }
 
   if (!active && !hasLiveData) {

@@ -328,19 +328,4 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
       { minute: 90, extra: 12, type: "Goal", detail: "Penalty", player: "Marko Arnautović", assist: null, team: "Austria" },
     ],
   },
-  // ── June 17 ──────────────────────────────────────────────────────
-  {
-    ts: 1781715600000,
-    status: "FT",
-    elapsed: 90,
-    venue: "NRG Stadium",
-    round: "Group Stage - 1",
-    home: "Portugal",
-    away: "DR Congo",
-    gh: 1,
-    ga: 0,
-    events: [
-      { minute: 6, extra: null, type: "Goal", detail: "Normal Goal", player: "João Neves", assist: "Pedro Neto", team: "Portugal" },
-    ],
-  },
 ];

@@ -138,7 +138,16 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     away: "Curaçao",
     gh: 7,
     ga: 1,
-    events: [],
+    events: [
+      { minute: 6, extra: null, type: "Goal", detail: "Normal Goal", player: "Felix Nmecha", assist: "Florian Wirtz", team: "Germany" },
+      { minute: 21, extra: null, type: "Goal", detail: "Normal Goal", player: "Livano Comenencia", assist: null, team: "Curaçao" },
+      { minute: 38, extra: null, type: "Goal", detail: "Normal Goal", player: "Nico Schlotterbeck", assist: null, team: "Germany" },
+      { minute: 45, extra: 5, type: "Goal", detail: "Penalty", player: "Kai Havertz", assist: null, team: "Germany" },
+      { minute: 47, extra: null, type: "Goal", detail: "Normal Goal", player: "Jamal Musiala", assist: null, team: "Germany" },
+      { minute: 68, extra: null, type: "Goal", detail: "Normal Goal", player: "Nathaniel Brown", assist: null, team: "Germany" },
+      { minute: 78, extra: null, type: "Goal", detail: "Normal Goal", player: "Deniz Undav", assist: null, team: "Germany" },
+      { minute: 88, extra: null, type: "Goal", detail: "Normal Goal", player: "Kai Havertz", assist: null, team: "Germany" },
+    ],
   },
   {
     ts: 1781474400000,
@@ -150,7 +159,12 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     away: "Japan",
     gh: 2,
     ga: 2,
-    events: [],
+    events: [
+      { minute: 50, extra: null, type: "Goal", detail: "Normal Goal", player: "Virgil van Dijk", assist: "Ryan Gravenberch", team: "Netherlands" },
+      { minute: 57, extra: null, type: "Goal", detail: "Normal Goal", player: "Keito Nakamura", assist: null, team: "Japan" },
+      { minute: 64, extra: null, type: "Goal", detail: "Normal Goal", player: "Crysencio Summerville", assist: null, team: "Netherlands" },
+      { minute: 89, extra: null, type: "Goal", detail: "Normal Goal", player: "Daichi Kamada", assist: null, team: "Japan" },
+    ],
   },
   {
     ts: 1781485200000,
@@ -162,7 +176,9 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     away: "Ecuador",
     gh: 1,
     ga: 0,
-    events: [],
+    events: [
+      { minute: 90, extra: null, type: "Goal", detail: "Normal Goal", player: "Amad Diallo", assist: "Wilfried Singo", team: "Ivory Coast" },
+    ],
   },
   {
     ts: 1781496000000,
@@ -174,7 +190,14 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     away: "Tunisia",
     gh: 5,
     ga: 1,
-    events: [],
+    events: [
+      { minute: 7, extra: null, type: "Goal", detail: "Normal Goal", player: "Yasin Ayari", assist: null, team: "Sweden" },
+      { minute: 30, extra: null, type: "Goal", detail: "Normal Goal", player: "Alexander Isak", assist: null, team: "Sweden" },
+      { minute: 43, extra: null, type: "Goal", detail: "Normal Goal", player: "Nabil Rekik", assist: null, team: "Tunisia" },
+      { minute: 59, extra: null, type: "Goal", detail: "Normal Goal", player: "Viktor Gyökeres", assist: null, team: "Sweden" },
+      { minute: 84, extra: null, type: "Goal", detail: "Normal Goal", player: "Mattias Svanberg", assist: null, team: "Sweden" },
+      { minute: 90, extra: 6, type: "Goal", detail: "Normal Goal", player: "Yasin Ayari", assist: null, team: "Sweden" },
+    ],
   },
   // ── June 15 ──────────────────────────────────────────────────────
   {
@@ -199,7 +222,10 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     away: "Egypt",
     gh: 1,
     ga: 1,
-    events: [],
+    events: [
+      { minute: 19, extra: null, type: "Goal", detail: "Normal Goal", player: "Emam Ashour", assist: null, team: "Egypt" },
+      { minute: 66, extra: null, type: "Goal", detail: "Own Goal", player: "Mohamed Hany", assist: null, team: "Egypt" },
+    ],
   },
   {
     ts: 1781571600000,
@@ -211,7 +237,10 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     away: "Uruguay",
     gh: 1,
     ga: 1,
-    events: [],
+    events: [
+      { minute: 41, extra: null, type: "Goal", detail: "Normal Goal", player: "Abdullah Al-Amri", assist: null, team: "Saudi Arabia" },
+      { minute: 80, extra: null, type: "Goal", detail: "Normal Goal", player: "Maxi Araújo", assist: null, team: "Uruguay" },
+    ],
   },
   {
     ts: 1781582400000,
@@ -223,7 +252,12 @@ export const VERIFIED_RESULTS: LiveFixture[] = [
     away: "New Zealand",
     gh: 2,
     ga: 2,
-    events: [],
+    events: [
+      { minute: 7, extra: null, type: "Goal", detail: "Normal Goal", player: "Elijah Just", assist: "Chris Wood", team: "New Zealand" },
+      { minute: 32, extra: null, type: "Goal", detail: "Normal Goal", player: "Ramin Rezaeian", assist: null, team: "Iran" },
+      { minute: 54, extra: null, type: "Goal", detail: "Normal Goal", player: "Elijah Just", assist: "Chris Wood", team: "New Zealand" },
+      { minute: 64, extra: null, type: "Goal", detail: "Normal Goal", player: "Mohammad Mohebbi", assist: "Ramin Rezaeian", team: "Iran" },
+    ],
   },
   // ── June 16 ──────────────────────────────────────────────────────
   {

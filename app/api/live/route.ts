@@ -288,7 +288,7 @@ async function fetchFixtures(key: string): Promise<FixtureResponse> {
     limit: r.headers.get("x-ratelimit-requests-limit"),
     remaining: r.headers.get("x-ratelimit-requests-remaining"),
   };
-  if (!r.ok) return { ok: false, http: r.status, errors: body.errors || null, quota };
+  if (!r.ok || body.errors?.access) return { ok: false, http: r.status, errors: body.errors || null, quota };
   const fixtures = ((body.response || []) as VendorFixture[]).map((f) => {
     const events = (f.events || []).map((e) => ({
       minute: e.time?.elapsed ?? 0,

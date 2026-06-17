@@ -12,6 +12,10 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
   },
   applicationName: "Compet 2026",
+  icons: {
+    icon: "/favicon.svg",
+    apple: "/icon-192.svg",
+  },
 };
 
 export const viewport: Viewport = {

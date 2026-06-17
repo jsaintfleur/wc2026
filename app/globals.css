@@ -480,6 +480,219 @@ body::after {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .dotlive { animation: none; } }
 
+/* ── Enhanced animations ────────────────────────────────────────── */
+
+@keyframes scoreFlash {
+  0% { transform: scale(1); filter: brightness(1); }
+  25% { transform: scale(1.25); filter: brightness(1.6); text-shadow: 0 0 18px currentColor; }
+  50% { transform: scale(1.08); filter: brightness(1.2); }
+  100% { transform: scale(1); filter: brightness(1); text-shadow: none; }
+}
+.score-flash { animation: scoreFlash .6s cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes goalPulse {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+  50% { box-shadow: 0 0 0 12px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+.tix.goal-scored { animation: goalPulse .8s ease-out; }
+
+@keyframes staggerRise {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes flipIn {
+  0% { transform: perspective(200px) rotateX(60deg); opacity: 0; }
+  100% { transform: perspective(200px) rotateX(0); opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; box-shadow: 0 0 28px var(--live-glow), 0 16px 44px rgba(0,0,0,0.38); }
+  50% { opacity: 1; box-shadow: 0 0 42px var(--live-glow), 0 0 8px rgba(244,63,94,0.15), 0 16px 44px rgba(0,0,0,0.38); }
+}
+
+@keyframes toastIn {
+  0% { transform: translateY(-100%) scale(0.9); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes toastOut {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-100%) scale(0.9); opacity: 0; }
+}
+
+@keyframes confettiDrop {
+  0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(60px) rotate(720deg); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .score-flash, .tix.goal-scored { animation: none; }
+  .stagger-rise { animation: none !important; }
+}
+
+/* Staggered card entrance — each card delays slightly */
+.stagger-rise {
+  animation: staggerRise .45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.stagger-rise:nth-child(1) { animation-delay: 0ms; }
+.stagger-rise:nth-child(2) { animation-delay: 40ms; }
+.stagger-rise:nth-child(3) { animation-delay: 80ms; }
+.stagger-rise:nth-child(4) { animation-delay: 120ms; }
+.stagger-rise:nth-child(5) { animation-delay: 160ms; }
+.stagger-rise:nth-child(6) { animation-delay: 200ms; }
+.stagger-rise:nth-child(7) { animation-delay: 240ms; }
+.stagger-rise:nth-child(8) { animation-delay: 280ms; }
+.stagger-rise:nth-child(9) { animation-delay: 320ms; }
+.stagger-rise:nth-child(10) { animation-delay: 360ms; }
+
+/* Live match breathing border effect */
+.tix.islive {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+/* Goal toast notification */
+.goal-toast {
+  position: fixed;
+  top: calc(16px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9998;
+  background: linear-gradient(135deg, #0d6e3f, #0a5c2f);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  border-radius: 14px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(34, 197, 94, 0.2);
+  animation: toastIn .4s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(16px);
+  max-width: calc(100% - 32px);
+}
+.goal-toast--exit {
+  animation: toastOut .3s ease-in forwards;
+}
+.goal-toast__icon {
+  font-size: 22px;
+  line-height: 1;
+}
+.goal-toast__text {
+  font-family: var(--disp);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  color: #fff;
+}
+.goal-toast__sub {
+  font-family: var(--body);
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255,255,255,.65);
+  margin-top: 2px;
+}
+
+/* Tab transition underline indicator */
+.tabs { position: relative; }
+.tab-indicator {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background: var(--pitch);
+  border-radius: 1px;
+  transition: left .28s cubic-bezier(0.16, 1, 0.3, 1), width .28s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1;
+}
+
+/* View crossfade transition */
+.view-transition {
+  animation: fadeSlide .3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Countdown digit flip effect */
+.cd-hero__digit {
+  transition: transform .15s ease;
+}
+.cd-hero__digit--flip {
+  animation: flipIn .25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Colon blink in countdown */
+.cd-hero__colon {
+  animation: pulse 1s ease-in-out infinite;
+}
+.cd-hero--live .cd-hero__colon { animation: none; opacity: 1; }
+
+/* Enhanced live hero shimmer */
+.cd-hero--live::before {
+  background:
+    linear-gradient(90deg, transparent, rgba(244,63,94,0.06), transparent),
+    linear-gradient(90deg, rgba(244,63,94,0.14), transparent 26%, transparent 74%, rgba(244,63,94,0.12));
+  background-size: 200% 100%, 100% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Match card hover enhancement — subtle glass lift */
+.tix--clickable:hover {
+  border-color: rgba(255,255,255,0.14);
+}
+
+/* Score badge shimmer for live matches */
+.lv {
+  background: linear-gradient(90deg, var(--live), #e11d48, var(--live));
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite, pulse 1.4s infinite;
+}
+
+/* Group card hover lift */
+.gcard {
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.gcard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 48px rgba(0,0,0,0.3);
+}
+
+/* Stats row entrance */
+.stat-row { animation: fadeSlide .3s ease both; }
+.stat-row:nth-child(odd) { animation-delay: 20ms; }
+.stat-row:nth-child(even) { animation-delay: 40ms; }
+
+/* Share button */
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.share-btn:hover {
+  color: #fff;
+  background: var(--glass-heavy);
+  border-color: rgba(255,255,255,0.16);
+}
+.share-btn:active { transform: scale(0.96); }
+
 .dayhead {
   position: sticky;
   top: calc(86px + var(--safe-t));

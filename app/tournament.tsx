@@ -108,6 +108,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
   const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture | null } | null>(null);
   const [playerProfile, setPlayerProfile] = useState<{ name: string; team: string } | null>(null);
+  const [goalToast, setGoalToast] = useState<{ team: string; player: string; minute: string; score: string; flag: string } | null>(null);
+  const [toastExiting, setToastExiting] = useState(false);
+  const prevScoresRef = useRef<Map<string, string>>(new Map());
   const scrolledRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -200,6 +203,38 @@ export default function Tournament({ data }: { data: TournamentData }) {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
+
+  // Detect goal changes and show toast notification
+  useEffect(() => {
+    if (fixtures.length === 0) return;
+    const prev = prevScoresRef.current;
+    const next = new Map<string, string>();
+    for (const f of fixtures) {
+      if (!LIVE_STATUSES.has(f.status) && !DONE_STATUSES.has(f.status)) continue;
+      if (f.gh == null || f.ga == null) continue;
+      const key = canon(f.home) + ":" + canon(f.away);
+      next.set(key, `${f.gh}-${f.ga}`);
+      const old = prev.get(key);
+      if (old && old !== `${f.gh}-${f.ga}` && LIVE_STATUSES.has(f.status)) {
+        const [oldH, oldA] = old.split("-").map(Number);
+        const scoringTeam = f.gh > oldH ? f.home : f.away;
+        const lastEvent = (f.events || []).filter((e: MatchEvent) => e.type === "Goal").pop();
+        const flag = data.flags[scoringTeam] || "⚽";
+        setGoalToast({
+          team: scoringTeam,
+          player: lastEvent?.player || "GOAL",
+          minute: lastEvent ? `${lastEvent.minute}'` : `${f.elapsed || ""}'`,
+          score: `${f.home} ${f.gh} – ${f.ga} ${f.away}`,
+          flag,
+        });
+        setToastExiting(false);
+        setTimeout(() => setToastExiting(true), 3500);
+        setTimeout(() => setGoalToast(null), 3900);
+      }
+    }
+    prevScoresRef.current = next;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixtures]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -333,7 +368,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     } else {
       timeHtml = `<div class="lo">${esc(m.et)}</div>${m.local !== m.et ? `<div class="et">${esc(m.local)}</div>` : ""}`;
     }
-    return `<article class="tix${cls}${anim ? " rise" : ""} tix--clickable" style="--gc:${gc}" data-match-id="${m.no}">
+    return `<article class="tix${cls}${anim ? " stagger-rise" : ""} tix--clickable" style="--gc:${gc}" data-match-id="${m.no}">
       <span class="tix__tab"></span>
       <div class="tix__main">
         <div class="tix__teams">${teamRow(m.t1, g1, lead1)}${scorers1}<div class="vs">vs</div>${teamRow(m.t2, g2, lead2)}${scorers2}</div>
@@ -437,7 +472,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
           <td class="l"><span class="tm"><span class="fl">${fl(r.t)}</span><a class="nm teamlink" data-team="${esc(r.t)}" href="#">${esc(r.t)}</a>${host}</span></td>
           <td>${r.p}</td><td class="w-col">${r.w}</td><td>${r.d}</td><td class="l-col">${r.l}</td><td class="gf-col">${r.gf}</td><td class="ga-col">${r.ga}</td><td class="${gdCls}">${formatGD(gd, played)}</td><td class="pts">${r.pts}</td></tr>`;
       }).join("");
-      html += `<div class="gcard${anim ? " rise" : ""}" style="--gc:${data.gcolor[g]}">
+      html += `<div class="gcard${anim ? " stagger-rise" : ""}" style="--gc:${data.gcolor[g]}">
         <div class="gcard__h">Group ${g}<span class="pl">${played ? played + " played" : "not started"}</span></div>
         <div class="tbl-wrap"><table class="tbl"><colgroup><col class="tbl__pos" /><col class="tbl__team" /><col class="tbl__stat" /><col class="tbl__stat" /><col class="tbl__stat" /><col class="tbl__stat" /><col class="tbl__gf" /><col class="tbl__ga" /><col class="tbl__gd" /><col class="tbl__pts" /></colgroup><thead><tr><th class="l"></th><th class="l">Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead>
         <tbody>${body}</tbody></table></div></div>`;
@@ -468,7 +503,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       } else {
         top = `<div class="kotix__top"><div class="pend">Pending FIFA Confirmation<span class="dot">vs</span>Pending FIFA Confirmation</div></div>`;
       }
-      html += `<article class="kotix${cls}${anim ? " rise" : ""}">${top}
+      html += `<article class="kotix${cls}${anim ? " stagger-rise" : ""}">${top}
         <div class="kotix__foot"><span>📍</span><span class="ven">${esc(v.common)}</span>· ${esc(v.city)}, ${esc(v.country)}
         <span class="dt">${DOW[t.getDay()]} ${t.getDate()} ${MON[t.getMonth()]} · ${esc(k.et)}${k.local !== k.et ? ` (${esc(k.local)})` : ""}</span></div></article>`;
     }
@@ -480,7 +515,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     const order = Object.entries(data.venues).sort((a, b) => b[1].cap - a[1].cap);
     return order.map(([, v]) => {
       const flag = v.country === "USA" ? "🇺🇸" : v.country === "Mexico" ? "🇲🇽" : "🇨🇦";
-      return `<div class="vcard${anim ? " rise" : ""}"><div class="vcard__cap"><b>${(v.cap / 1000).toFixed(v.cap % 1000 ? 1 : 0)}k</b><span>Seats</span></div>
+      return `<div class="vcard${anim ? " stagger-rise" : ""}"><div class="vcard__cap"><b>${(v.cap / 1000).toFixed(v.cap % 1000 ? 1 : 0)}k</b><span>Seats</span></div>
         <div class="vcard__b"><h4>${esc(v.common)}</h4><div class="meta">${esc(v.city)}, ${esc(v.country)}</div>
         <div class="fifa">Tournament name: ${esc(v.fifa)}</div></div><span class="flag-c">${flag}</span></div>`;
     }).join("");
@@ -666,21 +701,33 @@ export default function Tournament({ data }: { data: TournamentData }) {
         </div>
       )}
 
-      {view === "bracket" ? (
-        <BracketBuilder flags={data.flags} groups={data.groups} gcolor={data.gcolor} />
-      ) : view === "stats" ? (
-        <StatsView data={data} fixtures={fixtures} fl={fl} computeLeaders={computeLeaders} />
-      ) : (
-        <main
-          ref={mainRef}
-          className={view !== "groups" && view !== "knockout" ? "section" : undefined}
-          dangerouslySetInnerHTML={{ __html: viewContent }}
-        />
-      )}
+      <div key={view} className="view-transition">
+        {view === "bracket" ? (
+          <BracketBuilder flags={data.flags} groups={data.groups} gcolor={data.gcolor} />
+        ) : view === "stats" ? (
+          <StatsView data={data} fixtures={fixtures} fl={fl} computeLeaders={computeLeaders} />
+        ) : (
+          <main
+            ref={mainRef}
+            className={view !== "groups" && view !== "knockout" ? "section" : undefined}
+            dangerouslySetInnerHTML={{ __html: viewContent }}
+          />
+        )}
+      </div>
 
       <div className="foot">
         All data is unofficial &middot; FIFA is the source of record &middot; Knockout teams fill in as results are confirmed
       </div>
+
+      {goalToast && (
+        <div className={`goal-toast${toastExiting ? " goal-toast--exit" : ""}`} role="status" aria-live="assertive">
+          <span className="goal-toast__icon">⚽</span>
+          <div>
+            <div className="goal-toast__text">{goalToast.flag} GOAL! {goalToast.player} {goalToast.minute}</div>
+            <div className="goal-toast__sub">{goalToast.score}</div>
+          </div>
+        </div>
+      )}
 
       {teamDrawer && <TeamDrawer name={teamDrawer} flags={data.flags} groups={data.groups} gcolor={data.gcolor} gs={data.gs} hosts={data.hosts} onClose={() => setTeamDrawer(null)} onPlayerClick={(p, t) => { setTeamDrawer(null); setPlayerProfile({ name: p, team: t }); }} />}
       {matchDetail && <MatchDetailDrawer match={matchDetail.match} initialFixture={matchDetail.fixture} fixtures={fixtures} flags={data.flags} venues={data.venues} gcolor={data.gcolor} allMatches={data.gs} vName={vName} findLive={findLive} onClose={() => setMatchDetail(null)} onTeamClick={(t) => { setMatchDetail(null); setTeamDrawer(t); }} onPlayerClick={(p, t) => { setMatchDetail(null); setPlayerProfile({ name: p, team: t }); }} />}
@@ -694,9 +741,11 @@ function CountdownHero({ data, fixtures, findLive }: {
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
 }) {
+  const [mounted, setMounted] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    queueMicrotask(() => setNow(Date.now()));
+    setMounted(true);
+    setNow(Date.now());
     const id = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 1000);
     return () => clearInterval(id);
   }, []);
@@ -764,12 +813,12 @@ function CountdownHero({ data, fixtures, findLive }: {
   return (
     <div className="cd-hero" role="button" tabIndex={0} onClick={jumpToNext} onKeyDown={handleKey} aria-label="Jump to next match">
       <div className="cd-hero__label">NEXT MATCH <span className="cd-hero__tap" aria-hidden="true">↘</span></div>
-      <div className="cd-hero__countdown">
-        <span className="cd-hero__digit">{pad(h)}</span>
+      <div className="cd-hero__countdown" suppressHydrationWarning>
+        <span className="cd-hero__digit" suppressHydrationWarning>{mounted ? pad(h) : "--"}</span>
         <span className="cd-hero__colon">:</span>
-        <span className="cd-hero__digit">{pad(mn)}</span>
+        <span className="cd-hero__digit" suppressHydrationWarning>{mounted ? pad(mn) : "--"}</span>
         <span className="cd-hero__colon">:</span>
-        <span className="cd-hero__digit">{pad(s)}</span>
+        <span className="cd-hero__digit" suppressHydrationWarning>{mounted ? pad(s) : "--"}</span>
       </div>
       {useGs && nextGs ? (
         <div className="cd-hero__teams">
@@ -1226,6 +1275,19 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
               })}
             </div>
           </div>
+        )}
+
+        {(isDone || isLive) && typeof navigator !== "undefined" && navigator.share && (
+          <button
+            className="share-btn"
+            style={{ margin: "8px auto 4px", display: "flex" }}
+            onClick={() => {
+              const text = `${flags[match.t1] || ""} ${match.t1} ${scoreGh} – ${scoreGa} ${match.t2} ${flags[match.t2] || ""}\n${isDone ? "Full Time" : `${fixture?.elapsed || ""}'`} · FIFA World Cup 2026`;
+              navigator.share({ text }).catch(() => {});
+            }}
+          >
+            ↗ Share Result
+          </button>
         )}
 
         {!isUpcoming && (

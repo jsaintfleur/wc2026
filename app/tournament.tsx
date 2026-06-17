@@ -114,6 +114,10 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const scrolledRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
 
+  /* PWA install prompt — captured from beforeinstallprompt event */
+  const deferredPromptRef = useRef<any>(null);
+  const [showInstall, setShowInstall] = useState(false);
+
   const pollLive = useCallback(async () => {
     if (isMock()) {
       setFixtures(MOCK_FIXTURES as LiveFixture[]);
@@ -179,8 +183,14 @@ export default function Tournament({ data }: { data: TournamentData }) {
         el.textContent = diff <= 0 ? "kicking off now" : human(diff);
       });
     }, 1000);
+    /* PWA: capture the install prompt so we can trigger it from the UI */
+    const onBip = (e: Event) => { e.preventDefault(); deferredPromptRef.current = e; setShowInstall(true); };
+    window.addEventListener("beforeinstallprompt", onBip);
+    /* Hide install banner if the app is already installed */
+    if (window.matchMedia("(display-mode: standalone)").matches) setShowInstall(false);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("beforeinstallprompt", onBip);
       if (timerRef.current) clearInterval(timerRef.current);
       clearInterval(refreshTimer);
       clearInterval(countdownTimer);
@@ -521,10 +531,22 @@ export default function Tournament({ data }: { data: TournamentData }) {
     }).join("");
   }
 
-  /** Aggregate goal and assist tallies from all finished match events */
+  /** Aggregate goal/assist tallies and tournament-wide stats from all finished match events */
   function computeLeaders() {
     const scorers: Record<string, { name: string; team: string; goals: number; penalties: number }> = {};
     const assisters: Record<string, { name: string; team: string; assists: number }> = {};
+    const teamGoals: Record<string, { team: string; goals: number }> = {};
+    const cardPlayers: Record<string, { name: string; team: string; yellows: number; reds: number }> = {};
+
+    // Goals-by-minute buckets: 0-15, 16-30, 31-45, 46-60, 61-75, 76-90, 90+
+    const minuteBuckets = [0, 0, 0, 0, 0, 0, 0];
+    let totalGoals = 0;
+    let normalGoals = 0;
+    let penGoals = 0;
+    let ownGoals = 0;
+    let totalYellows = 0;
+    let totalReds = 0;
+    let totalSubs = 0;
 
     const allEvents: { events: MatchEvent[]; team?: string }[] = [];
 
@@ -536,7 +558,6 @@ export default function Tournament({ data }: { data: TournamentData }) {
     // From DB-stored events on group stage matches (fallback for matches not in current live feed)
     for (const m of data.gs) {
       if (m.dbEvents && m.dbEvents.length > 0) {
-        // Avoid double-counting: skip if we already have a fixture with matching timestamp
         const already = fixtures.some(f => Math.abs(f.ts - m.ts) < 60000 && f.events && f.events.length > 0);
         if (!already) allEvents.push({ events: m.dbEvents });
       }
@@ -544,11 +565,49 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
     for (const { events } of allEvents) {
       for (const ev of events) {
+        // ── Cards ──
+        if (ev.type === "Card") {
+          const isRed = ev.detail.includes("Red");
+          if (isRed) totalReds++;
+          else totalYellows++;
+
+          const cKey = `${ev.player}|${ev.team}`;
+          if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: ev.player, team: ev.team, yellows: 0, reds: 0 };
+          if (isRed) cardPlayers[cKey].reds++;
+          else cardPlayers[cKey].yellows++;
+          continue;
+        }
+
+        // ── Substitutions ──
+        if (ev.type === "subst") {
+          totalSubs++;
+          continue;
+        }
+
+        // ── Goals ──
         if (ev.type !== "Goal") continue;
+        totalGoals++;
 
         const isPen = ev.detail === "Penalty";
         const isOG = ev.detail === "Own Goal";
-        if (isOG) continue; // own goals don't count for the scorer
+        if (isOG) { ownGoals++; }
+        else if (isPen) { penGoals++; }
+        else { normalGoals++; }
+
+        const m = ev.minute;
+        if (m <= 15) minuteBuckets[0]++;
+        else if (m <= 30) minuteBuckets[1]++;
+        else if (m <= 45) minuteBuckets[2]++;
+        else if (m <= 60) minuteBuckets[3]++;
+        else if (m <= 75) minuteBuckets[4]++;
+        else if (m <= 90 && !ev.extra) minuteBuckets[5]++;
+        else minuteBuckets[6]++;
+
+        const tKey = ev.team;
+        if (!teamGoals[tKey]) teamGoals[tKey] = { team: tKey, goals: 0 };
+        teamGoals[tKey].goals++;
+
+        if (isOG) continue;
 
         const pKey = `${ev.player}|${ev.team}`;
         if (!scorers[pKey]) scorers[pKey] = { name: ev.player, team: ev.team, goals: 0, penalties: 0 };
@@ -563,15 +622,49 @@ export default function Tournament({ data }: { data: TournamentData }) {
       }
     }
 
+    // Count finished matches and clean sheets
+    const finishedKeys = new Set<string>();
+    let cleanSheets = 0;
+    for (const f of fixtures) {
+      if (!DONE_STATUSES.has(f.status) || f.gh == null || f.ga == null) continue;
+      const key = canon(f.home) + ":" + canon(f.away);
+      if (finishedKeys.has(key)) continue;
+      finishedKeys.add(key);
+      if (f.gh === 0) cleanSheets++;
+      if (f.ga === 0) cleanSheets++;
+    }
+    for (const m of data.gs) {
+      if (m.score == null) continue;
+      const key = canon(m.home) + ":" + canon(m.away);
+      if (finishedKeys.has(key)) continue;
+      finishedKeys.add(key);
+      const [h, a] = m.score.split("-").map(Number);
+      if (h === 0) cleanSheets++;
+      if (a === 0) cleanSheets++;
+    }
+
+    const matchesPlayed = finishedKeys.size;
+    const avgGoals = matchesPlayed > 0 ? +(totalGoals / matchesPlayed).toFixed(1) : 0;
+
     const topScorers = Object.values(scorers).sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, 20);
     const topAssisters = Object.values(assisters).sort((a, b) => b.assists - a.assists || a.name.localeCompare(b.name)).slice(0, 20);
-    return { topScorers, topAssisters };
+    const topTeams = Object.values(teamGoals).sort((a, b) => b.goals - a.goals || a.team.localeCompare(b.team)).slice(0, 12);
+    const mostCarded = Object.values(cardPlayers).sort((a, b) => (b.yellows + b.reds * 3) - (a.yellows + a.reds * 3) || a.name.localeCompare(b.name)).slice(0, 15);
+    const bucketLabels = ["1-15", "16-30", "31-45", "46-60", "61-75", "76-90", "90+"];
+
+    return {
+      topScorers, topAssisters, topTeams, mostCarded,
+      minuteBuckets, bucketLabels,
+      totalGoals, normalGoals, penGoals, ownGoals,
+      totalYellows, totalReds, totalSubs,
+      matchesPlayed, avgGoals, cleanSheets,
+    };
   }
 
   function renderAbout(): string {
     return `<div class="about">
       <h3>About this app</h3>
-      <p>A mobile companion to the 2026 FIFA World Cup across Canada, Mexico and the United States. Scores, statistics, lineups and group tables update live during matches. Tap any match card for detailed statistics, lineups and a full timeline.</p>
+      <p><b>Compet 2026</b> is a mobile companion to the 2026 FIFA World Cup across Canada, Mexico and the United States. Scores, statistics, lineups and group tables update live during matches. Tap any match card for detailed statistics, lineups and a full timeline. Install as an app from your browser for the best experience.</p>
       <h3>Live scores &amp; stats</h3>
       <p>Match data updates automatically during live matches. When no matches are in play, the confirmed schedule is displayed. All data is unofficial; FIFA is the source of record.</p>
       <h3>Knockout bracket</h3>
@@ -621,9 +714,12 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
       <section className="hero">
         <div className="hero__pitch-lines" aria-hidden="true" />
-        <TriondaBall id="hero" className="hero__ball" />
+        <div className="hero__centerpiece">
+          <WorldCupTrophy id="hero-trophy" className="hero__trophy" />
+          <TriondaBall id="hero" className="hero__ball" />
+        </div>
         <div className="hero__eyebrow">Canada &middot; Mexico &middot; United States</div>
-        <h1 className="hero__title">WORLD CUP<br />2026</h1>
+        <h1 className="hero__title">COMPET<br />2026</h1>
         <div className="hero__sub">Live scores, fixtures, tables and bracket picks</div>
         <div className="hero__host-row" aria-label="Host nations">
           <span>🇨🇦 Canada</span>
@@ -714,6 +810,27 @@ export default function Tournament({ data }: { data: TournamentData }) {
           />
         )}
       </div>
+
+      {showInstall && (
+        <div className="install-banner">
+          <div className="install-banner__icon">
+            <img src="/icon-192.svg" alt="" width={40} height={40} />
+          </div>
+          <div className="install-banner__text">
+            <strong>Install Compet 2026</strong>
+            <span>Add to home screen for live scores &amp; offline access</span>
+          </div>
+          <button className="install-banner__btn" onClick={async () => {
+            const p = deferredPromptRef.current;
+            if (!p) return;
+            p.prompt();
+            const { outcome } = await p.userChoice;
+            if (outcome === "accepted") setShowInstall(false);
+            deferredPromptRef.current = null;
+          }}>Install</button>
+          <button className="install-banner__close" onClick={() => setShowInstall(false)} aria-label="Dismiss">&times;</button>
+        </div>
+      )}
 
       <div className="foot">
         All data is unofficial &middot; FIFA is the source of record &middot; Knockout teams fill in as results are confirmed
@@ -1782,7 +1899,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   );
 }
 
-/** Stats view — top scorers, top assisters, trophy display */
+/** Stats view — tournament dashboard with visualizations */
 function StatsView({ data, fixtures, fl, computeLeaders }: {
   data: TournamentData;
   fixtures: LiveFixture[];
@@ -1790,10 +1907,35 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
   computeLeaders: () => {
     topScorers: { name: string; team: string; goals: number; penalties: number }[];
     topAssisters: { name: string; team: string; assists: number }[];
+    topTeams: { team: string; goals: number }[];
+    mostCarded: { name: string; team: string; yellows: number; reds: number }[];
+    minuteBuckets: number[];
+    bucketLabels: string[];
+    totalGoals: number;
+    normalGoals: number;
+    penGoals: number;
+    ownGoals: number;
+    totalYellows: number;
+    totalReds: number;
+    totalSubs: number;
+    matchesPlayed: number;
+    avgGoals: number;
+    cleanSheets: number;
   };
 }) {
-  const { topScorers, topAssisters } = useMemo(() => computeLeaders(), [fixtures, computeLeaders]);
+  const stats = useMemo(() => computeLeaders(), [fixtures, computeLeaders]);
+  const {
+    topScorers, topAssisters, topTeams, mostCarded,
+    minuteBuckets, bucketLabels,
+    totalGoals, normalGoals, penGoals, ownGoals,
+    totalYellows, totalReds, totalSubs,
+    matchesPlayed, avgGoals, cleanSheets,
+  } = stats;
   const hasData = topScorers.length > 0 || topAssisters.length > 0;
+  const hasCards = totalYellows > 0 || totalReds > 0;
+  const maxBucket = Math.max(...minuteBuckets, 1);
+  const maxScorerGoals = topScorers.length > 0 ? topScorers[0].goals : 1;
+  const maxTeamGoals = topTeams.length > 0 ? topTeams[0].goals : 1;
 
   return (
     <main className="section stats-view">
@@ -1802,70 +1944,209 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
         <WorldCupTrophy id="st" className="stats-trophy__svg" />
       </div>
 
-      {!hasData && (
+      {!hasData && !hasCards && (
         <div className="stats-empty">
           <p>Goal and assist tallies appear here once matches finish.</p>
           <p className="stats-empty__sub">Data updates automatically from live match events.</p>
         </div>
       )}
 
-      {topScorers.length > 0 && (
-        <section className="stats-table-wrap">
-          <h3 className="stats-heading">Top Scorers</h3>
-          <table className="stats-table">
-            <thead>
-              <tr>
-                <th className="stats-rank">#</th>
-                <th className="stats-player">Player</th>
-                <th className="stats-num">G</th>
-                <th className="stats-num">P</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topScorers.map((s, i) => (
-                <tr key={`${s.name}-${s.team}`} className={i === 0 ? "stats-gold" : i === 1 ? "stats-silver" : i === 2 ? "stats-bronze" : ""}>
-                  <td className="stats-rank">{i + 1}</td>
-                  <td className="stats-player">
-                    <span className="stats-flag">{fl(s.team)}</span>
-                    <span className="stats-name">{s.name}</span>
-                    <span className="stats-team">{s.team}</span>
-                  </td>
-                  <td className="stats-num stats-goals">{s.goals}</td>
-                  <td className="stats-num stats-pen">{s.penalties > 0 ? s.penalties : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="stats-legend">G = Goals &middot; P = Penalties (included in G)</div>
+      {/* ── Tournament summary cards — two rows ── */}
+      {(hasData || hasCards) && (
+        <>
+          <div className="stats-summary">
+            <div className="stats-card stagger-rise">
+              <span className="stats-card__value">{totalGoals}</span>
+              <span className="stats-card__label">Goals</span>
+            </div>
+            <div className="stats-card stagger-rise">
+              <span className="stats-card__value">{matchesPlayed}</span>
+              <span className="stats-card__label">Matches</span>
+            </div>
+            <div className="stats-card stagger-rise">
+              <span className="stats-card__value">{avgGoals}</span>
+              <span className="stats-card__label">Avg / Match</span>
+            </div>
+            <div className="stats-card stagger-rise">
+              <span className="stats-card__value">{cleanSheets}</span>
+              <span className="stats-card__label">Clean Sheets</span>
+            </div>
+          </div>
+          <div className="stats-summary stats-summary--secondary">
+            <div className="stats-card stats-card--yellow stagger-rise">
+              <span className="stats-card__value">{totalYellows}</span>
+              <span className="stats-card__label">Yellows</span>
+            </div>
+            <div className="stats-card stats-card--red stagger-rise">
+              <span className="stats-card__value">{totalReds}</span>
+              <span className="stats-card__label">Reds</span>
+            </div>
+            <div className="stats-card stats-card--sub stagger-rise">
+              <span className="stats-card__value">{totalSubs}</span>
+              <span className="stats-card__label">Subs</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Goal type breakdown ── */}
+      {totalGoals > 0 && (
+        <section className="stats-section">
+          <h3 className="stats-heading">Goal Types</h3>
+          <div className="stats-type-row">
+            <div className="stats-type-item">
+              <div className="stats-type-bar" style={{ "--bar-pct": `${(normalGoals / totalGoals) * 100}%` } as React.CSSProperties}>
+                <span className="stats-type-fill stats-type-fill--normal" />
+              </div>
+              <span className="stats-type-count">{normalGoals}</span>
+              <span className="stats-type-label">Open Play</span>
+            </div>
+            <div className="stats-type-item">
+              <div className="stats-type-bar" style={{ "--bar-pct": `${(penGoals / totalGoals) * 100}%` } as React.CSSProperties}>
+                <span className="stats-type-fill stats-type-fill--pen" />
+              </div>
+              <span className="stats-type-count">{penGoals}</span>
+              <span className="stats-type-label">Penalty</span>
+            </div>
+            <div className="stats-type-item">
+              <div className="stats-type-bar" style={{ "--bar-pct": `${(ownGoals / totalGoals) * 100}%` } as React.CSSProperties}>
+                <span className="stats-type-fill stats-type-fill--og" />
+              </div>
+              <span className="stats-type-count">{ownGoals}</span>
+              <span className="stats-type-label">Own Goal</span>
+            </div>
+          </div>
         </section>
       )}
 
+      {/* ── Goals by minute distribution ── */}
+      {totalGoals > 0 && (
+        <section className="stats-section">
+          <h3 className="stats-heading">When Goals Are Scored</h3>
+          <div className="stats-chart">
+            {minuteBuckets.map((count, i) => (
+              <div key={bucketLabels[i]} className="stats-bar-col">
+                <span className="stats-bar-val">{count || ""}</span>
+                <div className="stats-bar" style={{ "--bar-h": `${(count / maxBucket) * 100}%` } as React.CSSProperties} />
+                <span className="stats-bar-label">{bucketLabels[i]}</span>
+              </div>
+            ))}
+          </div>
+          <div className="stats-chart-axis">Minutes</div>
+        </section>
+      )}
+
+      {/* ── Top Scorers with visual bars ── */}
+      {topScorers.length > 0 && (
+        <section className="stats-section">
+          <h3 className="stats-heading">Top Scorers</h3>
+          <div className="stats-scorer-list">
+            {topScorers.slice(0, 10).map((s, i) => (
+              <div key={`${s.name}-${s.team}`} className={`stats-scorer stagger-rise${i < 3 ? ` stats-scorer--${["gold","silver","bronze"][i]}` : ""}`}>
+                <span className="stats-scorer__rank">{i + 1}</span>
+                <span className="stats-scorer__flag">{fl(s.team)}</span>
+                <div className="stats-scorer__info">
+                  <span className="stats-scorer__name">{s.name}</span>
+                  <span className="stats-scorer__team">{s.team}</span>
+                </div>
+                <div className="stats-scorer__bar-wrap">
+                  <div className="stats-scorer__bar" style={{ "--bar-w": `${(s.goals / maxScorerGoals) * 100}%` } as React.CSSProperties} />
+                </div>
+                <span className="stats-scorer__goals">{s.goals}</span>
+                {s.penalties > 0 && <span className="stats-scorer__pen">({s.penalties}p)</span>}
+              </div>
+            ))}
+          </div>
+          {topScorers.length > 10 && (
+            <details className="stats-expand">
+              <summary>Show all {topScorers.length} scorers</summary>
+              <div className="stats-scorer-list">
+                {topScorers.slice(10).map((s, i) => (
+                  <div key={`${s.name}-${s.team}`} className="stats-scorer">
+                    <span className="stats-scorer__rank">{i + 11}</span>
+                    <span className="stats-scorer__flag">{fl(s.team)}</span>
+                    <div className="stats-scorer__info">
+                      <span className="stats-scorer__name">{s.name}</span>
+                      <span className="stats-scorer__team">{s.team}</span>
+                    </div>
+                    <div className="stats-scorer__bar-wrap">
+                      <div className="stats-scorer__bar" style={{ "--bar-w": `${(s.goals / maxScorerGoals) * 100}%` } as React.CSSProperties} />
+                    </div>
+                    <span className="stats-scorer__goals">{s.goals}</span>
+                    {s.penalties > 0 && <span className="stats-scorer__pen">({s.penalties}p)</span>}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </section>
+      )}
+
+      {/* ── Top Assists ── */}
       {topAssisters.length > 0 && (
-        <section className="stats-table-wrap">
+        <section className="stats-section">
           <h3 className="stats-heading">Top Assists</h3>
-          <table className="stats-table">
-            <thead>
-              <tr>
-                <th className="stats-rank">#</th>
-                <th className="stats-player">Player</th>
-                <th className="stats-num">A</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topAssisters.map((a, i) => (
-                <tr key={`${a.name}-${a.team}`} className={i === 0 ? "stats-gold" : i === 1 ? "stats-silver" : i === 2 ? "stats-bronze" : ""}>
-                  <td className="stats-rank">{i + 1}</td>
-                  <td className="stats-player">
-                    <span className="stats-flag">{fl(a.team)}</span>
-                    <span className="stats-name">{a.name}</span>
-                    <span className="stats-team">{a.team}</span>
-                  </td>
-                  <td className="stats-num stats-goals">{a.assists}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="stats-legend">A = Assists</div>
+          <div className="stats-scorer-list">
+            {topAssisters.slice(0, 10).map((a, i) => (
+              <div key={`${a.name}-${a.team}`} className={`stats-scorer stagger-rise${i < 3 ? ` stats-scorer--${["gold","silver","bronze"][i]}` : ""}`}>
+                <span className="stats-scorer__rank">{i + 1}</span>
+                <span className="stats-scorer__flag">{fl(a.team)}</span>
+                <div className="stats-scorer__info">
+                  <span className="stats-scorer__name">{a.name}</span>
+                  <span className="stats-scorer__team">{a.team}</span>
+                </div>
+                <div className="stats-scorer__bar-wrap">
+                  <div className="stats-scorer__bar stats-scorer__bar--assist" style={{ "--bar-w": `${(a.assists / (topAssisters[0]?.assists || 1)) * 100}%` } as React.CSSProperties} />
+                </div>
+                <span className="stats-scorer__goals">{a.assists}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Discipline — most carded players ── */}
+      {mostCarded.length > 0 && (
+        <section className="stats-section">
+          <h3 className="stats-heading">Discipline</h3>
+          <div className="stats-scorer-list">
+            {mostCarded.map((c, i) => (
+              <div key={`${c.name}-${c.team}`} className="stats-scorer stagger-rise">
+                <span className="stats-scorer__rank">{i + 1}</span>
+                <span className="stats-scorer__flag">{fl(c.team)}</span>
+                <div className="stats-scorer__info">
+                  <span className="stats-scorer__name">{c.name}</span>
+                  <span className="stats-scorer__team">{c.team}</span>
+                </div>
+                <div className="stats-card-icons">
+                  {c.yellows > 0 && <span className="stats-card-icon stats-card-icon--yellow" title="Yellow cards">{c.yellows > 1 ? `${c.yellows}x` : ""}🟨</span>}
+                  {c.reds > 0 && <span className="stats-card-icon stats-card-icon--red" title="Red cards">{c.reds > 1 ? `${c.reds}x` : ""}🟥</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Team Goals leaderboard ── */}
+      {topTeams.length > 0 && (
+        <section className="stats-section">
+          <h3 className="stats-heading">Goals by Team</h3>
+          <div className="stats-scorer-list">
+            {topTeams.map((t, i) => (
+              <div key={t.team} className="stats-team-row stagger-rise">
+                <span className="stats-scorer__rank">{i + 1}</span>
+                <span className="stats-scorer__flag" style={{ fontSize: 20 }}>{fl(t.team)}</span>
+                <div className="stats-scorer__info">
+                  <span className="stats-scorer__name">{t.team}</span>
+                </div>
+                <div className="stats-scorer__bar-wrap">
+                  <div className="stats-scorer__bar stats-scorer__bar--team" style={{ "--bar-w": `${(t.goals / maxTeamGoals) * 100}%` } as React.CSSProperties} />
+                </div>
+                <span className="stats-scorer__goals">{t.goals}</span>
+              </div>
+            ))}
+          </div>
         </section>
       )}
     </main>

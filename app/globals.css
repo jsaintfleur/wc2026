@@ -200,18 +200,42 @@ body::after {
   border-width: 0 0 0 2px;
 }
 
-/* Trionda ball in hero — background-image zoomed in to crop the product photo edges */
-.hero__ball {
+/* Trophy + ball centerpiece in hero */
+.hero__centerpiece {
   position: absolute;
-  right: 16px;
-  top: 16px;
-  width: 80px;
-  height: 80px;
+  right: 12px;
+  top: 8px;
   z-index: 1;
-  opacity: .85;
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+}
+.hero__trophy {
+  width: 80px;
+  height: auto;
+  filter: drop-shadow(0 8px 24px rgba(212, 168, 67, 0.3));
+  animation: trophyFloat 3s ease-in-out infinite;
+}
+.hero__ball {
+  width: 32px;
+  height: 32px;
+  opacity: .9;
   border-radius: 50%;
-  filter: drop-shadow(0 12px 24px rgba(0,0,0,0.35));
-  box-shadow: inset 0 0 4px 3px rgba(6, 9, 16, 0.6);
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35));
+  box-shadow: inset 0 0 3px 2px rgba(6, 9, 16, 0.5);
+  animation: ballBounce 2s ease-in-out infinite;
+  margin-left: -8px;
+  margin-bottom: 4px;
+}
+@keyframes trophyFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes ballBounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-14px) scale(0.95); }
+  60% { transform: translateY(-14px) scale(0.95); }
+  80% { transform: translateY(2px) scale(1.04, 0.96); }
 }
 
 .hero__eyebrow {
@@ -539,6 +563,7 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   .score-flash, .tix.goal-scored { animation: none; }
   .stagger-rise { animation: none !important; }
+  .hero__trophy, .hero__ball { animation: none; }
 }
 
 /* Staggered card entrance — each card delays slightly */
@@ -3020,7 +3045,9 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .hero { padding: 18px 14px 18px; min-height: 220px; }
   .hero__title { font-size: 36px; }
   .hero__eyebrow { font-size: 10px; letter-spacing: 3px; }
-  .hero__ball { width: 52px; height: 52px; right: 10px; top: 12px; }
+  .hero__trophy { width: 60px; }
+  .hero__ball { width: 24px; height: 24px; }
+  .hero__centerpiece { right: 8px; top: 6px; }
   .hero__pitch-lines { width: 160px; height: 160px; right: -50px; }
   .stat { min-width: 54px; padding: 6px 8px; }
   .stat b { font-size: 20px; }
@@ -3054,7 +3081,9 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .hero__title { font-size: 56px; }
   .hero__eyebrow { font-size: 12px; letter-spacing: 5px; }
   .hero__sub { font-size: 14px; max-width: 400px; }
-  .hero__ball { width: 100px; height: 100px; right: 24px; top: 20px; }
+  .hero__trophy { width: 100px; }
+  .hero__ball { width: 38px; height: 38px; }
+  .hero__centerpiece { right: 20px; top: 14px; }
   .hero__pitch-lines { width: 240px; height: 240px; right: -30px; }
   .hero__stats { gap: 10px; }
   .stat { min-width: 72px; padding: 10px 12px; }
@@ -3089,7 +3118,9 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .tab:hover { color: #fff; }
   .hero { padding: 36px 32px 32px; min-height: 300px; }
   .hero__title { font-size: 60px; }
-  .hero__ball { width: 120px; height: 120px; right: 32px; top: 24px; }
+  .hero__trophy { width: 120px; }
+  .hero__ball { width: 44px; height: 44px; }
+  .hero__centerpiece { right: 28px; top: 18px; }
   .hero__pitch-lines { width: 260px; height: 260px; right: -20px; }
   .tix--clickable:hover { transform: translateY(-2px); box-shadow: 0 20px 48px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1); }
   .gcard:hover { border-color: rgba(255,255,255,0.12); }
@@ -3124,9 +3155,9 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .stats-empty p { margin: 0 0 8px; font-size: 14px; }
 .stats-empty__sub { font-size: 12px; opacity: 0.6; }
 
-/* Table section */
-.stats-table-wrap {
-  margin: 0 0 24px;
+/* Section wrapper — replaces old .stats-table-wrap */
+.stats-section {
+  margin: 0 0 28px;
 }
 .stats-heading {
   font-family: var(--disp);
@@ -3135,106 +3166,372 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   padding: 0 4px;
 }
 
-/* The table itself */
-.stats-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  line-height: 1.3;
+/* ── Summary cards ── */
+.stats-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 0 0 24px;
 }
-.stats-table thead th {
-  font-family: var(--disp);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--muted);
-  padding: 6px 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  text-align: left;
-}
-.stats-table tbody tr {
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  transition: background 0.15s ease;
-}
-.stats-table tbody tr:hover {
-  background: rgba(255,255,255,0.03);
-}
-.stats-table td {
-  padding: 10px 8px;
-  vertical-align: middle;
-}
-
-/* Rank column */
-.stats-rank {
-  width: 32px;
+.stats-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 14px 8px;
   text-align: center;
-  font-weight: 700;
-  font-family: var(--disp);
-  color: var(--muted);
-}
-
-/* Player cell */
-.stats-player {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
 }
-.stats-flag { font-size: 16px; flex: 0 0 auto; }
-.stats-name {
-  font-weight: 600;
+.stats-card__value {
+  font-family: var(--disp);
+  font-size: 24px;
+  font-weight: 800;
   color: #fff;
-  white-space: nowrap;
+  line-height: 1;
 }
-.stats-team {
-  font-size: 11px;
+.stats-card__label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
   color: var(--muted);
   opacity: 0.7;
 }
 
-/* Numeric columns */
-.stats-num {
-  width: 36px;
+/* Secondary summary row — yellows, reds, subs */
+.stats-summary--secondary {
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: -4px;
+}
+.stats-card--yellow {
+  border-color: rgba(250, 204, 21, 0.2);
+}
+.stats-card--yellow .stats-card__value { color: #facc15; }
+.stats-card--red {
+  border-color: rgba(239, 68, 68, 0.2);
+}
+.stats-card--red .stats-card__value { color: #ef4444; }
+.stats-card--sub {
+  border-color: rgba(96, 165, 250, 0.15);
+}
+.stats-card--sub .stats-card__value { color: #60a5fa; }
+
+/* Card icons in discipline table */
+.stats-card-icons {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.stats-card-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.stats-card-icon--yellow { filter: drop-shadow(0 1px 2px rgba(250, 204, 21, 0.3)); }
+.stats-card-icon--red { filter: drop-shadow(0 1px 2px rgba(239, 68, 68, 0.3)); }
+
+/* ── Goal type breakdown ── */
+.stats-type-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stats-type-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+}
+.stats-type-bar {
+  height: 8px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 0;
+}
+.stats-type-fill {
+  display: block;
+  height: 100%;
+  width: var(--bar-pct);
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+.stats-type-fill--normal { background: linear-gradient(90deg, #60a5fa, #3b82f6); }
+.stats-type-fill--pen { background: linear-gradient(90deg, #facc15, #eab308); }
+.stats-type-fill--og { background: linear-gradient(90deg, #f87171, #ef4444); }
+
+.stats-type-count {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+  width: 24px;
+  text-align: right;
+}
+.stats-type-label {
+  font-size: 11px;
+  color: var(--muted);
+  width: 60px;
+}
+
+/* ── Goals by minute bar chart ── */
+.stats-chart {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  height: 120px;
+  padding: 0 4px;
+}
+.stats-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  justify-content: flex-end;
+}
+.stats-bar-val {
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  min-height: 14px;
+}
+.stats-bar {
+  width: 100%;
+  max-width: 40px;
+  height: var(--bar-h, 0%);
+  min-height: 2px;
+  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+  border-radius: 4px 4px 0 0;
+  transition: height 0.6s ease;
+}
+.stats-bar-label {
+  font-size: 9px;
+  color: var(--muted);
+  font-family: var(--disp);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.stats-chart-axis {
+  text-align: center;
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.5;
+  margin-top: 4px;
+}
+
+/* ── Scorer / assist / team rows (shared layout) ── */
+.stats-scorer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stats-scorer, .stats-team-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+.stats-scorer:hover, .stats-team-row:hover {
+  background: rgba(255,255,255,0.03);
+}
+.stats-scorer__rank {
+  width: 22px;
   text-align: center;
   font-family: var(--disp);
   font-weight: 700;
-}
-.stats-goals { color: #fff; font-size: 15px; }
-.stats-pen { color: var(--muted); font-size: 12px; }
-th.stats-num { text-align: center; }
-
-/* Medal rows */
-.stats-gold .stats-rank { color: #f5d77a; }
-.stats-gold .stats-name { color: #f5d77a; }
-.stats-gold { background: rgba(245, 215, 122, 0.06); }
-
-.stats-silver .stats-rank { color: #c0c0c0; }
-.stats-silver .stats-name { color: #d4d4d8; }
-.stats-silver { background: rgba(192, 192, 192, 0.04); }
-
-.stats-bronze .stats-rank { color: #cd7f32; }
-.stats-bronze .stats-name { color: #d4a06a; }
-.stats-bronze { background: rgba(205, 127, 50, 0.04); }
-
-/* Legend below table */
-.stats-legend {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
-  opacity: 0.5;
-  padding: 6px 4px 0;
+  flex: 0 0 22px;
+}
+.stats-scorer__flag {
+  font-size: 16px;
+  flex: 0 0 auto;
+}
+.stats-scorer__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.stats-scorer__name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stats-scorer__team {
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.7;
+}
+.stats-scorer__bar-wrap {
+  flex: 0 0 60px;
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.stats-scorer__bar {
+  height: 100%;
+  width: var(--bar-w, 0%);
+  background: linear-gradient(90deg, #60a5fa, #3b82f6);
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+.stats-scorer__bar--assist {
+  background: linear-gradient(90deg, #34d399, #10b981);
+}
+.stats-scorer__bar--team {
+  background: linear-gradient(90deg, #a78bfa, #7c3aed);
+}
+.stats-scorer__goals {
+  font-family: var(--disp);
+  font-weight: 800;
+  font-size: 15px;
+  color: #fff;
+  width: 24px;
+  text-align: right;
+  flex: 0 0 24px;
+}
+.stats-scorer__pen {
+  font-size: 10px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+/* Medal highlights */
+.stats-scorer--gold .stats-scorer__rank { color: #f5d77a; }
+.stats-scorer--gold .stats-scorer__name { color: #f5d77a; }
+.stats-scorer--gold { background: rgba(245, 215, 122, 0.06); }
+.stats-scorer--gold .stats-scorer__bar { background: linear-gradient(90deg, #f5d77a, #d4a843); }
+
+.stats-scorer--silver .stats-scorer__rank { color: #c0c0c0; }
+.stats-scorer--silver .stats-scorer__name { color: #d4d4d8; }
+.stats-scorer--silver { background: rgba(192, 192, 192, 0.04); }
+
+.stats-scorer--bronze .stats-scorer__rank { color: #cd7f32; }
+.stats-scorer--bronze .stats-scorer__name { color: #d4a06a; }
+.stats-scorer--bronze { background: rgba(205, 127, 50, 0.04); }
+
+/* Expand/collapse for full scorer list */
+.stats-expand {
+  margin-top: 4px;
+}
+.stats-expand summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #60a5fa;
+  padding: 8px 6px;
+  list-style: none;
+}
+.stats-expand summary::-webkit-details-marker { display: none; }
+.stats-expand summary::before {
+  content: "▸ ";
+}
+.stats-expand[open] summary::before {
+  content: "▾ ";
 }
 
 /* Responsive — tablet+ */
 @media (min-width: 768px) {
   .stats-trophy__svg { width: 180px; }
-  .stats-table { font-size: 14px; }
-  .stats-name { font-size: 14px; }
+  .stats-scorer__name { font-size: 14px; }
+  .stats-scorer__bar-wrap { flex: 0 0 100px; }
+  .stats-card__value { font-size: 28px; }
 }
 @media (min-width: 1024px) {
   .stats-trophy__svg { width: 200px; }
+}
+/* Small screens — 2x2 grid for summary cards */
+@media (max-width: 380px) {
+  .stats-summary { grid-template-columns: repeat(2, 1fr); }
+  .stats-card__value { font-size: 20px; }
+}
+
+/* =========================================================
+ * PWA Install Banner
+ * ========================================================= */
+.install-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(34,197,94,0.12), rgba(56,189,248,0.08));
+  border: 1px solid rgba(34,197,94,0.25);
+  border-radius: 14px;
+  animation: fadeSlide 0.4s ease-out;
+}
+.install-banner__icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.install-banner__icon img { width: 100%; height: 100%; }
+.install-banner__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.install-banner__text strong {
+  font-family: var(--disp);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+.install-banner__text span {
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.3;
+}
+.install-banner__btn {
+  flex-shrink: 0;
+  padding: 8px 18px;
+  background: var(--pitch);
+  color: #fff;
+  font-family: var(--disp);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+.install-banner__btn:hover { background: var(--pitch-deep); }
+.install-banner__btn:active { transform: scale(0.96); }
+.install-banner__close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.install-banner__close:hover { color: var(--ink); }
+
+/* Hide install banner inside standalone PWA */
+@media (display-mode: standalone) {
+  .install-banner { display: none; }
 }

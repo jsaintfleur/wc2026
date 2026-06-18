@@ -5,13 +5,21 @@
  * without connectivity (schedule/tables still render from last fetch).
  * ---------------------------------------------------------------- */
 
-const CACHE_NAME = "compet-v1";
+const CACHE_NAME = "compet-v2";
 
 /* Static assets to pre-cache on install — the app shell. */
 const PRECACHE = [
   "/",
-  "/icon-192.svg",
-  "/icon-512.svg",
+  "/icons/favicon-16.png",
+  "/icons/favicon-32.png",
+  "/icons/compet-icon-48.png",
+  "/icons/compet-icon-72.png",
+  "/icons/compet-icon-96.png",
+  "/icons/compet-icon-128.png",
+  "/icons/compet-icon-192.png",
+  "/icons/compet-icon-512.png",
+  "/icons/compet-icon-maskable-512.png",
+  "/icons/apple-touch-icon.png",
   "/wc26-logo.svg",
   "/trophy.png",
   "/trionda.png",

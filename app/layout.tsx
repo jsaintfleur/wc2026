@@ -13,8 +13,14 @@ export const metadata: Metadata = {
   },
   applicationName: "Compet 2026",
   icons: {
-    icon: "/favicon.svg",
-    apple: "/icon-192.svg",
+    icon: [
+      { url: "/icons/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/compet-icon-48.png", sizes: "48x48", type: "image/png" },
+      { url: "/icons/compet-icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/compet-icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/icons/apple-touch-icon.png",
   },
 };
 
@@ -39,8 +45,10 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
-        {/* PWA: Apple touch icon + maskable shortcut */}
-        <link rel="apple-touch-icon" href="/icon-192.svg" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+        <link rel="icon" type="image/png" sizes="48x48" href="/icons/compet-icon-48.png" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body>

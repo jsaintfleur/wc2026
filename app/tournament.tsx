@@ -24,6 +24,10 @@ function isStaleStatus(ts: number, status: string, now = Date.now()): boolean {
 
 type ViewType = "schedule" | "groups" | "knockout" | "bracket" | "stats" | "venues" | "about";
 type LiveStatus = "init" | "off" | "idle" | "active" | "paused" | "nofix";
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
 
 function parseISO(iso: string): Date {
   const [y, m, da] = iso.split("-").map(Number);
@@ -115,7 +119,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const mainRef = useRef<HTMLElement>(null);
 
   /* PWA install prompt — captured from beforeinstallprompt event */
-  const deferredPromptRef = useRef<any>(null);
+  const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
   const [showInstall, setShowInstall] = useState(false);
 
   const pollLive = useCallback(async () => {
@@ -184,10 +188,16 @@ export default function Tournament({ data }: { data: TournamentData }) {
       });
     }, 1000);
     /* PWA: capture the install prompt so we can trigger it from the UI */
-    const onBip = (e: Event) => { e.preventDefault(); deferredPromptRef.current = e; setShowInstall(true); };
+    const onBip = (e: Event) => {
+      e.preventDefault();
+      deferredPromptRef.current = e as BeforeInstallPromptEvent;
+      setShowInstall(true);
+    };
     window.addEventListener("beforeinstallprompt", onBip);
     /* Hide install banner if the app is already installed */
-    if (window.matchMedia("(display-mode: standalone)").matches) setShowInstall(false);
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      queueMicrotask(() => setShowInstall(false));
+    }
     return () => {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("beforeinstallprompt", onBip);
@@ -634,13 +644,12 @@ export default function Tournament({ data }: { data: TournamentData }) {
       if (f.ga === 0) cleanSheets++;
     }
     for (const m of data.gs) {
-      if (m.score == null) continue;
-      const key = canon(m.home) + ":" + canon(m.away);
+      if (!m.dbStatus || !DONE_STATUSES.has(m.dbStatus) || m.dbGh == null || m.dbGa == null) continue;
+      const key = canon(m.t1) + ":" + canon(m.t2);
       if (finishedKeys.has(key)) continue;
       finishedKeys.add(key);
-      const [h, a] = m.score.split("-").map(Number);
-      if (h === 0) cleanSheets++;
-      if (a === 0) cleanSheets++;
+      if (m.dbGh === 0) cleanSheets++;
+      if (m.dbGa === 0) cleanSheets++;
     }
 
     const matchesPlayed = finishedKeys.size;
@@ -814,7 +823,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       {showInstall && (
         <div className="install-banner">
           <div className="install-banner__icon">
-            <img src="/icon-192.svg" alt="" width={40} height={40} />
+            <img src="/icons/compet-icon-192.png" alt="" width={40} height={40} />
           </div>
           <div className="install-banner__text">
             <strong>Install Compet 2026</strong>
@@ -861,8 +870,10 @@ function CountdownHero({ data, fixtures, findLive }: {
   const [mounted, setMounted] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    setMounted(true);
-    setNow(Date.now());
+    queueMicrotask(() => {
+      setMounted(true);
+      setNow(Date.now());
+    });
     const id = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 1000);
     return () => clearInterval(id);
   }, []);

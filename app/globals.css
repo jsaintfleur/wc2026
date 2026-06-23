@@ -200,101 +200,6 @@ body::after {
   border-width: 0 0 0 2px;
 }
 
-/* Trophy + ball centerpiece in hero */
-.hero__centerpiece {
-  position: absolute;
-  right: 14px;
-  top: 14px;
-  z-index: 1;
-  display: flex;
-  align-items: flex-end;
-  gap: 0;
-  isolation: isolate;
-}
-.hero__centerpiece::before {
-  content: "";
-  position: absolute;
-  width: 168px;
-  height: 168px;
-  right: -28px;
-  top: 18px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle, rgba(245,158,11,0.22), transparent 58%),
-    radial-gradient(circle, rgba(56,189,248,0.12), transparent 68%);
-  filter: blur(4px);
-  opacity: .85;
-  z-index: -1;
-}
-.hero__centerpiece::after {
-  content: "";
-  position: absolute;
-  width: 142px;
-  height: 142px;
-  right: -17px;
-  top: 30px;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 50%;
-  background:
-    radial-gradient(ellipse 34px 9px at 76% 80%, rgba(255,255,255,0.22), rgba(245,158,11,0.12) 45%, transparent 72%),
-    linear-gradient(90deg, transparent 26%, rgba(255,255,255,0.13) 48%, rgba(245,158,11,0.15) 68%, transparent 92%);
-  background-size: 100% 100%, 84px 1px;
-  background-position: center, 53px 109px;
-  background-repeat: no-repeat;
-  z-index: -1;
-}
-.hero__trophy {
-  width: 122px;
-  height: auto;
-  opacity: .96;
-  filter: drop-shadow(0 16px 28px rgba(0,0,0,0.48)) drop-shadow(0 0 20px rgba(245,158,11,0.18));
-  animation: trophyFloat 3s ease-in-out infinite;
-}
-.hero__ball {
-  width: 34px;
-  height: 34px;
-  opacity: .9;
-  border-radius: 50%;
-  position: relative;
-  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35));
-  box-shadow: inset 0 0 3px 2px rgba(6, 9, 16, 0.5);
-  transform-origin: center;
-  animation: ballRicochet 2.45s cubic-bezier(.36, .02, .25, 1) infinite;
-  margin-left: -20px;
-  margin-bottom: 70px;
-  will-change: transform;
-}
-@keyframes trophyFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
-}
-@keyframes ballRicochet {
-  0%, 100% { transform: translate(-7px, 25px) rotate(0deg) scale(1.08, .9); }
-  12% { transform: translate(10px, -8px) rotate(58deg) scale(.98, 1.02); }
-  27% { transform: translate(36px, -30px) rotate(136deg) scale(1); }
-  40% { transform: translate(42px, -15px) rotate(205deg) scale(.88, 1.1); }
-  48% { transform: translate(34px, -2px) rotate(250deg) scale(1.03, .97); }
-  64% { transform: translate(18px, 30px) rotate(336deg) scale(1.12, .86); }
-  78% { transform: translate(-4px, 2px) rotate(410deg) scale(.98, 1.02); }
-  90% { transform: translate(-14px, 18px) rotate(462deg) scale(1.03, .96); }
-}
-
-@media (max-width: 767px) {
-  .hero__centerpiece {
-    right: 10px;
-    top: 24px;
-  }
-  .hero__trophy {
-    width: 96px;
-  }
-  .hero__ball {
-    width: 30px;
-    height: 30px;
-    margin-left: -18px;
-    margin-bottom: 56px;
-  }
-}
-
 .hero__eyebrow {
   font-family: var(--disp);
   text-transform: uppercase;
@@ -620,7 +525,6 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   .score-flash, .tix.goal-scored { animation: none; }
   .stagger-rise { animation: none !important; }
-  .hero__trophy, .hero__ball { animation: none; }
 }
 
 /* Staggered card entrance — each card delays slightly */
@@ -3543,11 +3447,6 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .hero { padding: 18px 14px 18px; min-height: 220px; }
   .hero__title { font-size: 36px; }
   .hero__eyebrow { font-size: 10px; letter-spacing: 3px; }
-  .hero__trophy { width: 86px; }
-  .hero__ball { width: 24px; height: 24px; margin-left: -14px; margin-bottom: 50px; }
-  .hero__centerpiece { right: 8px; top: 10px; }
-  .hero__centerpiece::before { width: 120px; height: 120px; right: -22px; top: 14px; }
-  .hero__centerpiece::after { width: 100px; height: 100px; right: -14px; top: 24px; }
   .hero__pitch-lines { width: 160px; height: 160px; right: -50px; }
   .stat { min-width: 54px; padding: 6px 8px; }
   .stat b { font-size: 20px; }
@@ -3581,11 +3480,6 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .hero__title { font-size: 56px; }
   .hero__eyebrow { font-size: 12px; letter-spacing: 5px; }
   .hero__sub { font-size: 14px; max-width: 400px; }
-  .hero__trophy { width: 148px; }
-  .hero__ball { width: 40px; height: 40px; margin-left: -26px; margin-bottom: 86px; }
-  .hero__centerpiece { right: 26px; top: 18px; }
-  .hero__centerpiece::before { width: 188px; height: 188px; right: -35px; top: 24px; }
-  .hero__centerpiece::after { width: 154px; height: 154px; right: -20px; top: 42px; }
   .hero__pitch-lines { width: 240px; height: 240px; right: -30px; }
   .hero__stats { gap: 10px; }
   .stat { min-width: 72px; padding: 10px 12px; }
@@ -3620,9 +3514,6 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .tab:hover { color: #fff; }
   .hero { padding: 36px 32px 32px; min-height: 300px; }
   .hero__title { font-size: 60px; }
-  .hero__trophy { width: 168px; }
-  .hero__ball { width: 46px; height: 46px; margin-left: -30px; margin-bottom: 98px; }
-  .hero__centerpiece { right: 34px; top: 18px; }
   .hero__pitch-lines { width: 260px; height: 260px; right: -20px; }
   .tix--clickable:hover { transform: translateY(-2px); box-shadow: 0 20px 48px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1); }
   .gcard:hover { border-color: rgba(255,255,255,0.12); }

@@ -724,10 +724,6 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
       <section className="hero">
         <div className="hero__pitch-lines" aria-hidden="true" />
-        <div className="hero__centerpiece">
-          <WorldCupTrophy id="hero-trophy" className="hero__trophy" />
-          <TriondaBall id="hero" className="hero__ball" />
-        </div>
         <div className="hero__eyebrow">Canada &middot; Mexico &middot; United States</div>
         <h1 className="hero__title">COMPET<br />2026</h1>
         <div className="hero__sub">Live scores, fixtures, tables and bracket picks</div>

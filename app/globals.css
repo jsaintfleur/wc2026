@@ -235,6 +235,12 @@ body::after {
   top: 30px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 50%;
+  background:
+    radial-gradient(ellipse 34px 9px at 76% 80%, rgba(255,255,255,0.22), rgba(245,158,11,0.12) 45%, transparent 72%),
+    linear-gradient(90deg, transparent 26%, rgba(255,255,255,0.13) 48%, rgba(245,158,11,0.15) 68%, transparent 92%);
+  background-size: 100% 100%, 84px 1px;
+  background-position: center, 53px 109px;
+  background-repeat: no-repeat;
   z-index: -1;
 }
 .hero__trophy {
@@ -249,21 +255,28 @@ body::after {
   height: 34px;
   opacity: .9;
   border-radius: 50%;
+  position: relative;
   filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35));
   box-shadow: inset 0 0 3px 2px rgba(6, 9, 16, 0.5);
-  animation: ballBounce 2s ease-in-out infinite;
+  transform-origin: center;
+  animation: ballRicochet 2.45s cubic-bezier(.36, .02, .25, 1) infinite;
   margin-left: -20px;
   margin-bottom: 70px;
+  will-change: transform;
 }
 @keyframes trophyFloat {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
 }
-@keyframes ballBounce {
-  0%, 100% { transform: translateY(0) scale(1); }
-  40% { transform: translateY(-14px) scale(0.95); }
-  60% { transform: translateY(-14px) scale(0.95); }
-  80% { transform: translateY(2px) scale(1.04, 0.96); }
+@keyframes ballRicochet {
+  0%, 100% { transform: translate(-7px, 25px) rotate(0deg) scale(1.08, .9); }
+  12% { transform: translate(10px, -8px) rotate(58deg) scale(.98, 1.02); }
+  27% { transform: translate(36px, -30px) rotate(136deg) scale(1); }
+  40% { transform: translate(42px, -15px) rotate(205deg) scale(.88, 1.1); }
+  48% { transform: translate(34px, -2px) rotate(250deg) scale(1.03, .97); }
+  64% { transform: translate(18px, 30px) rotate(336deg) scale(1.12, .86); }
+  78% { transform: translate(-4px, 2px) rotate(410deg) scale(.98, 1.02); }
+  90% { transform: translate(-14px, 18px) rotate(462deg) scale(1.03, .96); }
 }
 
 @media (max-width: 767px) {

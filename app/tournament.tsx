@@ -28,6 +28,37 @@ type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
+type KnockoutRoundKey = "r32" | "r16" | "qf" | "sf" | "third" | "final";
+
+const KO_ROUNDS: {
+  key: KnockoutRoundKey;
+  dataRound: string;
+  label: string;
+  short: string;
+  matchNumbers: number[];
+}[] = [
+  { key: "r32", dataRound: "Round of 32", label: "Round of 32", short: "R32", matchNumbers: [73, 75, 74, 77, 76, 78, 79, 80, 83, 84, 81, 82, 86, 88, 85, 87] },
+  { key: "r16", dataRound: "Round of 16", label: "Round of 16", short: "R16", matchNumbers: [89, 90, 91, 92, 93, 94, 95, 96] },
+  { key: "qf", dataRound: "Quarter-final", label: "Quarterfinals", short: "QF", matchNumbers: [97, 98, 99, 100] },
+  { key: "sf", dataRound: "Semi-final", label: "Semifinals", short: "SF", matchNumbers: [101, 102] },
+  { key: "third", dataRound: "Third-place play-off", label: "Third Place", short: "3rd", matchNumbers: [103] },
+  { key: "final", dataRound: "Final", label: "Final", short: "Final", matchNumbers: [104] },
+];
+
+const R32_SEEDS = [
+  ["2A", "2B"], ["1F", "2C"], ["1E", "3rd"], ["1I", "3rd"],
+  ["1C", "2F"], ["2E", "2I"], ["1A", "3rd"], ["1L", "3rd"],
+  ["2K", "2L"], ["1H", "2J"], ["1D", "3rd"], ["1G", "3rd"],
+  ["1J", "2H"], ["2D", "2G"], ["1B", "3rd"], ["1K", "3rd"],
+] as const;
+
+const KO_SOURCE_PAIRS: Partial<Record<KnockoutRoundKey, [number, number][]>> = {
+  r16: [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9], [10, 11], [12, 13], [14, 15]],
+  qf: [[0, 1], [4, 5], [2, 3], [6, 7]],
+  sf: [[0, 1], [2, 3]],
+  final: [[0, 1]],
+  third: [[0, 1]],
+};
 
 function parseISO(iso: string): Date {
   const [y, m, da] = iso.split("-").map(Number);
@@ -501,36 +532,6 @@ export default function Tournament({ data }: { data: TournamentData }) {
     return html;
   }
 
-  function renderKnockout(anim: boolean): string {
-    let html = '<div class="section" style="padding-top:4px">' + liveIndicatorHtml();
-    let cur = "";
-    for (const k of data.ko) {
-      if (k.round !== cur) { cur = k.round; html += `<div class="kohead">${esc(k.round)}<span class="mr">Matches ${esc(k.mr)}</span></div>`; }
-      const v = ven(k.v), t = parseISO(k.iso);
-      const f = findLive(k as unknown as { ts: number; v: string; t1?: string; t2?: string }, fixtures);
-      let top: string, cls = "";
-      if (f && f.home && f.away && f.status && f.status !== "TBD") {
-        const a = canon(f.home), b = canon(f.away);
-        const live = LIVE_STATUSES.has(f.status) || DONE_STATUSES.has(f.status);
-        if (LIVE_STATUSES.has(f.status)) cls = " islive";
-        const right = live
-          ? `<div class="kotix__time"><div class="sc">${f.gh ?? 0}–${f.ga ?? 0}</div>${liveBadge(f)}</div>`
-          : `<div class="kotix__time"><div class="lo">${esc(k.et)}</div>${k.local !== k.et ? `<div class="et">${esc(k.local)}</div>` : ""}</div>`;
-        top = `<div class="kotix__top"><div class="koteams">
-          <div class="team"><span class="fl">${fl(a)}</span><span class="nm">${esc(a)}</span></div>
-          <div class="vs">vs</div>
-          <div class="team"><span class="fl">${fl(b)}</span><span class="nm">${esc(b)}</span></div></div>${right}</div>`;
-      } else {
-        top = `<div class="kotix__top"><div class="pend">Pending FIFA Confirmation<span class="dot">vs</span>Pending FIFA Confirmation</div></div>`;
-      }
-      html += `<article class="kotix${cls}${anim ? " stagger-rise" : ""}">${top}
-        <div class="kotix__foot"><span>📍</span><span class="ven">${esc(v.common)}</span>· ${esc(v.city)}, ${esc(v.country)}
-        <span class="dt">${DOW[t.getDay()]} ${t.getDate()} ${MON[t.getMonth()]} · ${esc(k.et)}${k.local !== k.et ? ` (${esc(k.local)})` : ""}</span></div></article>`;
-    }
-    html += `<p style="font-size:12.5px;color:var(--muted);margin:14px 2px 0">Dates, times and venues are confirmed. Teams fill in automatically as results come in; until then they read "Pending FIFA Confirmation." Round-of-32 pairings follow FIFA's pre-set bracket.</p></div>`;
-    return html;
-  }
-
   function renderVenues(anim: boolean): string {
     const order = Object.entries(data.venues).sort((a, b) => b[1].cap - a[1].cap);
     return order.map(([, v]) => {
@@ -688,9 +689,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const viewContent = useMemo(() => {
     if (view === "schedule") return renderSchedule(animate);
     if (view === "groups") return renderGroups(animate);
-    if (view === "knockout") return renderKnockout(animate);
     if (view === "venues") return renderVenues(animate);
     if (view === "stats") return ""; // stats rendered as React, not HTML string
+    if (view === "knockout") return ""; // knockout rendered as React bracket
     return renderAbout();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, group, team, query, fixtures, liveStatus, liveTs, liveEnrichmentIssue, animate, nowMs]);
@@ -809,12 +810,19 @@ export default function Tournament({ data }: { data: TournamentData }) {
       <div key={view} className="view-transition">
         {view === "bracket" ? (
           <BracketBuilder flags={data.flags} groups={data.groups} gcolor={data.gcolor} />
+        ) : view === "knockout" ? (
+          <KnockoutStageView
+            data={data}
+            fixtures={fixtures}
+            findLive={findLive}
+            onMatchClick={(match, fixture) => setMatchDetail({ match, fixture })}
+          />
         ) : view === "stats" ? (
           <StatsView data={data} fixtures={fixtures} fl={fl} computeLeaders={computeLeaders} />
         ) : (
           <main
             ref={mainRef}
-            className={view !== "groups" && view !== "knockout" ? "section" : undefined}
+            className={view !== "groups" ? "section" : undefined}
             dangerouslySetInnerHTML={{ __html: viewContent }}
           />
         )}
@@ -859,6 +867,265 @@ export default function Tournament({ data }: { data: TournamentData }) {
       {matchDetail && <MatchDetailDrawer match={matchDetail.match} initialFixture={matchDetail.fixture} fixtures={fixtures} flags={data.flags} venues={data.venues} gcolor={data.gcolor} allMatches={data.gs} vName={vName} findLive={findLive} onClose={() => setMatchDetail(null)} onTeamClick={(t) => { setMatchDetail(null); setTeamDrawer(t); }} onPlayerClick={(p, t) => { setMatchDetail(null); setPlayerProfile({ name: p, team: t }); }} />}
       {playerProfile && <PlayerProfileDrawer playerName={playerProfile.name} teamName={playerProfile.team} flags={data.flags} data={data} onClose={() => setPlayerProfile(null)} onTeamClick={(t) => { setPlayerProfile(null); setTeamDrawer(t); }} />}
     </div>
+  );
+}
+
+type KnockoutParticipant = {
+  name: string;
+  seed?: string;
+  winner?: boolean;
+  loser?: boolean;
+};
+
+type KnockoutCardModel = {
+  key: string;
+  round: KnockoutRoundKey;
+  match: KnockoutMatch;
+  matchNo: number;
+  fixture: LiveFixture | null;
+  teams: [KnockoutParticipant, KnockoutParticipant];
+  source: string;
+  isDone: boolean;
+  isLive: boolean;
+  winnerName: string | null;
+  loserName: string | null;
+};
+
+function KnockoutStageView({ data, fixtures, findLive, onMatchClick }: {
+  data: TournamentData;
+  fixtures: LiveFixture[];
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
+  onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
+}) {
+  const [activeRound, setActiveRound] = useState<KnockoutRoundKey>("r32");
+  const roundRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const byRound = useMemo(() => {
+    const grouped = new Map<string, KnockoutMatch[]>();
+    for (const match of data.ko) {
+      const list = grouped.get(match.round) || [];
+      list.push(match);
+      grouped.set(match.round, list);
+    }
+    return grouped;
+  }, [data.ko]);
+
+  function venueName(code: string) {
+    return data.venues[code] || { common: "", city: "", country: "" };
+  }
+
+  function fmtDate(match: KnockoutMatch) {
+    const dt = parseISO(match.iso);
+    return `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`;
+  }
+
+  const teamName = useCallback((name: string | undefined | null): string => {
+    if (!name) return "TBD";
+    const normalized = canon(name);
+    return normalized || name;
+  }, []);
+
+  const winnerFromFixture = useCallback((fixture: LiveFixture | null): string | null => {
+    if (!fixture || !DONE_STATUSES.has(fixture.status) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
+    return fixture.gh > fixture.ga ? teamName(fixture.home) : teamName(fixture.away);
+  }, [teamName]);
+
+  const loserFromFixture = useCallback((fixture: LiveFixture | null): string | null => {
+    if (!fixture || !DONE_STATUSES.has(fixture.status) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
+    return fixture.gh > fixture.ga ? teamName(fixture.away) : teamName(fixture.home);
+  }, [teamName]);
+
+  const rounds = useMemo(() => {
+    const winners: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
+    const losers: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
+
+    function sourcePair(round: KnockoutRoundKey, index: number): [number, number] {
+      return KO_SOURCE_PAIRS[round]?.[index] || [index * 2, index * 2 + 1];
+    }
+
+    function previousWinner(round: KnockoutRoundKey, index: number): string | null {
+      if (round === "r16") return winners.r32?.[index] || null;
+      if (round === "qf") return winners.r16?.[index] || null;
+      if (round === "sf") return winners.qf?.[index] || null;
+      if (round === "final") return winners.sf?.[index] || null;
+      if (round === "third") return losers.sf?.[index] || null;
+      return null;
+    }
+
+    function sourceFor(round: KnockoutRoundKey, index: number): string {
+      if (round === "r32") return R32_SEEDS[index]?.join(" vs ") || "Qualified teams";
+      const [a, b] = sourcePair(round, index);
+      if (round === "r16") return `W${KO_ROUNDS[0].matchNumbers[a]} / W${KO_ROUNDS[0].matchNumbers[b]}`;
+      if (round === "qf") return `W${KO_ROUNDS[1].matchNumbers[a]} / W${KO_ROUNDS[1].matchNumbers[b]}`;
+      if (round === "sf") return `W${KO_ROUNDS[2].matchNumbers[a]} / W${KO_ROUNDS[2].matchNumbers[b]}`;
+      if (round === "final") return "W101 / W102";
+      return "L101 / L102";
+    }
+
+    return KO_ROUNDS.map(config => {
+      const scheduled = byRound.get(config.dataRound) || [];
+      const cards: KnockoutCardModel[] = scheduled.map((match, index) => {
+        const matchNo = config.matchNumbers[index] || Number(match.mr) || 0;
+        const fixture = findLive({ ts: match.ts, v: match.v }, fixtures);
+        const isLive = !!fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(match.ts, fixture.status);
+        const isDone = !!fixture && DONE_STATUSES.has(fixture.status);
+        const winnerName = winnerFromFixture(fixture);
+        const loserName = loserFromFixture(fixture);
+        let teamA: KnockoutParticipant;
+        let teamB: KnockoutParticipant;
+
+        if (fixture?.home && fixture?.away) {
+          const home = teamName(fixture.home);
+          const away = teamName(fixture.away);
+          teamA = { name: home, winner: winnerName === home, loser: loserName === home };
+          teamB = { name: away, winner: winnerName === away, loser: loserName === away };
+        } else if (config.key === "r32") {
+          teamA = { name: "TBD", seed: R32_SEEDS[index]?.[0] || "TBD" };
+          teamB = { name: "TBD", seed: R32_SEEDS[index]?.[1] || "TBD" };
+        } else {
+          const [sourceA, sourceB] = sourcePair(config.key, index);
+          const sourceLabel = sourceFor(config.key, index).split(" / ");
+          const first = previousWinner(config.key, sourceA);
+          const second = previousWinner(config.key, sourceB);
+          teamA = { name: first || "TBD", seed: first ? undefined : sourceLabel[0] };
+          teamB = { name: second || "TBD", seed: second ? undefined : sourceLabel[1] };
+        }
+
+        return {
+          key: `${config.key}-${matchNo}-${index}`,
+          round: config.key,
+          match,
+          matchNo,
+          fixture,
+          teams: [teamA, teamB],
+          source: sourceFor(config.key, index),
+          isDone,
+          isLive,
+          winnerName,
+          loserName,
+        };
+      });
+      winners[config.key] = cards.map(card => card.winnerName);
+      losers[config.key] = cards.map(card => card.loserName);
+      return { ...config, cards };
+    });
+  }, [byRound, findLive, fixtures, loserFromFixture, teamName, winnerFromFixture]);
+
+  const completed = rounds.reduce((sum, round) => sum + round.cards.filter(card => card.isDone).length, 0);
+  const total = rounds.reduce((sum, round) => sum + round.cards.length, 0);
+  const liveCount = rounds.reduce((sum, round) => sum + round.cards.filter(card => card.isLive).length, 0);
+  const progressPct = total ? Math.round((completed / total) * 100) : 0;
+
+  function focusRound(key: KnockoutRoundKey) {
+    setActiveRound(key);
+    window.setTimeout(() => {
+      roundRefs.current[key]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }, 40);
+  }
+
+  function openMatch(card: KnockoutCardModel) {
+    const [teamA, teamB] = card.teams;
+    onMatchClick({
+      no: card.matchNo,
+      iso: card.match.iso,
+      local: card.match.local,
+      et: card.match.et,
+      g: "KO",
+      t1: teamA.name === "TBD" ? "TBD" : teamA.name,
+      t2: teamB.name === "TBD" ? "TBD" : teamB.name,
+      v: card.match.v,
+      ts: card.match.ts,
+    }, card.fixture);
+  }
+
+  return (
+    <section className="ko-stage" aria-label="Knockout Stage">
+      <div className="ko-stage__hero">
+        <div>
+          <div className="ko-stage__eyebrow">FIFA World Cup 2026</div>
+          <h2>Knockout Stage</h2>
+          <p>Follow the bracket from the Round of 32 to the Final. Teams advance only when confirmed by live match data.</p>
+        </div>
+        <div className="ko-stage__progress" aria-label={`${completed} of ${total} knockout matches complete`}>
+          <span>{completed}/{total}</span>
+          <b>{progressPct}% complete</b>
+          <i><em style={{ width: `${progressPct}%` }} /></i>
+          {liveCount > 0 && <strong><span className="dotlive" />{liveCount} live</strong>}
+        </div>
+      </div>
+
+      <div className="ko-stage__tabs" role="tablist" aria-label="Knockout rounds">
+        {rounds.map(round => (
+          <button
+            key={round.key}
+            type="button"
+            role="tab"
+            aria-selected={activeRound === round.key}
+            className={`ko-stage__tab${activeRound === round.key ? " ko-stage__tab--active" : ""}`}
+            onClick={() => focusRound(round.key)}
+          >
+            <span>{round.label}</span>
+            <b>{round.cards.filter(card => card.isDone).length}/{round.cards.length}</b>
+          </button>
+        ))}
+      </div>
+
+      <div className="ko-bracket-wrap" aria-label="Scrollable knockout bracket">
+        <div className="ko-bracket">
+          {rounds.map(round => (
+            <div
+              key={round.key}
+              ref={el => { roundRefs.current[round.key] = el; }}
+              className={`ko-round ko-round--${round.key}${activeRound === round.key ? " ko-round--active" : ""}`}
+            >
+              <div className="ko-round__head">
+                <span>{round.label}</span>
+                <b>{round.short}</b>
+              </div>
+              <div className="ko-round__cards">
+                {round.cards.map(card => {
+                  const v = venueName(card.match.v);
+                  const status = card.isLive ? (card.fixture?.elapsed ? `${card.fixture.elapsed}'` : "LIVE") : card.isDone ? "FT" : "TBD";
+                  return (
+                    <button
+                      key={card.key}
+                      type="button"
+                      className={`ko-match ko-match--${card.round}${card.isLive ? " ko-match--live" : ""}${card.isDone ? " ko-match--done" : ""}${card.round === "final" ? " ko-match--final" : ""}`}
+                      onClick={() => openMatch(card)}
+                    >
+                      <div className="ko-match__meta">
+                        <span>Match {card.matchNo || card.match.mr}</span>
+                        <b>{status}</b>
+                      </div>
+                      <div className="ko-match__teams">
+                        {card.teams.map((team, index) => {
+                          const score = card.fixture && (index === 0 ? card.fixture.gh : card.fixture.ga);
+                          return (
+                            <div key={`${card.key}-${index}`} className={`ko-team${team.winner ? " ko-team--winner" : ""}${team.name === "TBD" ? " ko-team--tbd" : ""}`}>
+                              <span className="ko-team__flag">{team.name === "TBD" ? "•" : (data.flags[team.name] || "⚽")}</span>
+                              <span className="ko-team__name">{team.name}</span>
+                              {team.seed && <span className="ko-team__seed">{team.seed}</span>}
+                              {score != null && <strong>{score}</strong>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="ko-match__foot">
+                        <span>{fmtDate(card.match)} · {card.match.et}</span>
+                        <span>{v.common}</span>
+                      </div>
+                      <div className="ko-match__source">{card.source}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <p className="ko-stage__note">No unverified scores are shown. Future teams remain TBD until qualifying and live fixture data confirm the matchup.</p>
+    </section>
   );
 }
 

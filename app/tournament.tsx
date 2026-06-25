@@ -924,6 +924,7 @@ type KnockoutParticipant = {
 type KnockoutCardModel = {
   key: string;
   round: KnockoutRoundKey;
+  roundIndex: number;
   match: KnockoutMatch;
   matchNo: number;
   fixture: LiveFixture | null;
@@ -943,7 +944,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
 }) {
   const [activeRound, setActiveRound] = useState<KnockoutRoundKey>("r32");
-  const roundRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [selectedPathKey, setSelectedPathKey] = useState<string>("");
 
   const byRound = useMemo(() => {
     const grouped = new Map<string, KnockoutMatch[]>();
@@ -1048,6 +1049,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
         return {
           key: `${config.key}-${matchNo}-${index}`,
           round: config.key,
+          roundIndex: index,
           match,
           matchNo,
           fixture,
@@ -1093,16 +1095,54 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const currentRound = rounds.find(round => round.cards.some(card => card.isLive)) ||
     rounds.find(round => round.cards.some(card => !card.isDone)) ||
     rounds[rounds.length - 1];
+  const allCards = rounds.flatMap(round => round.cards);
+  const activeRoundModel = rounds.find(round => round.key === activeRound) || rounds[0];
+  const nextMatch = allCards
+    .filter(card => !card.isDone && card.match.ts >= nowMs)
+    .sort((a, b) => a.match.ts - b.match.ts)[0] || allCards.find(card => !card.isDone);
+  const lastMatch = allCards
+    .filter(card => card.isDone)
+    .sort((a, b) => b.match.ts - a.match.ts)[0];
+  const selectedCard = allCards.find(card => card.key === selectedPathKey) || activeRoundModel?.cards[0];
+
+  function nextDestination(card: KnockoutCardModel): string {
+    if (card.round === "r32") return `Winner advances to R16 Match ${89 + Math.floor(card.roundIndex / 2)}`;
+    if (card.round === "r16") {
+      const qfIndex = KO_SOURCE_PAIRS.qf?.findIndex(pair => pair.includes(card.roundIndex)) ?? -1;
+      return `Winner advances to QF Match ${qfIndex >= 0 ? KO_ROUNDS[2].matchNumbers[qfIndex] : "TBD"}`;
+    }
+    if (card.round === "qf") return `Winner advances to SF Match ${101 + Math.floor(card.roundIndex / 2)}`;
+    if (card.round === "sf") return card.roundIndex === 0 ? "Winner advances to the Final" : "Winner advances to the Final";
+    if (card.round === "third") return "Winner claims third place";
+    return "Winner becomes champion";
+  }
+
+  function downstreamPath(card: KnockoutCardModel): KnockoutCardModel[] {
+    const path = [card];
+    let cursor = card;
+    const order: KnockoutRoundKey[] = ["r16", "qf", "sf", "final"];
+    while (cursor.round !== "final" && cursor.round !== "third") {
+      const nextKey = order.find(key => KO_SOURCE_PAIRS[key]?.some(pair => {
+        const sourceRound = cursor.round === "r32" ? "r16" : cursor.round === "r16" ? "qf" : cursor.round === "qf" ? "sf" : cursor.round === "sf" ? "final" : "";
+        return key === sourceRound && pair.includes(cursor.roundIndex);
+      }));
+      if (!nextKey) break;
+      const nextIndex = KO_SOURCE_PAIRS[nextKey]?.findIndex(pair => pair.includes(cursor.roundIndex)) ?? -1;
+      const nextCard = rounds.find(round => round.key === nextKey)?.cards[nextIndex];
+      if (!nextCard) break;
+      path.push(nextCard);
+      cursor = nextCard;
+    }
+    return path;
+  }
+
+  const selectedPath = selectedCard ? downstreamPath(selectedCard) : [];
+  const selectedPathKeys = new Set(selectedPath.map(card => card.key));
+  const shouldDim = !!selectedPathKey;
 
   function focusRound(key: KnockoutRoundKey) {
     setActiveRound(key);
-    window.setTimeout(() => {
-      const roundEl = roundRefs.current[key];
-      roundEl?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-      if (key !== "r32") {
-        roundEl?.querySelector(".ko-match")?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "center" });
-      }
-    }, 40);
+    setSelectedPathKey("");
   }
 
   function openMatch(card: KnockoutCardModel) {
@@ -1113,8 +1153,8 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
       local: card.match.local,
       et: card.match.et,
       g: "KO",
-      t1: teamA.name === "TBD" ? "TBD" : teamA.name,
-      t2: teamB.name === "TBD" ? "TBD" : teamB.name,
+      t1: teamA.name === "TBD" || teamA.placeholder ? "TBD" : teamA.name,
+      t2: teamB.name === "TBD" || teamB.placeholder ? "TBD" : teamB.name,
       v: card.match.v,
       ts: card.match.ts,
     }, card.fixture);
@@ -1122,18 +1162,37 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
 
   return (
     <section className="ko-stage" aria-label="Knockout Stage">
-      <div className="ko-stage__hero">
-        <div>
-          <div className="ko-stage__eyebrow">FIFA World Cup 2026</div>
-          <h2>Knockout Stage</h2>
-          <p>Follow the tournament path from the Round of 32 to the Final. Teams advance only when live match data confirms the result.</p>
+      <div className="ko-control">
+        <div className="ko-control__top">
+          <div>
+            <div className="ko-stage__eyebrow">FIFA World Cup 2026</div>
+            <h2>Knockout Stage</h2>
+          </div>
+          <div className="ko-control__stage">{currentRound ? currentRound.short : "KO"}</div>
         </div>
-        <div className="ko-stage__progress" aria-label={`${completed} of ${total} knockout matches complete`}>
-          <span>{completed}/{total}</span>
-          <b>{progressPct}% complete</b>
+        <div className="ko-control__progress" aria-label={`${completed} of ${total} knockout matches complete`}>
+          <div>
+            <span>{completed} of {total}</span>
+            <b>{progressPct}% complete</b>
+          </div>
           <i><em style={{ width: `${progressPct}%` }} /></i>
-          <small>{currentRound ? currentRound.label : "Bracket pending"}</small>
-          {liveCount > 0 && <strong><span className="dotlive" />{liveCount} live</strong>}
+        </div>
+        <div className="ko-control__grid">
+          <div>
+            <span>Next Match</span>
+            <b>{nextMatch ? `Match ${nextMatch.matchNo}` : "TBD"}</b>
+            <small>{nextMatch ? `${fmtDate(nextMatch.match)} · ${nextMatch.match.et}` : "Awaiting schedule"}</small>
+          </div>
+          <div>
+            <span>Last Winner</span>
+            <b>{lastMatch?.winnerName || "Pending"}</b>
+            <small>{lastMatch ? `Match ${lastMatch.matchNo}` : "No KO results yet"}</small>
+          </div>
+          <div>
+            <span>Current Stage</span>
+            <b>{currentRound ? currentRound.label : "Pending"}</b>
+            <small>{liveCount > 0 ? `${liveCount} live now` : "Live data ready"}</small>
+          </div>
         </div>
       </div>
 
@@ -1153,74 +1212,73 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
         ))}
       </div>
 
-      <div className="ko-bracket-wrap" aria-label="Scrollable knockout bracket">
-        <div className="ko-bracket">
-          {rounds.map(round => {
-            const slotSpan = Math.max(1, Math.floor(16 / Math.max(round.cards.length, 1)));
-            const doneInRound = round.cards.filter(card => card.isDone).length;
-            return (
-            <div
-              key={round.key}
-              ref={el => { roundRefs.current[round.key] = el; }}
-              className={`ko-round ko-round--${round.key}${activeRound === round.key ? " ko-round--active" : ""}`}
-            >
-              <div className="ko-round__head">
-                <div>
-                  <span>{round.label}</span>
-                  <small>{doneInRound ? `${doneInRound} decided` : "Awaiting qualifiers"}</small>
-                </div>
-                <b>{round.short}</b>
+      {selectedCard && (
+        <div className="ko-path" aria-label="Selected path to the Final">
+          <div className="ko-path__label">Path to Final</div>
+          <div className="ko-path__rail">
+            {selectedPath.map((card, index) => (
+              <div key={card.key} className="ko-path__step">
+                <span>{card.round === "final" ? "Final" : card.round.toUpperCase()}</span>
+                <b>{card.winnerName || `Winner M${card.matchNo}`}</b>
+                {index < selectedPath.length - 1 && <i>↓</i>}
               </div>
-              <div className="ko-round__cards">
-                {round.cards.map((card, index) => {
-                  const v = venueName(card.match.v);
-                  const status = card.isLive ? (card.fixture?.elapsed ? `${card.fixture.elapsed}'` : "LIVE") : card.isDone ? "FT" : "TBD";
-                  const cardStatus = card.isLive ? "Live" : card.isDone ? "Complete" : "Scheduled";
-                  const scoreA = card.fixture?.gh;
-                  const scoreB = card.fixture?.ga;
-                  return (
-                    <div
-                      key={card.key}
-                      className={`ko-slot ko-slot--${card.round}${card.round !== "final" && card.round !== "third" ? " ko-slot--advance" : ""}`}
-                      style={{ gridRow: `${index * slotSpan + 1} / span ${slotSpan}` }}
-                    >
-                      <button
-                        type="button"
-                        className={`ko-match ko-match--${card.round}${card.isLive ? " ko-match--live" : ""}${card.isDone ? " ko-match--done" : ""}${card.round === "final" ? " ko-match--final" : ""}`}
-                        onClick={() => openMatch(card)}
-                      >
-                        <div className="ko-match__meta">
-                          <span>Match {card.matchNo || card.match.mr}</span>
-                          <b>{status}</b>
-                        </div>
-                        <div className="ko-match__teams">
-                          {card.teams.map((team, teamIndex) => {
-                            const score = teamIndex === 0 ? scoreA : scoreB;
-                            return (
-                              <div key={`${card.key}-${teamIndex}`} className={`ko-team${team.winner ? " ko-team--winner" : ""}${team.name === "TBD" || team.placeholder ? " ko-team--tbd" : ""}`}>
-                                <span className="ko-team__flag">{team.name === "TBD" || team.placeholder ? "TBD" : (data.flags[team.name] || "⚽")}</span>
-                                <span className="ko-team__name">{team.name}</span>
-                                {team.seed && <span className="ko-team__seed">{team.seed}</span>}
-                                {score != null && <strong>{score}</strong>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="ko-match__foot">
-                          <span>{fmtDate(card.match)} · {card.match.et}</span>
-                          <span>{v.common}</span>
-                        </div>
-                        <div className="ko-match__source">
-                          <span>{card.source}</span>
-                          <b>{cardStatus}</b>
-                        </div>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+            ))}
+            <div className="ko-path__step ko-path__step--champ">
+              <span>Champion</span>
+              <b>Trophy</b>
             </div>
-          );})}
+          </div>
+        </div>
+      )}
+
+      <div className="ko-round-focus" aria-live="polite">
+        <div className="ko-round__head">
+          <div>
+            <span>{activeRoundModel.label}</span>
+            <small>{activeRoundModel.cards.filter(card => card.isDone).length ? `${activeRoundModel.cards.filter(card => card.isDone).length} decided` : "Awaiting qualifiers"}</small>
+          </div>
+          <b>{activeRoundModel.short}</b>
+        </div>
+        <div className="ko-mobile-list">
+          {activeRoundModel.cards.map(card => {
+            const v = venueName(card.match.v);
+            const status = card.isLive ? (card.fixture?.elapsed ? `${card.fixture.elapsed}'` : "LIVE") : card.isDone ? "FT" : "Scheduled";
+            const scoreA = card.fixture?.gh;
+            const scoreB = card.fixture?.ga;
+            const isSelected = selectedPathKeys.has(card.key);
+            return (
+              <article
+                key={card.key}
+                className={`ko-match ko-match--${card.round}${card.isLive ? " ko-match--live" : ""}${card.isDone ? " ko-match--done" : ""}${card.round === "final" ? " ko-match--final" : ""}${isSelected ? " ko-match--path" : ""}${shouldDim && !isSelected ? " ko-match--dim" : ""}`}
+              >
+                <button type="button" className="ko-match__tap" onClick={() => setSelectedPathKey(card.key)} aria-label={`Show path for match ${card.matchNo}`}>
+                  <div className="ko-match__meta">
+                    <span>Match {card.matchNo || card.match.mr}</span>
+                    <b>{status}</b>
+                  </div>
+                  <div className="ko-match__teams">
+                    {card.teams.map((team, teamIndex) => {
+                      const score = teamIndex === 0 ? scoreA : scoreB;
+                      return (
+                        <div key={`${card.key}-${teamIndex}`} className={`ko-team${team.winner ? " ko-team--winner" : ""}${team.name === "TBD" || team.placeholder ? " ko-team--tbd" : ""}`}>
+                          <span className="ko-team__flag">{team.name === "TBD" || team.placeholder ? "TBD" : (data.flags[team.name] || "⚽")}</span>
+                          <span className="ko-team__name">{team.name}</span>
+                          {team.seed && <span className="ko-team__seed">{team.seed}</span>}
+                          {score != null && <strong>{score}</strong>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="ko-match__foot">
+                    <span>{fmtDate(card.match)} · {card.match.et}</span>
+                    <span>{v.common}</span>
+                  </div>
+                  <div className="ko-match__advance">{nextDestination(card)}</div>
+                </button>
+                <button type="button" className="ko-match__details" onClick={() => openMatch(card)}>Match Details</button>
+              </article>
+            );
+          })}
         </div>
       </div>
 

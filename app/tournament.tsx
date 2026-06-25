@@ -29,6 +29,8 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 type KnockoutRoundKey = "r32" | "r16" | "qf" | "sf" | "third" | "final";
+type StandingRow = { t: string; p: number; w: number; d: number; l: number; gf: number; ga: number; pts: number };
+type GroupStanding = { rows: StandingRow[]; played: number; complete: boolean };
 
 const KO_ROUNDS: {
   key: KnockoutRoundKey;
@@ -59,6 +61,75 @@ const KO_SOURCE_PAIRS: Partial<Record<KnockoutRoundKey, [number, number][]>> = {
   final: [[0, 1]],
   third: [[0, 1]],
 };
+
+function ordinalSeedLabel(seed: string): string {
+  const m = seed.match(/^([123])([A-L])$/);
+  if (!m) return seed === "3rd" ? "Best 3rd" : seed || "TBD";
+  const place = m[1] === "1" ? "1st" : m[1] === "2" ? "2nd" : "3rd";
+  return `${place} Group ${m[2]}`;
+}
+
+function completedGroupStanding(
+  g: string,
+  data: TournamentData,
+  fixtures: LiveFixture[],
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null,
+  nowMs: number,
+): GroupStanding {
+  const teams = data.groups[g] || [];
+  const T: Record<string, StandingRow> = {};
+  teams.forEach(t => T[t] = { t, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 });
+  let played = 0;
+  for (const m of data.gs) {
+    if (m.g !== g) continue;
+    const f = findLive(m, fixtures);
+    const hasKickedOff = m.ts <= nowMs + 5 * 60000;
+    let t1g: number | null = null, t2g: number | null = null;
+    if (hasKickedOff && f && DONE_STATUSES.has(f.status)) {
+      const gg = goalsFor(m, f);
+      t1g = gg.t1; t2g = gg.t2;
+    } else if (hasKickedOff && m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null) {
+      t1g = m.dbGh; t2g = m.dbGa;
+    }
+    if (t1g == null || t2g == null) continue;
+    const A = T[m.t1], Bx = T[m.t2];
+    if (!A || !Bx) continue;
+    A.p++; Bx.p++; A.gf += t1g; A.ga += t2g; Bx.gf += t2g; Bx.ga += t1g; played++;
+    if (t1g > t2g) { A.w++; A.pts += 3; Bx.l++; }
+    else if (t1g < t2g) { Bx.w++; Bx.pts += 3; A.l++; }
+    else { A.d++; Bx.d++; A.pts++; Bx.pts++; }
+  }
+  const rows = teams.map(t => T[t]).sort((a, b) =>
+    b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf || a.t.localeCompare(b.t));
+  const expectedMatches = data.gs.filter(m => m.g === g).length;
+  return { rows, played, complete: expectedMatches > 0 && played === expectedMatches };
+}
+
+function resolveGroupSeed(seed: string, standingsByGroup: Record<string, GroupStanding>): KnockoutParticipant {
+  const label = ordinalSeedLabel(seed);
+  const m = seed.match(/^([123])([A-L])$/);
+  if (!m) return { name: label, placeholder: true };
+  const [, place, group] = m;
+  const standing = standingsByGroup[group];
+  const index = Number(place) - 1;
+  const qualified = standing?.complete ? standing.rows[index]?.t : "";
+  return qualified ? { name: qualified, seed: label } : { name: label, placeholder: true };
+}
+
+function isCompletedKnockoutFixture(fixture: LiveFixture | null): fixture is LiveFixture {
+  return !!fixture &&
+    DONE_STATUSES.has(fixture.status) &&
+    fixture.gh != null &&
+    fixture.ga != null &&
+    (fixture.gh !== fixture.ga || fixture.status === "PEN" || fixture.status === "AET");
+}
+
+function calculateKnockoutProgress(rounds: { cards: KnockoutCardModel[] }[]) {
+  const total = rounds.reduce((sum, round) => sum + round.cards.length, 0);
+  const completed = rounds.reduce((sum, round) => sum + round.cards.filter(card => card.isDone).length, 0);
+  const live = rounds.reduce((sum, round) => sum + round.cards.filter(card => card.isLive).length, 0);
+  return { total, completed, live, pct: total ? Math.round((completed / total) * 100) : 0 };
+}
 
 function parseISO(iso: string): Date {
   const [y, m, da] = iso.split("-").map(Number);
@@ -323,32 +394,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }
 
   function standings(g: string) {
-    const teams = data.groups[g];
-    const T: Record<string, { t: string; p: number; w: number; d: number; l: number; gf: number; ga: number; pts: number }> = {};
-    teams.forEach(t => T[t] = { t, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 });
-    let played = 0;
-    for (const m of data.gs) {
-      if (m.g !== g) continue;
-      const f = findLive(m, fixtures);
-      const hasKickedOff = m.ts <= nowMs + 5 * 60000;
-      let t1g: number | null = null, t2g: number | null = null;
-      if (hasKickedOff && f && DONE_STATUSES.has(f.status)) {
-        const gg = goalsFor(m, f);
-        t1g = gg.t1; t2g = gg.t2;
-      } else if (hasKickedOff && m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null) {
-        t1g = m.dbGh; t2g = m.dbGa;
-      }
-      if (t1g == null || t2g == null) continue;
-      const A = T[m.t1], Bx = T[m.t2];
-      if (!A || !Bx) continue;
-      A.p++; Bx.p++; A.gf += t1g; A.ga += t2g; Bx.gf += t2g; Bx.ga += t1g; played++;
-      if (t1g > t2g) { A.w++; A.pts += 3; Bx.l++; }
-      else if (t1g < t2g) { Bx.w++; Bx.pts += 3; A.l++; }
-      else { A.d++; Bx.d++; A.pts++; Bx.pts++; }
-    }
-    const rows = teams.map(t => T[t]).sort((a, b) =>
-      b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf || a.t.localeCompare(b.t));
-    return { rows, played };
+    return completedGroupStanding(g, data, fixtures, findLive, nowMs);
   }
 
   function formatGD(gd: number, matchesPlayed: number): string {
@@ -811,6 +857,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
             data={data}
             fixtures={fixtures}
             findLive={findLive}
+            nowMs={nowMs}
             onMatchClick={(match, fixture) => setMatchDetail({ match, fixture })}
           />
         ) : view === "stats" ? (
@@ -871,6 +918,7 @@ type KnockoutParticipant = {
   seed?: string;
   winner?: boolean;
   loser?: boolean;
+  placeholder?: boolean;
 };
 
 type KnockoutCardModel = {
@@ -887,10 +935,11 @@ type KnockoutCardModel = {
   loserName: string | null;
 };
 
-function KnockoutStageView({ data, fixtures, findLive, onMatchClick }: {
+function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   data: TournamentData;
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
+  nowMs: number;
   onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
 }) {
   const [activeRound, setActiveRound] = useState<KnockoutRoundKey>("r32");
@@ -922,14 +971,22 @@ function KnockoutStageView({ data, fixtures, findLive, onMatchClick }: {
   }, []);
 
   const winnerFromFixture = useCallback((fixture: LiveFixture | null): string | null => {
-    if (!fixture || !DONE_STATUSES.has(fixture.status) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
+    if (!isCompletedKnockoutFixture(fixture) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
     return fixture.gh > fixture.ga ? teamName(fixture.home) : teamName(fixture.away);
   }, [teamName]);
 
   const loserFromFixture = useCallback((fixture: LiveFixture | null): string | null => {
-    if (!fixture || !DONE_STATUSES.has(fixture.status) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
+    if (!isCompletedKnockoutFixture(fixture) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
     return fixture.gh > fixture.ga ? teamName(fixture.away) : teamName(fixture.home);
   }, [teamName]);
+
+  const standingsByGroup = useMemo(() => {
+    const groupMap: Record<string, GroupStanding> = {};
+    for (const g of Object.keys(data.groups)) {
+      groupMap[g] = completedGroupStanding(g, data, fixtures, findLive, nowMs);
+    }
+    return groupMap;
+  }, [data, findLive, fixtures, nowMs]);
 
   const rounds = useMemo(() => {
     const winners: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
@@ -964,7 +1021,7 @@ function KnockoutStageView({ data, fixtures, findLive, onMatchClick }: {
         const matchNo = config.matchNumbers[index] || Number(match.mr) || 0;
         const fixture = findLive({ ts: match.ts, v: match.v }, fixtures);
         const isLive = !!fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(match.ts, fixture.status);
-        const isDone = !!fixture && DONE_STATUSES.has(fixture.status);
+        const isDone = isCompletedKnockoutFixture(fixture);
         const winnerName = winnerFromFixture(fixture);
         const loserName = loserFromFixture(fixture);
         let teamA: KnockoutParticipant;
@@ -976,8 +1033,9 @@ function KnockoutStageView({ data, fixtures, findLive, onMatchClick }: {
           teamA = { name: home, winner: winnerName === home, loser: loserName === home };
           teamB = { name: away, winner: winnerName === away, loser: loserName === away };
         } else if (config.key === "r32") {
-          teamA = { name: "TBD", seed: R32_SEEDS[index]?.[0] || "TBD" };
-          teamB = { name: "TBD", seed: R32_SEEDS[index]?.[1] || "TBD" };
+          const [seedA, seedB] = R32_SEEDS[index] || ["TBD", "TBD"];
+          teamA = resolveGroupSeed(seedA, standingsByGroup);
+          teamB = resolveGroupSeed(seedB, standingsByGroup);
         } else {
           const [sourceA, sourceB] = sourcePair(config.key, index);
           const sourceLabel = sourceFor(config.key, index).split(" / ");
@@ -1005,12 +1063,33 @@ function KnockoutStageView({ data, fixtures, findLive, onMatchClick }: {
       losers[config.key] = cards.map(card => card.loserName);
       return { ...config, cards };
     });
-  }, [byRound, findLive, fixtures, loserFromFixture, teamName, winnerFromFixture]);
+  }, [byRound, findLive, fixtures, loserFromFixture, standingsByGroup, teamName, winnerFromFixture]);
 
-  const completed = rounds.reduce((sum, round) => sum + round.cards.filter(card => card.isDone).length, 0);
-  const total = rounds.reduce((sum, round) => sum + round.cards.length, 0);
-  const liveCount = rounds.reduce((sum, round) => sum + round.cards.filter(card => card.isLive).length, 0);
-  const progressPct = total ? Math.round((completed / total) * 100) : 0;
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    const r32 = rounds.find(round => round.key === "r32");
+    const warnings: string[] = [];
+    if (!r32 || r32.cards.length !== 16) warnings.push(`Round of 32 slot count is ${r32?.cards.length ?? 0}, expected 16`);
+    R32_SEEDS.forEach((pair, index) => {
+      pair.forEach(seed => {
+        if (seed !== "3rd" && !/^([12][A-L])$/.test(seed)) warnings.push(`Invalid R32 seed "${seed}" at slot ${index + 1}`);
+      });
+    });
+    rounds.forEach(round => {
+      round.cards.forEach(card => {
+        card.teams.forEach((team, index) => {
+          if (!team.name.trim()) warnings.push(`${round.label} match ${card.matchNo} side ${index + 1} has an empty team slot`);
+        });
+      });
+    });
+    if (warnings.length) console.warn("[Knockout validation]", warnings);
+  }, [rounds]);
+
+  const progress = calculateKnockoutProgress(rounds);
+  const completed = progress.completed;
+  const total = progress.total;
+  const liveCount = progress.live;
+  const progressPct = progress.pct;
   const currentRound = rounds.find(round => round.cards.some(card => card.isLive)) ||
     rounds.find(round => round.cards.some(card => !card.isDone)) ||
     rounds[rounds.length - 1];
@@ -1118,8 +1197,8 @@ function KnockoutStageView({ data, fixtures, findLive, onMatchClick }: {
                           {card.teams.map((team, teamIndex) => {
                             const score = teamIndex === 0 ? scoreA : scoreB;
                             return (
-                              <div key={`${card.key}-${teamIndex}`} className={`ko-team${team.winner ? " ko-team--winner" : ""}${team.name === "TBD" ? " ko-team--tbd" : ""}`}>
-                                <span className="ko-team__flag">{team.name === "TBD" ? "TBD" : (data.flags[team.name] || "⚽")}</span>
+                              <div key={`${card.key}-${teamIndex}`} className={`ko-team${team.winner ? " ko-team--winner" : ""}${team.name === "TBD" || team.placeholder ? " ko-team--tbd" : ""}`}>
+                                <span className="ko-team__flag">{team.name === "TBD" || team.placeholder ? "TBD" : (data.flags[team.name] || "⚽")}</span>
                                 <span className="ko-team__name">{team.name}</span>
                                 {team.seed && <span className="ko-team__seed">{team.seed}</span>}
                                 {score != null && <strong>{score}</strong>}

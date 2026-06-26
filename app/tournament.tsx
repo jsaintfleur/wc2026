@@ -324,7 +324,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
+  }, [view, fixtures.length, liveStatus, liveTs]);
 
   // Detect goal changes and show toast notification
   useEffect(() => {
@@ -482,9 +482,28 @@ export default function Tournament({ data }: { data: TournamentData }) {
     const list = data.gs.filter(matchHit);
     if (!list.length) return `<div class="empty">No matches match your filters.<br>Try clearing the search or picking "All".</div>`;
 
+    const isMatchDone = (m: GroupStageMatch): boolean => {
+      const f = findLive(m, fixtures);
+      const stale = (f && isStaleStatus(m.ts, f.status, now)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, now));
+      const hasKickedOff = m.ts <= now + 5 * 60000;
+      return !stale && hasKickedOff && !!(
+        (f && DONE_STATUSES.has(f.status)) ||
+        (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null)
+      );
+    };
+    const isPastUnresolved = (m: GroupStageMatch): boolean => {
+      if (isMatchDone(m)) return false;
+      const f = findLive(m, fixtures);
+      const stale = (f && isStaleStatus(m.ts, f.status, now)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, now));
+      const live = !!f && LIVE_STATUSES.has(f.status) && !stale;
+      return !live && m.iso < today && m.ts < now;
+    };
+
     /* Group matches by ISO date, preserving chronological order */
     const byDate = new Map<string, GroupStageMatch[]>();
-    for (const m of list) {
+    const completedMatches = list.filter(m => isMatchDone(m) || isPastUnresolved(m)).sort((a, b) => b.ts - a.ts);
+    const activeList = list.filter(m => !isMatchDone(m) && !isPastUnresolved(m));
+    for (const m of activeList) {
       if (!byDate.has(m.iso)) byDate.set(m.iso, []);
       byDate.get(m.iso)!.push(m);
     }
@@ -500,9 +519,23 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
     let html = "";
 
+    if (completedMatches.length) {
+      const latest = completedMatches[0];
+      const latestDate = parseISO(latest.iso);
+      html += `<details class="finished-drawer">
+        <summary>
+          <span>Finished Games</span>
+          <b>${completedMatches.length}</b>
+          <small>Latest: ${DOW[latestDate.getDay()]} ${latestDate.getDate()} ${MON[latestDate.getMonth()]}</small>
+        </summary>
+        <div class="finished-drawer__body">`;
+      for (const m of completedMatches) html += tixCard(m, anim, true);
+      html += `</div></details>`;
+    }
+
     /* Live banner pinned at top when matches are in progress */
     if (liveMatches.length) {
-      html += `<div class="mc-sec" id="mc-live"><div class="mc-hd mc-hd--live"><span class="mc-dot"></span>Live Now</div>`;
+      html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div><div class="mc-sec" id="mc-live"><div class="mc-hd mc-hd--live"><span class="mc-dot"></span>Live Now</div>`;
       for (const m of liveMatches) html += tixCard(m, anim);
       html += `</div>`;
     }
@@ -515,21 +548,12 @@ export default function Tournament({ data }: { data: TournamentData }) {
       const dateLabel = `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`;
 
       /* Determine if this day is fully in the past, current, or future */
-      const allDone = matches.every(m => {
-        const f = findLive(m, fixtures);
-        const stale = (f && isStaleStatus(m.ts, f.status, now)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, now));
-        const hasKickedOff = m.ts <= now + 5 * 60000;
-        return !stale && hasKickedOff && (
-          (f && DONE_STATUSES.has(f.status)) ||
-          (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null)
-        );
-      });
       const isToday = iso === today;
-      const isPast = iso < today || (isToday && allDone);
+      const isPast = iso < today;
 
       /* Place the scroll anchor before the first non-past section */
-      if (!anchorPlaced && !isPast) {
-        html += `<div id="next-match-anchor" style="scroll-margin-top:80px"></div>`;
+      if (!liveMatches.length && !anchorPlaced && !isPast) {
+        html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div>`;
         anchorPlaced = true;
       }
 
@@ -541,16 +565,20 @@ export default function Tournament({ data }: { data: TournamentData }) {
         const f = findLive(m, fixtures);
         const stale = (f && isStaleStatus(m.ts, f.status, now)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, now));
         const hasKickedOff = m.ts <= now + 5 * 60000;
-        const isDone = !stale && hasKickedOff && !!(
-          (f && DONE_STATUSES.has(f.status)) ||
-          (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null)
-        );
+        const isDone = !stale && hasKickedOff && isMatchDone(m);
         html += tixCard(m, anim, isDone);
       }
       html += `</div>`;
     }
 
-    /* If every single match is done, no anchor was placed — that's fine */
+    if (!activeList.length && completedMatches.length) {
+      const latest = completedMatches.slice(0, 4);
+      html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div>
+        <div class="mc-sec mc-sec--latest"><div class="mc-hd">Latest Results</div>`;
+      for (const m of latest) html += tixCard(m, anim, true);
+      html += `</div>`;
+    }
+
     return html || `<div class="empty">No matches match your filters.</div>`;
   }
 

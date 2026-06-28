@@ -6147,6 +6147,23 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   border-radius: var(--r-full);
 }
 
+.team-tile__star {
+  margin-left: auto;
+  font-size: 16px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .15s, transform .15s;
+  line-height: 1;
+}
+.team-tile__star:hover { color: var(--gold); transform: scale(1.2); }
+.team-tile__star--active { color: var(--gold-bright); }
+.team-tile__star--active:hover { color: var(--gold); }
+
+.team-tile--fav {
+  border-color: rgba(245,158,11,0.2);
+  box-shadow: 0 0 16px rgba(245,158,11,0.08), var(--shadow);
+}
+
 .team-tile__name {
   min-width: 0;
   overflow: hidden;

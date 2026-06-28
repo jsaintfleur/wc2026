@@ -7,6 +7,26 @@ import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import TriondaBall from "@/app/components/TriondaBall";
 import WorldCupTrophy from "@/app/components/WorldCupTrophy";
 
+/* Favorites hook — persists to localStorage */
+function useFavorites(): [Set<string>, (team: string) => void] {
+  const [favs, setFavs] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const saved = localStorage.getItem("compet-favs");
+      return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+    } catch { return new Set<string>(); }
+  });
+  const toggle = useCallback((team: string) => {
+    setFavs(prev => {
+      const next = new Set(prev);
+      if (next.has(team)) next.delete(team); else next.add(team);
+      try { localStorage.setItem("compet-favs", JSON.stringify([...next])); } catch { /* quota */ }
+      return next;
+    });
+  }, []);
+  return [favs, toggle];
+}
+
 const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
@@ -381,6 +401,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [goalToast, setGoalToast] = useState<{ team: string; player: string; minute: string; score: string; flag: string } | null>(null);
   const [toastExiting, setToastExiting] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [favs, toggleFav] = useFavorites();
   const prevScoresRef = useRef<Map<string, string>>(new Map());
   const scrolledRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
@@ -1333,7 +1354,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         ) : view === "stats" ? (
           <StatsView data={data} fixtures={fixtures} fl={fl} computeLeaders={computeLeaders} />
         ) : view === "teams" ? (
-          <TeamsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} />
+          <TeamsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} favs={favs} toggleFav={toggleFav} />
         ) : view === "more" ? (
           <MoreView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
         ) : (
@@ -1870,12 +1891,14 @@ function SearchOverlay({ data, fixtures, findLive, onClose, onTeamClick, onMatch
   );
 }
 
-function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
+function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleFav }: {
   data: TournamentData;
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
   onTeamClick: (team: string) => void;
+  favs: Set<string>;
+  toggleFav: (team: string) => void;
 }) {
   const [filter, setFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
@@ -1924,8 +1947,13 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
       const q = search.toLowerCase();
       result = result.filter(t => t.team.toLowerCase().includes(q));
     }
-    return result;
-  }, [teamsData, filter, search]);
+    /* Sort favorites to top */
+    return [...result].sort((a, b) => {
+      const aFav = favs.has(a.team) ? 0 : 1;
+      const bFav = favs.has(b.team) ? 0 : 1;
+      return aFav - bFav;
+    });
+  }, [teamsData, filter, search, favs]);
 
   return (
     <main className="teams-view" aria-label="Teams">
@@ -1963,10 +1991,20 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
       {/* -- team grid --------------------------------------------- */}
       <div className="teams-view__grid">
         {filtered.map(({ team, group, flag, host, w, d, l, gf, ga, pts, form }) => (
-          <button key={team} type="button" className="team-tile" onClick={() => onTeamClick(team)}>
+          <button key={team} type="button" className={`team-tile${favs.has(team) ? " team-tile--fav" : ""}`} onClick={() => onTeamClick(team)}>
             <div className="team-tile__top">
               <span className="team-tile__flag">{flag}</span>
               {host && <span className="team-tile__host">Host</span>}
+              <span
+                className={`team-tile__star${favs.has(team) ? " team-tile__star--active" : ""}`}
+                role="button"
+                tabIndex={0}
+                aria-label={favs.has(team) ? `Remove ${team} from favorites` : `Add ${team} to favorites`}
+                onClick={e => { e.stopPropagation(); toggleFav(team); }}
+                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); toggleFav(team); } }}
+              >
+                {favs.has(team) ? "★" : "☆"}
+              </span>
             </div>
             <span className="team-tile__name">{team}</span>
             <span className="team-tile__group">Group {group}</span>

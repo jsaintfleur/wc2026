@@ -3065,7 +3065,62 @@ body::after {
 
 code { background: var(--glass-heavy); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; font-size: 12.5px; }
 
-.empty { text-align: center; color: var(--muted); padding: 40px 20px; font-size: 14px; }
+/* ── Empty & loading states ─────────────────────────────────── */
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 48px 24px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.empty::before {
+  content: "🔍";
+  display: block;
+  font-size: 32px;
+  margin-bottom: 12px;
+  opacity: .6;
+}
+
+.empty__action {
+  appearance: none;
+  display: inline-block;
+  margin-top: 14px;
+  padding: 8px 18px;
+  border: 1px solid rgba(245,158,11,0.25);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--dur-fast);
+}
+.empty__action:hover { background: rgba(245,158,11,0.1); }
+
+/* Skeleton shimmer for loading placeholders */
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s ease-in-out infinite;
+  border-radius: var(--r-sm);
+}
+
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; background: rgba(255,255,255,0.06); }
+}
 
 .foot { padding: 20px 16px; text-align: center; color: var(--muted); font-size: 11px; border-top: 1px solid var(--line); letter-spacing: .3px; }
 
@@ -5221,10 +5276,17 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 /* Empty state */
 .stats-empty {
   text-align: center;
-  padding: 32px 16px;
+  padding: 48px 24px;
   color: var(--muted);
 }
-.stats-empty p { margin: 0 0 8px; font-size: 14px; }
+.stats-empty::before {
+  content: "📊";
+  display: block;
+  font-size: 36px;
+  margin-bottom: 14px;
+  opacity: .5;
+}
+.stats-empty p { margin: 0 0 8px; font-size: 14px; line-height: 1.5; }
 .stats-empty__sub { font-size: 12px; opacity: 0.6; }
 
 /* Section wrapper — replaces old .stats-table-wrap */

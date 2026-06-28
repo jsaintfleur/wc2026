@@ -1728,8 +1728,8 @@ function SearchOverlay({ data, fixtures, findLive, onClose, onTeamClick, onMatch
 
     /* -- players -------------------------------------------------- */
     const players: { name: string; team: string; pos: string }[] = [];
-    for (const [teamName, roster] of Object.entries(TEAM_PROFILES)) {
-      for (const p of roster) {
+    for (const [teamName, profile] of Object.entries(TEAM_PROFILES)) {
+      for (const p of profile.squad) {
         if (p.name.toLowerCase().includes(query)) {
           players.push({ name: p.name, team: teamName, pos: p.pos });
           if (players.length >= 10) break;

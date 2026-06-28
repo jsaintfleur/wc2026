@@ -380,6 +380,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [playerProfile, setPlayerProfile] = useState<{ name: string; team: string } | null>(null);
   const [goalToast, setGoalToast] = useState<{ team: string; player: string; minute: string; score: string; flag: string } | null>(null);
   const [toastExiting, setToastExiting] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const prevScoresRef = useRef<Map<string, string>>(new Map());
   const scrolledRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
@@ -1209,7 +1210,12 @@ export default function Tournament({ data }: { data: TournamentData }) {
           <img src="/wc26-logo.png" alt="FIFA World Cup 26" className="bar__logo" draggable={false} />
           <TriondaBall id="hb" className="bar__ball" />
         </div>
-        <div className="bar__hosts" aria-label="Hosts: Canada, Mexico, United States"><span>🇨🇦</span><span>🇲🇽</span><span>🇺🇸</span></div>
+        <div className="bar__actions">
+          <button type="button" className="bar__search-btn" onClick={() => setSearchOpen(true)} aria-label="Search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="10.5" cy="10.5" r="7" /><line x1="15.5" y1="15.5" x2="21" y2="21" /></svg>
+          </button>
+          <div className="bar__hosts" aria-label="Hosts: Canada, Mexico, United States"><span>🇨🇦</span><span>🇲🇽</span><span>🇺🇸</span></div>
+        </div>
       </header>
 
       {view !== "bracket" && view !== "home" && (
@@ -1365,6 +1371,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
           </div>
         </div>
       )}
+
+      {searchOpen && <SearchOverlay data={data} fixtures={fixtures} findLive={findLive} onClose={() => setSearchOpen(false)} onTeamClick={(t) => { setSearchOpen(false); setTeamDrawer(t); }} onMatchClick={(m, f) => { setSearchOpen(false); setMatchDetail({ match: m, fixture: f }); }} onNavigate={(v) => { setSearchOpen(false); handleTab(v); }} />}
 
       {teamDrawer && <TeamDrawer name={teamDrawer} flags={data.flags} groups={data.groups} gcolor={data.gcolor} gs={data.gs} hosts={data.hosts} onClose={() => setTeamDrawer(null)} onPlayerClick={(p, t) => { setTeamDrawer(null); setPlayerProfile({ name: p, team: t }); }} />}
       {matchDetail && <MatchDetailDrawer match={matchDetail.match} initialFixture={matchDetail.fixture} fixtures={fixtures} flags={data.flags} venues={data.venues} gcolor={data.gcolor} allMatches={data.gs} vName={vName} findLive={findLive} onClose={() => setMatchDetail(null)} onTeamClick={(t) => { setMatchDetail(null); setTeamDrawer(t); }} onPlayerClick={(p, t) => { setMatchDetail(null); setPlayerProfile({ name: p, team: t }); }} />}
@@ -1678,6 +1686,178 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
       </section>
 
     </main>
+  );
+}
+
+/* ---------------------------------------------------------------
+ * SearchOverlay — universal instant search across all entities
+ * Searches: teams, players, stadiums, cities, groups
+ * --------------------------------------------------------------- */
+function SearchOverlay({ data, fixtures, findLive, onClose, onTeamClick, onMatchClick, onNavigate }: {
+  data: TournamentData;
+  fixtures: LiveFixture[];
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
+  onClose: () => void;
+  onTeamClick: (t: string) => void;
+  onMatchClick: (m: GroupStageMatch, f: LiveFixture | null) => void;
+  onNavigate: (v: ViewType) => void;
+}) {
+  const [q, setQ] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const fl = (t: string) => data.flags[t] || "⚽";
+
+  const results = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return null;
+
+    /* -- teams ---------------------------------------------------- */
+    const teams: { name: string; group: string; flag: string }[] = [];
+    for (const [group, groupTeams] of Object.entries(data.groups)) {
+      for (const t of groupTeams) {
+        if (t.toLowerCase().includes(query)) teams.push({ name: t, group, flag: fl(t) });
+      }
+    }
+
+    /* -- players -------------------------------------------------- */
+    const players: { name: string; team: string; pos: string }[] = [];
+    for (const [teamName, roster] of Object.entries(TEAM_PROFILES)) {
+      for (const p of roster) {
+        if (p.name.toLowerCase().includes(query)) {
+          players.push({ name: p.name, team: teamName, pos: p.pos });
+          if (players.length >= 10) break;
+        }
+      }
+      if (players.length >= 10) break;
+    }
+
+    /* -- venues --------------------------------------------------- */
+    const venues: { code: string; name: string; city: string }[] = [];
+    for (const [code, v] of Object.entries(data.venues)) {
+      if (v.common.toLowerCase().includes(query) || v.city.toLowerCase().includes(query) || v.fifa.toLowerCase().includes(query)) {
+        venues.push({ code, name: v.common, city: v.city });
+      }
+    }
+
+    /* -- matches -------------------------------------------------- */
+    const matches: { match: GroupStageMatch; fixture: LiveFixture | null }[] = [];
+    for (const m of data.gs) {
+      if (m.t1.toLowerCase().includes(query) || m.t2.toLowerCase().includes(query)) {
+        matches.push({ match: m, fixture: findLive(m, fixtures) });
+        if (matches.length >= 6) break;
+      }
+    }
+
+    /* -- groups --------------------------------------------------- */
+    const groups: string[] = [];
+    for (const g of Object.keys(data.groups)) {
+      if (`group ${g}`.toLowerCase().includes(query) || g.toLowerCase() === query) groups.push(g);
+    }
+
+    const total = teams.length + players.length + venues.length + matches.length + groups.length;
+    return { teams, players, venues, matches, groups, total };
+  }, [q, data, fixtures, findLive, fl]);
+
+  return (
+    <div className="search-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="search-overlay__panel">
+        <div className="search-overlay__header">
+          <svg className="search-overlay__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="10.5" cy="10.5" r="7" /><line x1="15.5" y1="15.5" x2="21" y2="21" /></svg>
+          <input
+            ref={inputRef}
+            type="search"
+            className="search-overlay__input"
+            placeholder="Search teams, players, stadiums…"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            aria-label="Search"
+          />
+          <button type="button" className="search-overlay__close" onClick={onClose} aria-label="Close search">✕</button>
+        </div>
+
+        <div className="search-overlay__results">
+          {!results && (
+            <div className="search-overlay__hint">
+              <p>Try searching for a team, player, or stadium</p>
+            </div>
+          )}
+
+          {results && results.total === 0 && (
+            <div className="search-overlay__empty">No results for &ldquo;{q}&rdquo;</div>
+          )}
+
+          {results && results.teams.length > 0 && (
+            <div className="search-overlay__section">
+              <h4>Teams</h4>
+              {results.teams.slice(0, 8).map(t => (
+                <button key={t.name} type="button" className="search-overlay__row" onClick={() => onTeamClick(t.name)}>
+                  <span className="search-overlay__row-icon">{t.flag}</span>
+                  <span className="search-overlay__row-text"><b>{t.name}</b><span>Group {t.group}</span></span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {results && results.players.length > 0 && (
+            <div className="search-overlay__section">
+              <h4>Players</h4>
+              {results.players.map((p, i) => (
+                <button key={i} type="button" className="search-overlay__row" onClick={() => onTeamClick(p.team)}>
+                  <span className="search-overlay__row-icon">⚽</span>
+                  <span className="search-overlay__row-text"><b>{p.name}</b><span>{p.team} · {p.pos}</span></span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {results && results.matches.length > 0 && (
+            <div className="search-overlay__section">
+              <h4>Matches</h4>
+              {results.matches.map((m, i) => (
+                <button key={i} type="button" className="search-overlay__row" onClick={() => onMatchClick(m.match, m.fixture)}>
+                  <span className="search-overlay__row-icon">📅</span>
+                  <span className="search-overlay__row-text">
+                    <b>{m.match.t1} vs {m.match.t2}</b>
+                    <span>Group {m.match.g}{m.fixture && m.fixture.gh != null ? ` · ${m.fixture.gh}–${m.fixture.ga}` : ""}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {results && results.venues.length > 0 && (
+            <div className="search-overlay__section">
+              <h4>Stadiums</h4>
+              {results.venues.map(v => (
+                <button key={v.code} type="button" className="search-overlay__row" onClick={() => onNavigate("more")}>
+                  <span className="search-overlay__row-icon">🏟️</span>
+                  <span className="search-overlay__row-text"><b>{v.name}</b><span>{v.city}</span></span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {results && results.groups.length > 0 && (
+            <div className="search-overlay__section">
+              <h4>Groups</h4>
+              {results.groups.map(g => (
+                <button key={g} type="button" className="search-overlay__row" onClick={() => onNavigate("groups")}>
+                  <span className="search-overlay__row-icon">📊</span>
+                  <span className="search-overlay__row-text"><b>Group {g}</b><span>{data.groups[g]?.join(", ")}</span></span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

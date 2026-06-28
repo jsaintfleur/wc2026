@@ -523,6 +523,18 @@ export default function Tournament({ data }: { data: TournamentData }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fixtures]);
 
+  /* Cmd+K / Ctrl+K opens search overlay */
+  useEffect(() => {
+    function handleKeyboard(e: globalThis.KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen(prev => !prev);
+      }
+    }
+    document.addEventListener("keydown", handleKeyboard);
+    return () => document.removeEventListener("keydown", handleKeyboard);
+  }, []);
+
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       const teamEl = (e.target as HTMLElement).closest("[data-team]") as HTMLElement | null;
@@ -1775,6 +1787,7 @@ function SearchOverlay({ data, fixtures, findLive, onClose, onTeamClick, onMatch
             onChange={e => setQ(e.target.value)}
             aria-label="Search"
           />
+          <kbd className="search-overlay__kbd">⌘K</kbd>
           <button type="button" className="search-overlay__close" onClick={onClose} aria-label="Close search">✕</button>
         </div>
 

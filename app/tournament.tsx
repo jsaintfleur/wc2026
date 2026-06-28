@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup, type PlayerMatchStat } from "@/lib/data";
-import { nrm, canon } from "@/lib/merge";
+import { nrm, canon, canonPlayer } from "@/lib/merge";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import TriondaBall from "@/app/components/TriondaBall";
 import WorldCupTrophy from "@/app/components/WorldCupTrophy";
@@ -1143,8 +1143,10 @@ export default function Tournament({ data }: { data: TournamentData }) {
             const isRed = ev.detail?.includes("Red") ?? false;
             if (isRed) totalReds++; else totalYellows++;
             if (ev.player) {
-              const cKey = `${ev.player}|${ev.team}`;
-              if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: ev.player, team: ev.team, yellows: 0, reds: 0 };
+              const cName = canonPlayer(ev.player);
+              const cTeam = ev.team ? canon(ev.team) : ev.team;
+              const cKey = `${cName}|${cTeam}`;
+              if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: cName, team: cTeam, yellows: 0, reds: 0 };
               if (isRed) cardPlayers[cKey].reds++; else cardPlayers[cKey].yellows++;
             }
             continue;
@@ -1173,23 +1175,28 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
           /* Event-based team goals (for granular tracking) */
           if (ev.team) {
-            teamGoalsFromEvents[ev.team] = (teamGoalsFromEvents[ev.team] || 0) + 1;
+            const cTeam = canon(ev.team);
+            teamGoalsFromEvents[cTeam] = (teamGoalsFromEvents[cTeam] || 0) + 1;
           }
 
           if (isOG) continue;
 
-          /* Individual scorer */
+          /* Individual scorer — normalize Farsi transliterations + abbreviations */
           if (ev.player) {
-            const pKey = `${ev.player}|${ev.team}`;
-            if (!scorers[pKey]) scorers[pKey] = { name: ev.player, team: ev.team, goals: 0, penalties: 0, assists: 0, matches: 0 };
+            const pName = canonPlayer(ev.player);
+            const pTeam = ev.team ? canon(ev.team) : ev.team;
+            const pKey = `${pName}|${pTeam}`;
+            if (!scorers[pKey]) scorers[pKey] = { name: pName, team: pTeam, goals: 0, penalties: 0, assists: 0, matches: 0 };
             scorers[pKey].goals++;
             if (isPen) scorers[pKey].penalties++;
           }
 
           /* Assist */
           if (ev.assist) {
-            const aKey = `${ev.assist}|${ev.team}`;
-            if (!assisters[aKey]) assisters[aKey] = { name: ev.assist, team: ev.team, assists: 0 };
+            const aName = canonPlayer(ev.assist);
+            const aTeam = ev.team ? canon(ev.team) : ev.team;
+            const aKey = `${aName}|${aTeam}`;
+            if (!assisters[aKey]) assisters[aKey] = { name: aName, team: aTeam, assists: 0 };
             assisters[aKey].assists++;
           }
         }
@@ -1200,20 +1207,22 @@ export default function Tournament({ data }: { data: TournamentData }) {
         for (const p of fm.players!) {
           if (!p.name || !p.team) continue;
 
+          const pName = canonPlayer(p.name);
+          const pTeam = canon(p.team);
           if (p.goals > 0) {
-            const pKey = `${p.name}|${p.team}`;
-            if (!scorers[pKey]) scorers[pKey] = { name: p.name, team: p.team, goals: 0, penalties: 0, assists: 0, matches: 0 };
+            const pKey = `${pName}|${pTeam}`;
+            if (!scorers[pKey]) scorers[pKey] = { name: pName, team: pTeam, goals: 0, penalties: 0, assists: 0, matches: 0 };
             scorers[pKey].goals += p.goals;
           }
           if (p.assists > 0) {
-            const aKey = `${p.name}|${p.team}`;
-            if (!assisters[aKey]) assisters[aKey] = { name: p.name, team: p.team, assists: 0 };
+            const aKey = `${pName}|${pTeam}`;
+            if (!assisters[aKey]) assisters[aKey] = { name: pName, team: pTeam, assists: 0 };
             assisters[aKey].assists += p.assists;
             if (scorers[aKey]) scorers[aKey].assists += p.assists;
           }
           if (p.yellowCards > 0 || p.redCards > 0) {
-            const cKey = `${p.name}|${p.team}`;
-            if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: p.name, team: p.team, yellows: 0, reds: 0 };
+            const cKey = `${pName}|${pTeam}`;
+            if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: pName, team: pTeam, yellows: 0, reds: 0 };
             cardPlayers[cKey].yellows += p.yellowCards;
             cardPlayers[cKey].reds += p.redCards;
             totalYellows += p.yellowCards;
@@ -1237,8 +1246,10 @@ export default function Tournament({ data }: { data: TournamentData }) {
           const isRed = ev.detail?.includes("Red") ?? false;
           if (isRed) totalReds++; else totalYellows++;
           if (ev.player) {
-            const cKey = `${ev.player}|${ev.team}`;
-            if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: ev.player, team: ev.team, yellows: 0, reds: 0 };
+            const cName = canonPlayer(ev.player);
+            const cTeam = ev.team ? canon(ev.team) : ev.team;
+            const cKey = `${cName}|${cTeam}`;
+            if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: cName, team: cTeam, yellows: 0, reds: 0 };
             if (isRed) cardPlayers[cKey].reds++; else cardPlayers[cKey].yellows++;
           }
         }
@@ -1251,17 +1262,24 @@ export default function Tournament({ data }: { data: TournamentData }) {
         if (isOG) ownGoals++;
         else if (isPen) penGoals++;
         else normalGoals++;
-        if (ev.team) teamGoalsFromEvents[ev.team] = (teamGoalsFromEvents[ev.team] || 0) + 1;
+        if (ev.team) {
+          const cTeam = canon(ev.team);
+          teamGoalsFromEvents[cTeam] = (teamGoalsFromEvents[cTeam] || 0) + 1;
+        }
         if (isOG) continue;
         if (ev.player) {
-          const pKey = `${ev.player}|${ev.team}`;
-          if (!scorers[pKey]) scorers[pKey] = { name: ev.player, team: ev.team, goals: 0, penalties: 0, assists: 0, matches: 0 };
+          const pName = canonPlayer(ev.player);
+          const pTeam = ev.team ? canon(ev.team) : ev.team;
+          const pKey = `${pName}|${pTeam}`;
+          if (!scorers[pKey]) scorers[pKey] = { name: pName, team: pTeam, goals: 0, penalties: 0, assists: 0, matches: 0 };
           scorers[pKey].goals++;
           if (isPen) scorers[pKey].penalties++;
         }
         if (ev.assist) {
-          const aKey = `${ev.assist}|${ev.team}`;
-          if (!assisters[aKey]) assisters[aKey] = { name: ev.assist, team: ev.team, assists: 0 };
+          const aName = canonPlayer(ev.assist);
+          const aTeam = ev.team ? canon(ev.team) : ev.team;
+          const aKey = `${aName}|${aTeam}`;
+          if (!assisters[aKey]) assisters[aKey] = { name: aName, team: aTeam, assists: 0 };
           assisters[aKey].assists++;
         }
       }

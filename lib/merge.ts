@@ -22,6 +22,95 @@ export function canon(n: string): string {
   return TEAM_NORM[nrm(n)] || n;
 }
 
+// Player name normalization — maps Farsi transliterations and API-Football
+// abbreviations to canonical English names (ESPN as reference source).
+export const PLAYER_NORM: Record<string, string> = {
+  // England
+  "H. Kane": "Harry Kane", "Hri Kin": "Harry Kane",
+  "J. Bellingham": "Jude Bellingham", "Jvd Blingham": "Jude Bellingham",
+  "M. Rashford": "Marcus Rashford",
+  // New Zealand
+  "Ali Jast": "Elijah Just", "Fin Svrman": "Finn Surman",
+  // Germany
+  "Dniz Avndav": "Deniz Undav",
+  // Brazil
+  "Vinicius Junior": "Vinícius Júnior",
+  // DR Congo
+  "Y. Wissa": "Yoane Wissa", "Fistvn Mail": "Fiston Mayele",
+  // Canada
+  "Kail Larin": "Cyle Larin", "Astfan Avstakviv": "Stephen Eustáquio",
+  "Prvmis Divid": "Promise David", "Mohamed Almnai": "Moïse Bombito",
+  // Netherlands
+  "Kvdi Khakpv": "Cody Gakpo", "Ian Fn Hkh": "Jan Paul van Hecke",
+  "Alis Skhiri": "Ellyes Skhiri",
+  // Portugal
+  "J. Neves": "João Neves", "Abdalvhid Namtvf": "Abdulwahid Namotaf",
+  "Nvnv Mndz": "Nuno Mendes",
+  // Morocco
+  "Asmaail Saibari": "Ismael Saibari", "Gessime Yassine": "Yassine Gessime",
+  "Svfian Rhimi": "Sofiane Rahimi",
+  // Switzerland
+  "Jvhan Mnzambi": "Johan Manzambi", "Rvbn Vargas": "Rubén Vargas",
+  // Mexico
+  "Jvlian Kviinvnz": "Julián Quiñones",
+  // Uruguay
+  "Maximiliano Araújo": "Maxi Araújo",
+  // Colombia
+  "Dnil Mvnvz": "Daniel Muñoz", "Lviiz Diaz": "Luis Díaz",
+  "Khamintvn Kampaz": "Hamilton Campaz",
+  // Senegal
+  "Paph Gviih": "Pape Gueye", "Ailman Andiaih": "Iliman Ndiaye",
+  // Japan
+  "Aiash Ivida": "Ayase Ueda",
+  // Argentina
+  "Jivani Lv Slsv": "Giovani Lo Celso",
+  // Ecuador
+  "Gvnzalv Plata": "Gonzalo Plata", "Nilsvn Angvlv": "Nelson Angulo",
+  // Norway
+  "Markvs Hlmgrn Pdrsn": "Markus Holmgren Pedersen",
+  // Türkiye
+  "Baris Alpr Ailmaz": "Barış Alper Yılmaz", "Kan Aihan": "Kaan Ayhan",
+  // Czech Republic
+  "mikhal Sadilk": "Michal Sadílek", "‫mikhal Sadilk": "Michal Sadílek",
+  // Bosnia & Herzegovina
+  "Armin Mhmich": "Ermin Mahmic", "Abvnad": "Edin Džeko",
+  "Karim Alaibgvvich": "Karim Alaibegović",
+  // South Africa
+  "Taplv Maskv": "Thabelo Maseko",
+  // Ivory Coast
+  "Nikvlas Ph Ph": "Nicolas Pépé",
+  // Ghana
+  "Drik Lvkasn": "Derrick Luckassen", "Kalb Iirnki": "Caleb Ekuban",
+  // Algeria
+  "Nzir Bnbvali": "Nazir Benbouali", "Rafik Blghali": "Rafik Belghali",
+  // Jordan
+  "Mvsi Altmari": "Mousa Al-Tamari",
+  // Cape Verde
+  "Hliv Varla": "Hélio Varela",
+  // Qatar
+  // Iran
+  // United States
+  "Kamrvn Bargs": "Cameron Burgess",
+  // Uzbekistan
+  "Abas Bk Fiz Allh Af": "Abbas Faizullayev",
+  "Aldvr Shvmvrvdvf": "Eldor Shomurodov",
+  // Spain
+  "Hassan Mohamed Altmbkti": "Lamine Yamal",
+  // Croatia
+  "M. Baturina": "Martin Baturina", "P. Musa": "Petar Musa",
+  // Tunisia
+  "Hazm Mstvri": "Hazem Mastouri",
+  // Haiti
+  // South Korea
+};
+
+// Normalize a player name using the PLAYER_NORM table
+export function canonPlayer(name: string): string {
+  if (!name) return name;
+  const trimmed = name.trim().replace(/[​-‏‪-‮﻿]/g, "");
+  return PLAYER_NORM[trimmed] || PLAYER_NORM[name] || name;
+}
+
 const WINDOW_MS = 75 * 60_000;
 
 export interface VendorFixture {

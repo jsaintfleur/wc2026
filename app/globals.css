@@ -912,12 +912,22 @@ body::after {
 .qkey i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
 
 /* knockout */
-.wrap:has(.ko-stage) {
-  max-width: 860px;
+.wrap:has(.ko-stage),
+.wrap--knockout {
+  max-width: 980px;
+}
+
+.wrap--knockout .bar {
+  margin-bottom: 8px;
+  background: #060910;
+}
+
+.wrap--knockout .tabs {
+  margin-bottom: 8px;
 }
 
 .ko-stage {
-  padding: 10px 10px 24px;
+  padding: 4px 10px 24px;
 }
 
 .ko-control {
@@ -971,7 +981,7 @@ body::after {
 .ko-control h2 {
   margin: 7px 0 0;
   font-family: var(--disp);
-  font-size: clamp(34px, 10vw, 54px);
+  font-size: clamp(30px, 8vw, 46px);
   font-weight: 800;
   line-height: .88;
   letter-spacing: 0;
@@ -1089,11 +1099,12 @@ body::after {
   z-index: 20;
   display: flex;
   gap: 8px;
-  margin: 12px -10px 12px;
+  margin: 12px -10px 10px;
   padding: 8px 10px;
   overflow-x: auto;
   scrollbar-width: none;
-  background: rgba(8, 12, 21, 0.92);
+  background:
+    linear-gradient(180deg, rgba(8, 12, 21, 0.98), rgba(8, 12, 21, 0.9));
   backdrop-filter: blur(18px) saturate(1.35);
   -webkit-backdrop-filter: blur(18px) saturate(1.35);
   border-block: 1px solid rgba(255,255,255,0.055);
@@ -1198,14 +1209,14 @@ body::after {
 
 .ko-road__scroll {
   display: grid;
-  grid-template-columns: max-content 220px max-content;
-  gap: 16px;
+  grid-template-columns: max-content 232px max-content;
+  gap: 18px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  padding: 2px 2px 8px;
+  padding: 2px 2px 10px;
 }
 
 .ko-road__scroll::-webkit-scrollbar {
@@ -1214,8 +1225,8 @@ body::after {
 
 .ko-road__side {
   display: grid;
-  grid-template-columns: repeat(4, 178px);
-  gap: 10px;
+  grid-template-columns: repeat(4, 184px);
+  gap: 12px;
   align-items: stretch;
 }
 
@@ -1264,7 +1275,7 @@ body::after {
 
 .ko-road__stack {
   display: grid;
-  gap: 8px;
+  gap: 9px;
   align-content: center;
 }
 
@@ -1353,6 +1364,29 @@ body::after {
   transition: opacity .2s, border-color .2s, box-shadow .2s, transform .2s;
 }
 
+.ko-road-card::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  z-index: 0;
+  width: 14px;
+  border-top: 1px solid rgba(245,158,11,0.36);
+  box-shadow: 0 0 10px rgba(168,85,247,0.22);
+  pointer-events: none;
+}
+
+.ko-road-card--left::after {
+  right: -14px;
+}
+
+.ko-road-card--right::after {
+  left: -14px;
+}
+
+.ko-road-card--center::after {
+  display: none;
+}
+
 .ko-road-card--center {
   border-color: rgba(245,158,11,0.34);
   background:
@@ -1370,6 +1404,11 @@ body::after {
   border-color: rgba(245,158,11,0.52);
   box-shadow: 0 16px 36px rgba(0,0,0,0.34), 0 0 0 1px rgba(245,158,11,0.12) inset;
   transform: translateY(-1px);
+}
+
+.ko-road-card--path::after {
+  border-color: rgba(245,158,11,0.86);
+  box-shadow: 0 0 14px rgba(245,158,11,0.4);
 }
 
 .ko-road-card--dim {
@@ -1473,6 +1512,26 @@ body::after {
   letter-spacing: .55px;
   text-transform: uppercase;
   cursor: pointer;
+}
+
+.ko-road__hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 8px 2px 2px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.ko-road__hint span {
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.ko-road__hint b {
+  font-weight: 700;
 }
 
 .ko-path {
@@ -1861,7 +1920,7 @@ body::after {
   }
 
   .ko-control h2 {
-    font-size: 38px;
+    font-size: 32px;
   }
 
   .ko-stage__tab {

@@ -787,7 +787,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   ];
 
   return (
-    <div className="wrap">
+    <div className={`wrap${view === "knockout" ? " wrap--knockout" : ""}`}>
       <header className="bar">
         <div className="bar__mark">
           <img src="/wc26-logo.png" alt="FIFA World Cup 26" className="bar__logo" draggable={false} />
@@ -796,23 +796,25 @@ export default function Tournament({ data }: { data: TournamentData }) {
         <div className="bar__hosts" aria-label="Hosts: Canada, Mexico, United States"><span>🇨🇦</span><span>🇲🇽</span><span>🇺🇸</span></div>
       </header>
 
-      <section className="hero">
-        <div className="hero__pitch-lines" aria-hidden="true" />
-        <div className="hero__eyebrow">Canada &middot; Mexico &middot; United States</div>
-        <h1 className="hero__title">COMPET<br />2026</h1>
-        <div className="hero__sub">Live scores, fixtures, tables and bracket picks</div>
-        <div className="hero__host-row" aria-label="Host nations">
-          <span>🇨🇦 Canada</span>
-          <span>🇲🇽 Mexico</span>
-          <span>🇺🇸 United States</span>
-        </div>
-        <div className="hero__stats">
-          <div className="stat"><b>48</b><span>Teams</span></div>
-          <div className="stat"><b>104</b><span>Matches</span></div>
-          <div className="stat"><b>16</b><span>Venues</span></div>
-          <div className="stat"><b>3</b><span>Hosts</span></div>
-        </div>
-      </section>
+      {view !== "knockout" && (
+        <section className="hero">
+          <div className="hero__pitch-lines" aria-hidden="true" />
+          <div className="hero__eyebrow">Canada &middot; Mexico &middot; United States</div>
+          <h1 className="hero__title">COMPET<br />2026</h1>
+          <div className="hero__sub">Live scores, fixtures, tables and bracket picks</div>
+          <div className="hero__host-row" aria-label="Host nations">
+            <span>🇨🇦 Canada</span>
+            <span>🇲🇽 Mexico</span>
+            <span>🇺🇸 United States</span>
+          </div>
+          <div className="hero__stats">
+            <div className="stat"><b>48</b><span>Teams</span></div>
+            <div className="stat"><b>104</b><span>Matches</span></div>
+            <div className="stat"><b>16</b><span>Venues</span></div>
+            <div className="stat"><b>3</b><span>Hosts</span></div>
+          </div>
+        </section>
+      )}
 
       <nav className="tabs" role="tablist" aria-label="Views">
         {tabs.map(t => (
@@ -828,7 +830,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         ))}
       </nav>
 
-      <CountdownHero data={data} fixtures={fixtures} findLive={findLive} />
+      {view !== "knockout" && <CountdownHero data={data} fixtures={fixtures} findLive={findLive} />}
 
       {view === "schedule" && (
         <div className="filters">
@@ -1358,6 +1360,11 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
               </div>
             ))}
           </div>
+        </div>
+        <div className="ko-road__hint" aria-hidden="true">
+          <span>←</span>
+          <b>Swipe horizontally to explore both sides</b>
+          <span>→</span>
         </div>
       </div>
 

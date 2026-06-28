@@ -1449,16 +1449,16 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const shouldDim = !!selectedPathKey;
   const roundMap = new Map(rounds.map(round => [round.key, round.cards]));
   const leftRoad = [
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "One half", cards: (roundMap.get("r32") || []).slice(0, 8) },
-    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 winners", cards: (roundMap.get("r16") || []).slice(0, 4) },
-    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 paths", cards: (roundMap.get("qf") || []).slice(0, 2) },
-    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "Final gate", cards: (roundMap.get("sf") || []).slice(0, 1) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: (roundMap.get("r32") || []).slice(0, 8) },
+    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: (roundMap.get("r16") || []).slice(0, 4) },
+    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: (roundMap.get("qf") || []).slice(0, 2) },
+    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: (roundMap.get("sf") || []).slice(0, 1) },
   ];
   const rightRoad = [
-    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "Final gate", cards: (roundMap.get("sf") || []).slice(1, 2) },
-    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 paths", cards: (roundMap.get("qf") || []).slice(2, 4) },
-    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 winners", cards: (roundMap.get("r16") || []).slice(4, 8) },
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "One half", cards: (roundMap.get("r32") || []).slice(8, 16) },
+    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: (roundMap.get("sf") || []).slice(1, 2) },
+    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: (roundMap.get("qf") || []).slice(2, 4) },
+    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: (roundMap.get("r16") || []).slice(4, 8) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: (roundMap.get("r32") || []).slice(8, 16) },
   ];
   const finalCard = (roundMap.get("final") || [])[0];
   const thirdCard = (roundMap.get("third") || [])[0];
@@ -1483,21 +1483,10 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
         centerChild(roadCenterRef.current);
         return;
       }
-      const column = roadScrollRef.current?.querySelector<HTMLElement>(`.ko-road__column[data-round="${key}"]`);
+      const column = roadScrollRef.current?.querySelector<HTMLElement>(`.ko-road__column[data-round="${key}"][data-side="left"], .ko-road__column[data-round="${key}"]`);
       centerChild(column);
     }, 40);
   }
-
-  useEffect(() => {
-    const id = window.setTimeout(() => {
-      const scroller = roadScrollRef.current;
-      const center = roadCenterRef.current;
-      if (!scroller || !center) return;
-      const left = center.offsetLeft - (scroller.clientWidth - center.clientWidth) / 2;
-      scroller.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
-    }, 180);
-    return () => window.clearTimeout(id);
-  }, []);
 
   function openMatch(card: KnockoutCardModel) {
     const [teamA, teamB] = card.teams;
@@ -1611,12 +1600,12 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
       <div className="ko-road" aria-label="Road to the World Cup">
         <div className="ko-road__intro">
           <span>Road to the Final</span>
-          <b>{selectedTeamName ? `${selectedTeamName}'s path` : "RD32 half to Final to RD32 half"}</b>
+          <b>{selectedTeamName ? `${selectedTeamName}'s path` : "RD32 -> R16 -> QF -> SF -> Final <- SF <- QF <- R16 <- RD32"}</b>
         </div>
         <div className="ko-road__scroll" ref={roadScrollRef}>
           <div className="ko-road__side ko-road__side--left" aria-label="Left side of bracket">
             {leftRoad.map(column => (
-              <div key={`left-${column.key}`} data-round={column.key} className={`ko-road__column${activeRound === column.key ? " ko-road__column--active" : ""}`}>
+              <div key={`left-${column.key}`} data-round={column.key} data-side="left" className={`ko-road__column ko-road__column--${column.key}${activeRound === column.key ? " ko-road__column--active" : ""}`}>
                 <div className="ko-road__round"><span>{column.label}</span><small>{column.detail}</small></div>
                 <div className="ko-road__stack">
                   {column.cards.map(card => renderRoadCard(card, "left"))}
@@ -1642,7 +1631,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
 
           <div className="ko-road__side ko-road__side--right" aria-label="Right side of bracket">
             {rightRoad.map(column => (
-              <div key={`right-${column.key}`} data-round={column.key} className={`ko-road__column${activeRound === column.key ? " ko-road__column--active" : ""}`}>
+              <div key={`right-${column.key}`} data-round={column.key} data-side="right" className={`ko-road__column ko-road__column--${column.key}${activeRound === column.key ? " ko-road__column--active" : ""}`}>
                 <div className="ko-road__round"><span>{column.label}</span><small>{column.detail}</small></div>
                 <div className="ko-road__stack">
                   {column.cards.map(card => renderRoadCard(card, "right"))}

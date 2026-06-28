@@ -1390,7 +1390,7 @@ body::after {
 .ko-control {
   position: relative;
   overflow: hidden;
-  padding: 16px;
+  padding: 12px 16px;
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 22px;
   background:
@@ -1440,9 +1440,9 @@ body::after {
 }
 
 .ko-control h2 {
-  margin: 7px 0 0;
+  margin: 5px 0 0;
   font-family: var(--disp);
-  font-size: clamp(30px, 8vw, 46px);
+  font-size: clamp(28px, 5vw, 40px);
   font-weight: 800;
   line-height: .88;
   letter-spacing: 0;
@@ -1498,9 +1498,9 @@ body::after {
 }
 
 .ko-control__progress {
-  margin-top: 16px;
+  margin-top: 10px;
   display: grid;
-  gap: 10px;
+  gap: 7px;
 }
 
 .ko-control__progress div {
@@ -1512,7 +1512,7 @@ body::after {
 
 .ko-control__progress span {
   font-family: var(--disp);
-  font-size: 24px;
+  font-size: 19px;
   font-weight: 800;
 }
 
@@ -1525,7 +1525,7 @@ body::after {
 }
 
 .ko-control__progress i {
-  height: 8px;
+  height: 6px;
   border-radius: 999px;
   background: rgba(255,255,255,0.1);
   overflow: hidden;
@@ -1543,12 +1543,12 @@ body::after {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 9px;
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .ko-control__grid div {
   min-width: 0;
-  padding: 10px;
+  padding: 8px 10px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 15px;
   background: rgba(6, 9, 16, 0.52);
@@ -1572,17 +1572,17 @@ body::after {
 
 .ko-control__grid b {
   display: block;
-  margin-top: 5px;
+  margin-top: 3px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--disp);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
 }
 
 .ko-control__grid small {
-  margin-top: 3px;
+  margin-top: 2px;
   color: var(--ink-soft);
   font-size: 10px;
 }
@@ -1593,8 +1593,8 @@ body::after {
   z-index: 20;
   display: flex;
   gap: 8px;
-  margin: 12px -10px 10px;
-  padding: 8px 10px;
+  margin: 9px -10px 8px;
+  padding: 7px 10px;
   overflow-x: auto;
   scrollbar-width: none;
   background:
@@ -1661,7 +1661,7 @@ body::after {
 
 .ko-road {
   margin: 0 0 12px;
-  padding: 14px;
+  padding: 10px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 22px;
   background:
@@ -1677,7 +1677,7 @@ body::after {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .ko-road__intro span {
@@ -1703,8 +1703,9 @@ body::after {
 
 .ko-road__scroll {
   display: grid;
-  grid-template-columns: max-content 268px max-content;
-  gap: 22px;
+  grid-template-columns: repeat(4, 118px) 168px repeat(4, 118px);
+  gap: 8px;
+  min-width: min(1180px, 100%);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
@@ -1718,14 +1719,11 @@ body::after {
 }
 
 .ko-road__side {
-  display: grid;
-  grid-template-columns: repeat(4, 204px);
-  gap: 14px;
-  align-items: stretch;
+  display: contents;
 }
 
 .ko-road__side--right {
-  direction: rtl;
+  direction: ltr;
 }
 
 .ko-road__side--right > * {
@@ -1735,9 +1733,9 @@ body::after {
 .ko-road__column {
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
-  opacity: .72;
+  opacity: .78;
   transition: opacity .2s, transform .2s;
   scroll-snap-align: center;
 }
@@ -1750,13 +1748,13 @@ body::after {
 .ko-road__round {
   display: grid;
   gap: 2px;
-  padding: 7px 9px;
+  padding: 6px 8px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 999px;
   color: var(--ink-soft);
   background: rgba(255,255,255,0.04);
   font-family: var(--disp);
-  font-size: 11px;
+  font-size: 9.5px;
   font-weight: 800;
   letter-spacing: .45px;
   text-align: center;
@@ -1778,7 +1776,7 @@ body::after {
 .ko-road__round small {
   color: var(--muted);
   font-family: var(--body);
-  font-size: 8.5px;
+  font-size: 8px;
   font-weight: 800;
   letter-spacing: .6px;
   line-height: 1;
@@ -1796,14 +1794,19 @@ body::after {
 
 .ko-road__stack {
   display: grid;
-  gap: 9px;
-  align-content: center;
+  gap: 7px;
+  align-content: space-around;
+}
+
+.ko-road__column--r32 .ko-road__stack {
+  gap: 5px;
 }
 
 .ko-road__center {
   display: grid;
-  gap: 10px;
-  align-content: center;
+  gap: 9px;
+  align-content: start;
+  grid-column: 5;
   scroll-snap-align: center;
 }
 
@@ -1811,7 +1814,7 @@ body::after {
   display: grid;
   justify-items: center;
   gap: 6px;
-  padding: 14px 12px;
+  padding: 12px 10px;
   border: 1px solid rgba(245,158,11,0.22);
   border-radius: 20px;
   background:
@@ -1820,8 +1823,8 @@ body::after {
 }
 
 .ko-road__cup-img {
-  width: 66px;
-  height: 66px;
+  width: 58px;
+  height: 58px;
   object-fit: contain;
   filter: drop-shadow(0 13px 24px rgba(245,158,11,0.24));
 }
@@ -1853,9 +1856,9 @@ body::after {
 .ko-road-card {
   position: relative;
   min-width: 0;
-  padding: 9px;
+  padding: 6px;
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 14px;
+  border-radius: 12px;
   background:
     linear-gradient(145deg, rgba(255,255,255,0.065), rgba(255,255,255,0.024)),
     rgba(8, 12, 21, 0.86);
@@ -1868,18 +1871,18 @@ body::after {
   position: absolute;
   top: 50%;
   z-index: 0;
-  width: 14px;
+  width: 10px;
   border-top: 1px solid rgba(245,158,11,0.36);
   box-shadow: 0 0 10px rgba(168,85,247,0.22);
   pointer-events: none;
 }
 
 .ko-road-card--left::after {
-  right: -14px;
+  right: -10px;
 }
 
 .ko-road-card--right::after {
-  left: -14px;
+  left: -10px;
 }
 
 .ko-road-card--center::after {
@@ -1917,10 +1920,10 @@ body::after {
 .ko-road-card__top {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 7px;
+  gap: 6px;
+  margin-bottom: 5px;
   color: var(--muted);
-  font-size: 9.5px;
+  font-size: 8.5px;
   font-weight: 800;
   letter-spacing: .6px;
   text-transform: uppercase;
@@ -1932,20 +1935,20 @@ body::after {
 
 .ko-road-card__teams {
   display: grid;
-  gap: 5px;
+  gap: 4px;
 }
 
 .ko-road-team {
   appearance: none;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
-  min-height: 31px;
+  min-height: 27px;
   border: 0;
-  border-radius: 10px;
-  padding: 5px 6px;
+  border-radius: 9px;
+  padding: 4px 5px;
   background: rgba(255,255,255,0.045);
   color: var(--ink);
   text-align: left;
@@ -1956,7 +1959,7 @@ body::after {
 .ko-road-team span {
   color: var(--gold-bright);
   font-family: var(--disp);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
   text-align: center;
 }
@@ -1967,7 +1970,7 @@ body::after {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--disp);
-  font-size: 14.5px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -1977,7 +1980,7 @@ body::after {
 
 .ko-road-team strong {
   font-family: var(--disp);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -2000,13 +2003,13 @@ body::after {
 .ko-road-card__details {
   appearance: none;
   width: 100%;
-  margin-top: 7px;
+  margin-top: 5px;
   border: 0;
   border-radius: 9px;
-  padding: 6px 8px;
+  padding: 4px 7px;
   background: rgba(255,255,255,0.04);
   color: var(--ink-soft);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: .55px;
   text-transform: uppercase;
@@ -2414,7 +2417,7 @@ body::after {
   }
 
   .ko-road {
-    min-height: 620px;
+    min-height: 560px;
   }
 
   .ko-mobile-list {

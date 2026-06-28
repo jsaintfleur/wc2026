@@ -1154,6 +1154,327 @@ body::after {
   background: rgba(8,12,21,0.45);
 }
 
+.ko-road {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245,158,11,0.16), transparent 30%),
+    linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
+    rgba(4, 8, 15, 0.68);
+  box-shadow: 0 18px 48px rgba(0,0,0,0.28);
+  overflow: hidden;
+}
+
+.ko-road__intro {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.ko-road__intro span {
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .9px;
+  text-transform: uppercase;
+}
+
+.ko-road__intro b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .45px;
+  text-transform: uppercase;
+}
+
+.ko-road__scroll {
+  display: grid;
+  grid-template-columns: max-content 220px max-content;
+  gap: 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 2px 8px;
+}
+
+.ko-road__scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.ko-road__side {
+  display: grid;
+  grid-template-columns: repeat(4, 178px);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.ko-road__side--right {
+  direction: rtl;
+}
+
+.ko-road__side--right > * {
+  direction: ltr;
+}
+
+.ko-road__column {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 8px;
+  min-width: 0;
+  opacity: .72;
+  transition: opacity .2s, transform .2s;
+  scroll-snap-align: center;
+}
+
+.ko-road__column--active {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.ko-road__round {
+  padding: 7px 9px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: rgba(255,255,255,0.04);
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .45px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.ko-road__column--active .ko-road__round {
+  color: #fff;
+  border-color: rgba(245,158,11,0.42);
+  background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(34,197,94,0.08));
+}
+
+.ko-road__stack {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+}
+
+.ko-road__center {
+  display: grid;
+  gap: 10px;
+  align-content: center;
+  scroll-snap-align: center;
+}
+
+.ko-road__trophy {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 12px 10px;
+  border: 1px solid rgba(245,158,11,0.22);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(245,158,11,0.18), transparent 58%),
+    rgba(255,255,255,0.035);
+}
+
+.ko-road__cup {
+  position: relative;
+  width: 58px;
+  height: 66px;
+  filter: drop-shadow(0 13px 24px rgba(245,158,11,0.24));
+}
+
+.ko-road__cup::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 36px;
+  height: 42px;
+  transform: translateX(-50%);
+  border-radius: 48% 48% 34% 34%;
+  background:
+    radial-gradient(circle at 36% 20%, rgba(255,255,255,0.8), transparent 14%),
+    linear-gradient(135deg, #fff1a8 0%, var(--gold-bright) 34%, var(--gold) 62%, #8f5b09 100%);
+  clip-path: polygon(15% 0, 85% 0, 76% 58%, 60% 82%, 60% 100%, 40% 100%, 40% 82%, 24% 58%);
+}
+
+.ko-road__cup::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 44px;
+  height: 20px;
+  transform: translateX(-50%);
+  border-radius: 8px 8px 14px 14px;
+  background:
+    linear-gradient(180deg, #ffe58a, var(--gold) 58%, #6f4506);
+  box-shadow:
+    0 -20px 0 -13px #0b8a50,
+    0 -14px 0 -9px #c91835;
+}
+
+.ko-road__trophy span,
+.ko-road__third > span {
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+}
+
+.ko-road__third {
+  display: grid;
+  gap: 7px;
+}
+
+.ko-road-card {
+  position: relative;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.065), rgba(255,255,255,0.024)),
+    rgba(8, 12, 21, 0.86);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.22);
+  transition: opacity .2s, border-color .2s, box-shadow .2s, transform .2s;
+}
+
+.ko-road-card--center {
+  border-color: rgba(245,158,11,0.34);
+  background:
+    radial-gradient(circle at 84% 0%, rgba(245,158,11,0.22), transparent 44%),
+    linear-gradient(145deg, rgba(245,158,11,0.12), rgba(255,255,255,0.03)),
+    rgba(8, 12, 21, 0.92);
+}
+
+.ko-road-card--live {
+  border-color: rgba(244,63,94,0.45);
+  box-shadow: 0 0 22px var(--live-glow), 0 10px 24px rgba(0,0,0,0.24);
+}
+
+.ko-road-card--path {
+  border-color: rgba(245,158,11,0.52);
+  box-shadow: 0 16px 36px rgba(0,0,0,0.34), 0 0 0 1px rgba(245,158,11,0.12) inset;
+  transform: translateY(-1px);
+}
+
+.ko-road-card--dim {
+  opacity: .36;
+}
+
+.ko-road-card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+}
+
+.ko-road-card__top b {
+  color: var(--gold-bright);
+}
+
+.ko-road-card__teams {
+  display: grid;
+  gap: 5px;
+}
+
+.ko-road-team {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 31px;
+  border: 0;
+  border-radius: 10px;
+  padding: 5px 6px;
+  background: rgba(255,255,255,0.045);
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ko-road-team span {
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.ko-road-team b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--disp);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.ko-road-team small {
+  display: none;
+}
+
+.ko-road-team strong {
+  font-family: var(--disp);
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.ko-road-team--winner {
+  background: rgba(34,197,94,0.13);
+  box-shadow: 0 0 0 1px rgba(34,197,94,0.18) inset;
+}
+
+.ko-road-team--selected {
+  box-shadow: 0 0 0 1px rgba(245,158,11,0.5) inset;
+}
+
+.ko-road-team--tbd {
+  color: var(--ink-soft);
+  border: 1px dashed rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.025);
+}
+
+.ko-road-card__details {
+  appearance: none;
+  width: 100%;
+  margin-top: 7px;
+  border: 0;
+  border-radius: 9px;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.04);
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .55px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
 .ko-path {
   margin: 0 0 12px;
   padding: 12px;

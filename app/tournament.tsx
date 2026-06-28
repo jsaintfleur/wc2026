@@ -973,6 +973,9 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
 }) {
   const [activeRound, setActiveRound] = useState<KnockoutRoundKey>("r32");
   const [selectedPathKey, setSelectedPathKey] = useState<string>("");
+  const [selectedTeamName, setSelectedTeamName] = useState<string>("");
+  const roadScrollRef = useRef<HTMLDivElement | null>(null);
+  const roadCenterRef = useRef<HTMLDivElement | null>(null);
 
   const byRound = useMemo(() => {
     const grouped = new Map<string, KnockoutMatch[]>();
@@ -1167,11 +1170,47 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const selectedPath = selectedCard ? downstreamPath(selectedCard) : [];
   const selectedPathKeys = new Set(selectedPath.map(card => card.key));
   const shouldDim = !!selectedPathKey;
+  const roundMap = new Map(rounds.map(round => [round.key, round.cards]));
+  const leftRoad = [
+    { key: "r32" as KnockoutRoundKey, label: "Round of 32", cards: (roundMap.get("r32") || []).slice(0, 8) },
+    { key: "r16" as KnockoutRoundKey, label: "Round of 16", cards: (roundMap.get("r16") || []).slice(0, 4) },
+    { key: "qf" as KnockoutRoundKey, label: "Quarterfinals", cards: (roundMap.get("qf") || []).slice(0, 2) },
+    { key: "sf" as KnockoutRoundKey, label: "Semifinals", cards: (roundMap.get("sf") || []).slice(0, 1) },
+  ];
+  const rightRoad = [
+    { key: "sf" as KnockoutRoundKey, label: "Semifinals", cards: (roundMap.get("sf") || []).slice(1, 2) },
+    { key: "qf" as KnockoutRoundKey, label: "Quarterfinals", cards: (roundMap.get("qf") || []).slice(2, 4) },
+    { key: "r16" as KnockoutRoundKey, label: "Round of 16", cards: (roundMap.get("r16") || []).slice(4, 8) },
+    { key: "r32" as KnockoutRoundKey, label: "Round of 32", cards: (roundMap.get("r32") || []).slice(8, 16) },
+  ];
+  const finalCard = (roundMap.get("final") || [])[0];
+  const thirdCard = (roundMap.get("third") || [])[0];
+
+  function selectRoad(card: KnockoutCardModel, team?: KnockoutParticipant) {
+    setSelectedPathKey(card.key);
+    setSelectedTeamName(team && !team.placeholder && team.name !== "TBD" ? team.name : "");
+  }
 
   function focusRound(key: KnockoutRoundKey) {
     setActiveRound(key);
     setSelectedPathKey("");
+    setSelectedTeamName("");
+    window.setTimeout(() => {
+      if (key === "final" || key === "third") {
+        roadCenterRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+        return;
+      }
+      const column = roadScrollRef.current?.querySelector<HTMLElement>(`.ko-road__column[data-round="${key}"]`);
+      column?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }, 40);
   }
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      roadCenterRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }, 180);
+    return () => window.clearTimeout(id);
+  }, []);
 
   function openMatch(card: KnockoutCardModel) {
     const [teamA, teamB] = card.teams;
@@ -1186,6 +1225,44 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
       v: card.match.v,
       ts: card.match.ts,
     }, card.fixture);
+  }
+
+  function renderRoadTeam(card: KnockoutCardModel, team: KnockoutParticipant, teamIndex: number) {
+    const score = teamIndex === 0 ? card.fixture?.gh : card.fixture?.ga;
+    const selected = selectedTeamName && canon(selectedTeamName) === canon(team.name);
+    return (
+      <button
+        key={`${card.key}-road-team-${teamIndex}`}
+        type="button"
+        className={`ko-road-team${team.winner ? " ko-road-team--winner" : ""}${team.placeholder || team.name === "TBD" ? " ko-road-team--tbd" : ""}${selected ? " ko-road-team--selected" : ""}`}
+        onClick={() => selectRoad(card, team)}
+      >
+        <span>{team.placeholder || team.name === "TBD" ? "TBD" : (data.flags[team.name] || "⚽")}</span>
+        <b>{team.name}</b>
+        {team.seed && <small>{team.seed}</small>}
+        {score != null && <strong>{score}</strong>}
+      </button>
+    );
+  }
+
+  function renderRoadCard(card: KnockoutCardModel, tone: "left" | "right" | "center" = "left") {
+    const isSelected = selectedPathKeys.has(card.key);
+    const status = card.isLive ? (card.fixture?.elapsed ? `${card.fixture.elapsed}'` : "LIVE") : card.isDone ? "FT" : "Scheduled";
+    return (
+      <article
+        key={`road-${card.key}`}
+        className={`ko-road-card ko-road-card--${tone}${card.isLive ? " ko-road-card--live" : ""}${card.isDone ? " ko-road-card--done" : ""}${isSelected ? " ko-road-card--path" : ""}${shouldDim && !isSelected ? " ko-road-card--dim" : ""}`}
+      >
+        <div className="ko-road-card__top">
+          <span>M{card.matchNo}</span>
+          <b>{status}</b>
+        </div>
+        <div className="ko-road-card__teams">
+          {card.teams.map((team, index) => renderRoadTeam(card, team, index))}
+        </div>
+        <button type="button" className="ko-road-card__details" onClick={() => openMatch(card)}>Details</button>
+      </article>
+    );
   }
 
   return (
@@ -1240,6 +1317,50 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
         ))}
       </div>
 
+      <div className="ko-road" aria-label="Road to the World Cup">
+        <div className="ko-road__intro">
+          <span>Road to Glory</span>
+          <b>{selectedTeamName ? `${selectedTeamName}'s path` : "Every road leads to the cup"}</b>
+        </div>
+        <div className="ko-road__scroll" ref={roadScrollRef}>
+          <div className="ko-road__side ko-road__side--left" aria-label="Left side of bracket">
+            {leftRoad.map(column => (
+              <div key={`left-${column.key}`} data-round={column.key} className={`ko-road__column${activeRound === column.key ? " ko-road__column--active" : ""}`}>
+                <div className="ko-road__round">{column.label}</div>
+                <div className="ko-road__stack">
+                  {column.cards.map(card => renderRoadCard(card, "left"))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="ko-road__center" ref={roadCenterRef} aria-label="World Cup final path">
+            <div className="ko-road__trophy">
+              <span className="ko-road__cup" aria-hidden="true" />
+              <span>World Cup</span>
+            </div>
+            {finalCard && renderRoadCard(finalCard, "center")}
+            {thirdCard && (
+              <div className="ko-road__third">
+                <span>Third Place</span>
+                {renderRoadCard(thirdCard, "center")}
+              </div>
+            )}
+          </div>
+
+          <div className="ko-road__side ko-road__side--right" aria-label="Right side of bracket">
+            {rightRoad.map(column => (
+              <div key={`right-${column.key}`} data-round={column.key} className={`ko-road__column${activeRound === column.key ? " ko-road__column--active" : ""}`}>
+                <div className="ko-road__round">{column.label}</div>
+                <div className="ko-road__stack">
+                  {column.cards.map(card => renderRoadCard(card, "right"))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {selectedCard && (
         <div className="ko-path" aria-label="Selected path to the Final">
           <div className="ko-path__label">Path to Final</div>
@@ -1279,7 +1400,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
                 key={card.key}
                 className={`ko-match ko-match--${card.round}${card.isLive ? " ko-match--live" : ""}${card.isDone ? " ko-match--done" : ""}${card.round === "final" ? " ko-match--final" : ""}${isSelected ? " ko-match--path" : ""}${shouldDim && !isSelected ? " ko-match--dim" : ""}`}
               >
-                <button type="button" className="ko-match__tap" onClick={() => setSelectedPathKey(card.key)} aria-label={`Show path for match ${card.matchNo}`}>
+                <button type="button" className="ko-match__tap" onClick={() => selectRoad(card)} aria-label={`Show path for match ${card.matchNo}`}>
                   <div className="ko-match__meta">
                     <span>Match {card.matchNo || card.match.mr}</span>
                     <b>{status}</b>

@@ -106,12 +106,12 @@ function parseScorers(raw: string, teamName: string): Array<{
   return entries.map(entry => {
     const isOG = /\(OG\)/i.test(entry);
     const isPen = /\(pen\.?\)/i.test(entry);
-    // Extract minute — patterns like "7'", "45'+5'", "90'+8'"
-    const minMatch = entry.match(/(\d+)'\+?(\d+)?'?/);
+    // Extract minute — patterns like "7'", "45'+5'", "90'+8'", "90+5'"
+    const minMatch = entry.match(/(\d+)'?\+(\d+)'/) || entry.match(/(\d+)'/);
     const minute = minMatch ? parseInt(minMatch[1], 10) : 0;
     const extra = minMatch?.[2] ? parseInt(minMatch[2], 10) : null;
-    // Player name is everything before the minute
-    const player = entry.replace(/\s*\d+'.*$/, "").trim();
+    // Player name is everything before the minute number
+    const player = entry.replace(/\s*\d+'?\+?\d*'?(\(.*?\))?$/, "").trim();
     return {
       minute,
       extra,

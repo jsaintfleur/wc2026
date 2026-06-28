@@ -337,7 +337,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       next.set(key, `${f.gh}-${f.ga}`);
       const old = prev.get(key);
       if (old && old !== `${f.gh}-${f.ga}` && LIVE_STATUSES.has(f.status)) {
-        const [oldH, oldA] = old.split("-").map(Number);
+        const [oldH] = old.split("-").map(Number);
         const scoringTeam = f.gh > oldH ? f.home : f.away;
         const lastEvent = (f.events || []).filter((e: MatchEvent) => e.type === "Goal").pop();
         const flag = data.flags[scoringTeam] || "⚽";
@@ -373,11 +373,18 @@ export default function Tournament({ data }: { data: TournamentData }) {
           const f = findLive(m, fixtures);
           setMatchDetail({ match: m, fixture: f });
         }
+        return;
+      }
+      const koMatchEl = (e.target as HTMLElement).closest("[data-ko-match-id]") as HTMLElement | null;
+      if (koMatchEl) {
+        const matchNo = parseInt(koMatchEl.dataset.koMatchId || "0", 10);
+        const card = buildKnockoutScheduleCards().find(item => item.matchNo === matchNo);
+        if (card) setMatchDetail({ match: knockoutCardToMatch(card), fixture: card.fixture });
       }
     }
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
-  }, [fixtures, data.gs]);
+  }, [fixtures, data.gs, data.ko, data.groups]);
 
   const today = todayISO();
 
@@ -396,6 +403,135 @@ export default function Tournament({ data }: { data: TournamentData }) {
     return completedGroupStanding(g, data, fixtures, findLive, nowMs);
   }
 
+  function buildKnockoutScheduleCards(): KnockoutCardModel[] {
+    const standingsByGroup: Record<string, GroupStanding> = {};
+    for (const g of Object.keys(data.groups)) standingsByGroup[g] = standings(g);
+    const winners: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
+    const losers: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
+
+    function teamName(name: string | undefined | null): string {
+      if (!name) return "TBD";
+      return canon(name) || name;
+    }
+    function winnerFromFixture(fixture: LiveFixture | null): string | null {
+      if (!isCompletedKnockoutFixture(fixture) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
+      return fixture.gh > fixture.ga ? teamName(fixture.home) : teamName(fixture.away);
+    }
+    function loserFromFixture(fixture: LiveFixture | null): string | null {
+      if (!isCompletedKnockoutFixture(fixture) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
+      return fixture.gh > fixture.ga ? teamName(fixture.away) : teamName(fixture.home);
+    }
+    function sourcePair(round: KnockoutRoundKey, index: number): [number, number] {
+      return KO_SOURCE_PAIRS[round]?.[index] || [index * 2, index * 2 + 1];
+    }
+    function previousTeam(round: KnockoutRoundKey, index: number): string | null {
+      if (round === "r16") return winners.r32?.[index] || null;
+      if (round === "qf") return winners.r16?.[index] || null;
+      if (round === "sf") return winners.qf?.[index] || null;
+      if (round === "final") return winners.sf?.[index] || null;
+      if (round === "third") return losers.sf?.[index] || null;
+      return null;
+    }
+    function sourceLabel(round: KnockoutRoundKey, index: number, side: number): string {
+      if (round === "r32") return ordinalSeedLabel(R32_SEEDS[index]?.[side] || "TBD");
+      const [a, b] = sourcePair(round, index);
+      const sourceIndex = side === 0 ? a : b;
+      const sourceRound = round === "r16" ? KO_ROUNDS[0] : round === "qf" ? KO_ROUNDS[1] : round === "sf" ? KO_ROUNDS[2] : KO_ROUNDS[3];
+      const prefix = round === "third" ? "Loser" : "Winner";
+      return `${prefix} M${sourceRound.matchNumbers[sourceIndex] || "TBD"}`;
+    }
+
+    const all: KnockoutCardModel[] = [];
+    for (const config of KO_ROUNDS) {
+      const scheduled = data.ko.filter(match => match.round === config.dataRound);
+      const roundCards = scheduled.map((match, index) => {
+        const matchNo = config.matchNumbers[index] || Number(match.mr) || 0;
+        const fixture = findLive({ ts: match.ts, v: match.v }, fixtures);
+        const isLive = !!fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(match.ts, fixture.status, nowMs);
+        const isDone = isCompletedKnockoutFixture(fixture);
+        const winnerName = winnerFromFixture(fixture);
+        const loserName = loserFromFixture(fixture);
+        let teams: [KnockoutParticipant, KnockoutParticipant];
+
+        if (fixture?.home && fixture?.away) {
+          const home = teamName(fixture.home);
+          const away = teamName(fixture.away);
+          teams = [
+            { name: home, winner: winnerName === home, loser: loserName === home },
+            { name: away, winner: winnerName === away, loser: loserName === away },
+          ];
+        } else if (config.key === "r32") {
+          const [seedA, seedB] = R32_SEEDS[index] || ["TBD", "TBD"];
+          teams = [resolveGroupSeed(seedA, standingsByGroup), resolveGroupSeed(seedB, standingsByGroup)];
+        } else {
+          const [sourceA, sourceB] = sourcePair(config.key, index);
+          const first = previousTeam(config.key, sourceA);
+          const second = previousTeam(config.key, sourceB);
+          teams = [
+            { name: first || sourceLabel(config.key, index, 0), placeholder: !first },
+            { name: second || sourceLabel(config.key, index, 1), placeholder: !second },
+          ];
+        }
+
+        return {
+          key: `${config.key}-schedule-${matchNo}-${index}`,
+          round: config.key,
+          roundIndex: index,
+          match,
+          matchNo,
+          fixture,
+          teams,
+          source: config.label,
+          isDone,
+          isLive,
+          winnerName,
+          loserName,
+        };
+      });
+      winners[config.key] = roundCards.map(card => card.winnerName);
+      losers[config.key] = roundCards.map(card => card.loserName);
+      all.push(...roundCards);
+    }
+    return all;
+  }
+
+  function knockoutCardToMatch(card: KnockoutCardModel): GroupStageMatch {
+    const [teamA, teamB] = card.teams;
+    return {
+      no: card.matchNo,
+      iso: card.match.iso,
+      local: card.match.local,
+      et: card.match.et,
+      g: "KO",
+      t1: teamA.placeholder ? "TBD" : teamA.name,
+      t2: teamB.placeholder ? "TBD" : teamB.name,
+      v: card.match.v,
+      ts: card.match.ts,
+    };
+  }
+
+  function koMatchHit(card: KnockoutCardModel): boolean {
+    if (group !== "ALL") return false;
+    const actualTeams = card.teams.filter(t => !t.placeholder && t.name !== "TBD").map(t => t.name);
+    if (team !== "ALL" && !actualTeams.includes(team)) return false;
+    if (query) {
+      const v = ven(card.match.v);
+      const hay = [
+        card.source,
+        card.match.round,
+        `Match ${card.matchNo}`,
+        ...card.teams.map(t => t.name),
+        v.common,
+        v.fifa,
+        v.city,
+        v.country,
+        "knockout",
+      ].join(" ").toLowerCase();
+      if (!hay.includes(query.toLowerCase())) return false;
+    }
+    return true;
+  }
+
   function formatGD(gd: number, matchesPlayed: number): string {
     if (matchesPlayed === 0 || gd === 0) return "0";
     return gd > 0 ? `+${gd}` : String(gd);
@@ -412,6 +548,16 @@ export default function Tournament({ data }: { data: TournamentData }) {
   function teamRow(t: string, goal: string, lead: boolean): string {
     const host = data.hosts.includes(t) ? '<span class="host">HOST</span>' : "";
     return `<div class="team${lead ? " lead" : ""}"><span class="fl">${fl(t)}</span><a class="nm teamlink" data-team="${esc(t)}" href="#">${esc(t)}</a>${host}${goal}</div>`;
+  }
+
+  function koTeamRow(team: KnockoutParticipant, goal: string, lead: boolean): string {
+    const isPlaceholder = !!team.placeholder || team.name === "TBD";
+    const flag = isPlaceholder ? "TBD" : fl(team.name);
+    const name = isPlaceholder
+      ? `<span class="nm nm--placeholder">${esc(team.name)}</span>`
+      : `<a class="nm teamlink" data-team="${esc(team.name)}" href="#">${esc(team.name)}</a>`;
+    const seed = team.seed ? `<span class="host">${esc(team.seed)}</span>` : "";
+    return `<div class="team${lead ? " lead" : ""}${isPlaceholder ? " team--placeholder" : ""}"><span class="fl">${flag}</span>${name}${seed}${goal}</div>`;
   }
 
   function goalScorers(events: MatchEvent[] | undefined, teamName: string): string {
@@ -452,8 +598,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
       lead1 = a > b; lead2 = b > a;
       if (fLive) cls += " islive";
       timeHtml = `<div class="sc">${a}–${b}</div>${liveBadge(f!)}`;
-      scorers1 = goalScorers(f!.events, m.t1);
-      scorers2 = goalScorers(f!.events, m.t2);
+      const scorerEvents = f!.events?.length ? f!.events : m.dbEvents;
+      scorers1 = goalScorers(scorerEvents, m.t1);
+      scorers2 = goalScorers(scorerEvents, m.t2);
     } else if (hasKickedOff && m.dbStatus && !isStaleStatus(m.ts, m.dbStatus, nowMs) && (LIVE_STATUSES.has(m.dbStatus) || DONE_STATUSES.has(m.dbStatus)) && m.dbGh != null && m.dbGa != null) {
       const a = m.dbGh, b = m.dbGa;
       g1 = `<span class="gl">${a}</span>`;
@@ -461,6 +608,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
       lead1 = a > b; lead2 = b > a;
       const badge = DONE_STATUSES.has(m.dbStatus) ? `<span class="ft">FT</span>` : `<span class="ft live">${m.dbStatus}</span>`;
       timeHtml = `<div class="sc">${a}–${b}</div>${badge}`;
+      scorers1 = goalScorers(m.dbEvents, m.t1);
+      scorers2 = goalScorers(m.dbEvents, m.t2);
     } else {
       timeHtml = `<div class="lo">${esc(m.et)}</div>${m.local !== m.et ? `<div class="et">${esc(m.local)}</div>` : ""}`;
     }
@@ -476,10 +625,45 @@ export default function Tournament({ data }: { data: TournamentData }) {
     </article>`;
   }
 
+  function koTixCard(card: KnockoutCardModel, anim: boolean, dimmed = false): string {
+    const v = ven(card.match.v), gc = "#D7AF5A";
+    const f = card.fixture;
+    const fStale = f && isStaleStatus(card.match.ts, f.status, nowMs);
+    const fLive = !!f && LIVE_STATUSES.has(f.status) && !fStale;
+    const fDone = !!f && DONE_STATUSES.has(f.status) && !fStale;
+    let timeHtml: string, g1 = "", g2 = "", cls = dimmed ? " tix--done" : "", scorers1 = "", scorers2 = "";
+    let lead1 = false, lead2 = false;
+    if (fStale) {
+      timeHtml = `<div class="lo tix__updating">Updating...</div>`;
+    } else if (fLive || fDone) {
+      const a = f.gh == null ? 0 : f.gh, b = f.ga == null ? 0 : f.ga;
+      g1 = `<span class="gl">${a}</span>`;
+      g2 = `<span class="gl">${b}</span>`;
+      lead1 = a > b; lead2 = b > a;
+      if (fLive) cls += " islive";
+      timeHtml = `<div class="sc">${a}–${b}</div>${liveBadge(f)}`;
+      scorers1 = goalScorers(f.events, card.teams[0].name);
+      scorers2 = goalScorers(f.events, card.teams[1].name);
+    } else {
+      timeHtml = `<div class="lo">${esc(card.match.et)}</div>${card.match.local !== card.match.et ? `<div class="et">${esc(card.match.local)}</div>` : ""}`;
+    }
+    return `<article class="tix tix--ko${cls}${anim ? " stagger-rise" : ""} tix--clickable" style="--gc:${gc}" data-ko-match-id="${card.matchNo}">
+      <span class="tix__tab"></span>
+      <div class="tix__main">
+        <div class="tix__teams">${koTeamRow(card.teams[0], g1, lead1)}${scorers1}<div class="vs">vs</div>${koTeamRow(card.teams[1], g2, lead2)}${scorers2}</div>
+        <div class="tix__time">${timeHtml}</div>
+      </div>
+      <div class="tix__foot"><span class="gbadge">KO</span>
+        <span class="ven">${esc(card.source)} · ${esc(v.common)}</span><span class="cty">· ${esc(v.city)}, ${esc(v.country)}</span>
+        <span class="mno">#${card.matchNo}</span></div>
+    </article>`;
+  }
+
   function renderSchedule(anim: boolean): string {
     const now = nowMs;
     const list = data.gs.filter(matchHit);
-    if (!list.length) return `<div class="empty">No matches match your filters.<br>Try clearing the search or picking "All".</div>`;
+    const knockoutCards = buildKnockoutScheduleCards().filter(koMatchHit).sort((a, b) => a.match.ts - b.match.ts);
+    if (!list.length && !knockoutCards.length) return `<div class="empty">No matches match your filters.<br>Try clearing the search or picking "All".</div>`;
 
     const isMatchDone = (m: GroupStageMatch): boolean => {
       const f = findLive(m, fixtures);
@@ -507,6 +691,13 @@ export default function Tournament({ data }: { data: TournamentData }) {
       byDate.get(m.iso)!.push(m);
     }
     const sortedDates = [...byDate.keys()].sort();
+    const koByDate = new Map<string, KnockoutCardModel[]>();
+    const activeKoCards = knockoutCards.filter(card => !card.isDone);
+    for (const card of activeKoCards) {
+      if (!koByDate.has(card.match.iso)) koByDate.set(card.match.iso, []);
+      koByDate.get(card.match.iso)!.push(card);
+    }
+    const sortedKoDates = [...koByDate.keys()].sort();
 
     /* Find live matches for the pinned banner */
     const liveMatches: GroupStageMatch[] = [];
@@ -572,9 +763,29 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
     if (!activeList.length && completedMatches.length) {
       const latest = completedMatches.slice(0, 4);
-      html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div>
-        <div class="mc-sec mc-sec--latest"><div class="mc-hd">Latest Results</div>`;
+      if (!activeKoCards.length) {
+        html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div>`;
+        anchorPlaced = true;
+      }
+      html += `<div class="mc-sec mc-sec--latest"><div class="mc-hd">Latest Results</div>`;
       for (const m of latest) html += tixCard(m, anim, true);
+      html += `</div>`;
+    }
+
+    for (const iso of sortedKoDates) {
+      const cards = koByDate.get(iso)!;
+      const dt = parseISO(iso);
+      const dateLabel = `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`;
+      const isToday = iso === today;
+      const isPast = iso < today;
+      if (!liveMatches.length && !anchorPlaced && !isPast) {
+        html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div>`;
+        anchorPlaced = true;
+      }
+      const sectionCls = isPast ? "mc-sec mc-sec--past mc-sec--ko" : "mc-sec mc-sec--ko";
+      const headExtra = isToday ? " — Knockout Gameday" : "";
+      html += `<div class="${sectionCls}"><div class="mc-hd">${dateLabel}${headExtra}<small>Knockout Stage</small></div>`;
+      for (const card of cards) html += koTixCard(card, anim, card.isDone);
       html += `</div>`;
     }
 

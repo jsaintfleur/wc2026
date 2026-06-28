@@ -5260,46 +5260,495 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   text-transform: uppercase;
 }
 
-.more-view__grid {
-  display: grid;
-  gap: 10px;
+/* =========================================================
+ * MoreView — comprehensive dashboard styles
+ * ========================================================= */
+
+/* Subtitle below the hero heading */
+.more-view__subtitle {
+  margin: 2px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.3px;
 }
 
-.more-tile {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
+/* ── Section wrapper + heading ──────────────────────────── */
+.more-section {
+  margin-top: 20px;
 }
 
-.more-tile__icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  aspect-ratio: 1;
-  border-radius: 14px;
-  background: rgba(245,158,11,0.12);
+.more-section__heading {
+  margin: 0 0 10px 2px;
   color: var(--gold-bright);
   font-family: var(--disp);
-  font-size: 22px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+.more-section__subheading {
+  margin: 16px 0 8px 2px;
+  color: var(--ink-soft);
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+/* ── Stagger entrance animation ─────────────────────────── */
+@keyframes moreCardIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Tournament Progress card ───────────────────────────── */
+.more-progress-card {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 16px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
+    rgba(8, 12, 21, 0.86);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+}
+
+.more-progress-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.more-progress-card__stage {
+  font-family: var(--disp);
+  font-size: 16px;
   font-weight: 800;
 }
 
-.more-tile b,
-.more-tile small {
-  display: block;
+.more-progress-card__count {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.more-tile b {
+/* Progress bar track + fill */
+.more-progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+}
+
+.more-progress-bar__fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--gold-bright);
+  transition: width 0.6s ease;
+}
+
+.more-progress-card__footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.more-progress-card__next {
+  color: var(--gold-bright);
+  font-weight: 600;
+}
+
+.more-progress-card__breakdown {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+/* ── Quick Access grid — large premium cards ────────────── */
+.more-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.more-quick-card {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
+    rgba(8, 12, 21, 0.86);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+  cursor: pointer;
+  animation: moreCardIn 0.4s ease both;
+  transition: border-color 0.2s, transform 0.15s;
+}
+
+.more-quick-card:active {
+  transform: scale(0.97);
+  border-color: rgba(245,158,11,0.25);
+}
+
+/* Let the first card span full width for emphasis */
+.more-quick-grid .more-quick-card:first-child {
+  grid-column: 1 / -1;
+}
+
+.more-quick-card__icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.more-quick-card__title {
   font-family: var(--disp);
-  font-size: 17px;
+  font-size: 16px;
+  font-weight: 800;
 }
 
-.more-tile small {
+.more-quick-card__desc {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
+}
+
+/* ── Venue (stadium) grid ───────────────────────────────── */
+.more-venue-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.more-venue-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
+    rgba(8, 12, 21, 0.86);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+  animation: moreCardIn 0.4s ease both;
+}
+
+.more-venue-card__top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.more-venue-card__flag {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.more-venue-card__name {
+  font-family: var(--disp);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more-venue-card__city {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.more-venue-card__stats {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+/* ── Host Cities list ───────────────────────────────────── */
+.more-cities-list {
+  display: grid;
+  gap: 8px;
+}
+
+.more-city-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
+    rgba(8, 12, 21, 0.86);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+  animation: moreCardIn 0.4s ease both;
+}
+
+.more-city-row__flag {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.more-city-row__info b {
+  display: block;
+  font-family: var(--disp);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.more-city-row__info small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.more-city-row__badge {
+  color: var(--gold-bright);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ── Tournament Calendar (vertical timeline) ────────────── */
+.more-timeline {
+  position: relative;
+  padding-left: 24px;
+}
+
+/* Vertical connecting line */
+.more-timeline::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 1px;
+}
+
+.more-timeline__item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: 8px 0;
+  animation: moreCardIn 0.4s ease both;
+}
+
+/* Dot on the timeline */
+.more-timeline__dot {
+  position: absolute;
+  left: -20px;
+  top: 12px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  border: 2px solid rgba(255,255,255,0.08);
+}
+
+/* Past milestone — gold dot */
+.more-timeline__item--past .more-timeline__dot {
+  background: var(--gold-bright);
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 8px rgba(245,158,11,0.35);
+}
+
+/* Current milestone — pulsing gold */
+.more-timeline__item--current .more-timeline__dot {
+  background: var(--gold-bright);
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 12px rgba(245,158,11,0.5);
+  animation: timelinePulse 2s ease infinite;
+}
+
+@keyframes timelinePulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(245,158,11,0.35); }
+  50%      { box-shadow: 0 0 16px rgba(245,158,11,0.6); }
+}
+
+.more-timeline__content b {
+  display: block;
+  font-family: var(--disp);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.more-timeline__item--past .more-timeline__content b {
+  color: var(--gold-bright);
+}
+
+.more-timeline__item--upcoming .more-timeline__content b {
+  color: var(--ink-soft);
+}
+
+.more-timeline__content small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 1px;
+}
+
+/* ── History — past winners grid ────────────────────────── */
+.more-history-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.more-history-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
+    rgba(8, 12, 21, 0.86);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+  text-align: center;
+  animation: moreCardIn 0.4s ease both;
+}
+
+.more-history-card__year {
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.more-history-card__flag {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.more-history-card__winner {
+  font-family: var(--disp);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.more-history-card__detail {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ── Records list ───────────────────────────────────────── */
+.more-records-list {
+  display: grid;
+  gap: 6px;
+}
+
+.more-record-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  animation: moreCardIn 0.35s ease both;
+}
+
+.more-record-row__label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.more-record-row__value {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* ── App Settings list ──────────────────────────────────── */
+.more-section--settings {
+  margin-bottom: 80px;
+}
+
+.more-settings-list {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
+    rgba(8, 12, 21, 0.86);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+}
+
+.more-settings-row {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.more-settings-row:last-child {
+  border-bottom: none;
+}
+
+.more-settings-row:active {
+  background: rgba(255,255,255,0.04);
+}
+
+.more-settings-row__icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.more-settings-row__chevron {
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 300;
+}
+
+.more-settings-row--version {
+  cursor: default;
+}
+
+.more-settings-row__version {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
 }
 
 .ko-road__scroll {

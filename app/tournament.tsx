@@ -1319,7 +1319,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         ) : view === "teams" ? (
           <TeamsView data={data} onTeamClick={setTeamDrawer} />
         ) : view === "more" ? (
-          <MoreView onNavigate={handleTab} />
+          <MoreView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
         ) : (
           <main
             ref={mainRef}
@@ -1479,32 +1479,390 @@ function TeamsView({ data, onTeamClick }: {
   );
 }
 
-function MoreView({ onNavigate }: {
+/* ---------------------------------------------------------------
+ * MoreView — comprehensive tournament dashboard
+ * Sections: Hero, Progress, Quick Access, Stadiums, Host Cities,
+ *           Calendar Timeline, History, App Settings
+ * --------------------------------------------------------------- */
+function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: {
+  data: TournamentData;
+  fixtures: LiveFixture[];
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
+  nowMs: number;
   onNavigate: (view: ViewType) => void;
+  onTeamClick: (team: string) => void;
 }) {
-  const items: { view: ViewType; icon: string; title: string; desc: string }[] = [
-    { view: "stats", icon: "↗", title: "Stats", desc: "Scorers, assists, cards and team leaderboards." },
-    { view: "venues", icon: "⌖", title: "Venues", desc: "Stadiums, cities and host country details." },
-    { view: "about", icon: "i", title: "About", desc: "Data notes, live updates and app details." },
+
+  /* -- helper: country code → flag emoji ----------------------- */
+  const countryFlag = (c: string) =>
+    c === "USA" ? "🇺🇸" : c === "Mexico" ? "🇲🇽" : "🇨🇦";
+
+  /* -- helper: format large numbers with commas ---------------- */
+  const fmtNum = (n: number) => n.toLocaleString("en-US");
+
+  /* =============================================================
+   * 1. Tournament progress calculations
+   * ============================================================= */
+
+  /* Count completed group-stage matches */
+  const completedGS = useMemo(() => {
+    let count = 0;
+    for (const m of data.gs) {
+      const f = findLive({ ts: m.ts, v: m.v, t1: m.t1, t2: m.t2 }, fixtures);
+      if (f && DONE_STATUSES.has(f.status)) count++;
+      else if (m.dbStatus && DONE_STATUSES.has(m.dbStatus)) count++;
+    }
+    return count;
+  }, [data.gs, fixtures, findLive]);
+
+  /* Count completed knockout matches (KnockoutMatch has no dbStatus,
+     so we only check live fixtures for done status) */
+  const completedKO = useMemo(() => {
+    let count = 0;
+    for (const m of data.ko) {
+      const f = findLive({ ts: m.ts, v: m.v }, fixtures);
+      if (f && DONE_STATUSES.has(f.status)) count++;
+    }
+    return count;
+  }, [data.ko, fixtures, findLive]);
+
+  const totalMatches = 104;
+  const completedTotal = completedGS + completedKO;
+  const progressPct = Math.round((completedTotal / totalMatches) * 100);
+
+  /* Determine current tournament stage label */
+  const stageLabel = useMemo(() => {
+    if (completedTotal === 0) return "Pre-Tournament";
+    if (completedGS < 72) return "Group Stage";
+    if (completedKO === 0) return "Group Stage Complete";
+    /* Check KO rounds in order */
+    const koRoundCounts = [
+      { label: "Round of 32", count: 16, start: 0 },
+      { label: "Round of 16", count: 8, start: 16 },
+      { label: "Quarterfinals", count: 4, start: 24 },
+      { label: "Semifinals", count: 2, start: 26 },
+      { label: "Third Place / Final", count: 2, start: 28 },
+    ];
+    let koIdx = 0;
+    let running = completedKO;
+    for (const r of koRoundCounts) {
+      if (running < r.count) return r.label;
+      running -= r.count;
+      koIdx++;
+    }
+    return "Tournament Complete";
+  }, [completedGS, completedKO, completedTotal]);
+
+  /* Find next upcoming match for countdown */
+  const nextMatch = useMemo(() => {
+    const allMatches = [...data.gs, ...data.ko]
+      .filter(m => m.ts > nowMs)
+      .sort((a, b) => a.ts - b.ts);
+    return allMatches[0] || null;
+  }, [data.gs, data.ko, nowMs]);
+
+  /* Format countdown string */
+  const countdown = useMemo(() => {
+    if (!nextMatch) return null;
+    const diff = nextMatch.ts - nowMs;
+    if (diff <= 0) return null;
+    const days = Math.floor(diff / 86400000);
+    const hrs = Math.floor((diff % 86400000) / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    if (days > 0) return `${days}d ${hrs}h`;
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    return `${mins}m`;
+  }, [nextMatch, nowMs]);
+
+  /* =============================================================
+   * 2. Venue statistics — match counts per venue
+   * ============================================================= */
+  const venueMatchCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const m of data.gs) counts[m.v] = (counts[m.v] || 0) + 1;
+    for (const m of data.ko) {
+      if (m.v) counts[m.v] = (counts[m.v] || 0) + 1;
+    }
+    return counts;
+  }, [data.gs, data.ko]);
+
+  /* Sorted venue list */
+  const venueList = useMemo(() =>
+    Object.entries(data.venues)
+      .map(([key, v]) => ({ key, ...v, matches: venueMatchCounts[key] || 0 }))
+      .sort((a, b) => b.cap - a.cap),
+    [data.venues, venueMatchCounts]
+  );
+
+  /* =============================================================
+   * 3. Host cities — unique cities with stats
+   * ============================================================= */
+  const hostCities = useMemo(() => {
+    const cityMap: Record<string, { city: string; country: string; venues: string[]; matches: number }> = {};
+    for (const v of venueList) {
+      if (!cityMap[v.city]) {
+        cityMap[v.city] = { city: v.city, country: v.country, venues: [], matches: 0 };
+      }
+      cityMap[v.city].venues.push(v.common);
+      cityMap[v.city].matches += v.matches;
+    }
+    return Object.values(cityMap).sort((a, b) => b.matches - a.matches);
+  }, [venueList]);
+
+  /* =============================================================
+   * 4. Calendar milestones with date ranges
+   * ============================================================= */
+  const milestones = useMemo(() => {
+    const items = [
+      { label: "Opening Match", date: "Jun 11", ts: Date.UTC(2026, 5, 11, 20, 0) },
+      { label: "Final Group Matches", date: "Jun 27", ts: Date.UTC(2026, 5, 27, 22, 0) },
+      { label: "Round of 32", date: "Jun 28 – Jul 3", ts: Date.UTC(2026, 6, 3, 22, 0) },
+      { label: "Round of 16", date: "Jul 4 – Jul 7", ts: Date.UTC(2026, 6, 7, 22, 0) },
+      { label: "Quarterfinals", date: "Jul 9 – Jul 11", ts: Date.UTC(2026, 6, 11, 22, 0) },
+      { label: "Semifinals", date: "Jul 14 – Jul 15", ts: Date.UTC(2026, 6, 15, 22, 0) },
+      { label: "Third Place", date: "Jul 18", ts: Date.UTC(2026, 6, 18, 22, 0) },
+      { label: "Final", date: "Jul 19", ts: Date.UTC(2026, 6, 19, 22, 0) },
+    ];
+    return items.map(m => ({
+      ...m,
+      status: nowMs >= m.ts ? "past" as const
+        : (items.find(x => x.ts > nowMs) === m ? "current" as const : "upcoming" as const),
+    }));
+  }, [nowMs]);
+
+  /* =============================================================
+   * 5. History — hardcoded past World Cup data
+   * ============================================================= */
+  const pastWinners = [
+    { year: 2022, host: "Qatar", winner: "Argentina", flag: "🇦🇷", runner: "France" },
+    { year: 2018, host: "Russia", winner: "France", flag: "🇫🇷", runner: "Croatia" },
+    { year: 2014, host: "Brazil", winner: "Germany", flag: "🇩🇪", runner: "Argentina" },
+    { year: 2010, host: "South Africa", winner: "Spain", flag: "🇪🇸", runner: "Netherlands" },
+    { year: 2006, host: "Germany", winner: "Italy", flag: "🇮🇹", runner: "France" },
+    { year: 2002, host: "Korea/Japan", winner: "Brazil", flag: "🇧🇷", runner: "Germany" },
   ];
 
+  const records = [
+    { label: "Most Titles", value: "Brazil (5)" },
+    { label: "Most Goals (Career)", value: "Miroslav Klose (16)" },
+    { label: "Most Goals (Single)", value: "Just Fontaine (13, 1958)" },
+    { label: "Most Appearances", value: "Lothar Matthäus (25)" },
+    { label: "Fastest Goal", value: "Hakan Şükür (11 sec, 2002)" },
+    { label: "Highest Scoring Final", value: "Argentina 3–3 France (2022)" },
+  ];
+
+  /* =============================================================
+   * 6. Quick access navigation items
+   * ============================================================= */
+  const quickAccess: { view: ViewType; icon: string; title: string; desc: string }[] = [
+    { view: "bracket", icon: "🏆", title: "Knockout Bracket", desc: "Full elimination bracket from R32 to the Final" },
+    { view: "stats", icon: "📊", title: "Statistics", desc: "Top scorers, assists, cards and team leaderboards" },
+    { view: "groups", icon: "⚽", title: "Groups", desc: "All 12 groups with live standings and results" },
+    { view: "schedule", icon: "📅", title: "Full Schedule", desc: "Complete match schedule with live scores" },
+    { view: "teams", icon: "🌍", title: "Teams", desc: "All 48 national teams and squad profiles" },
+  ];
+
+  /* =============================================================
+   * 7. Share handler for app settings section
+   * ============================================================= */
+  const handleShare = async () => {
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: "Compet 2026",
+          text: "Track the FIFA World Cup 2026 — live scores, brackets, stats and more.",
+          url: window.location.href,
+        });
+      } catch { /* user cancelled */ }
+    }
+  };
+
+  /* =============================================================
+   * RENDER
+   * ============================================================= */
   return (
     <main className="more-view" aria-label="More">
+
+      {/* ── Section 1: Hero ─────────────────────────────────── */}
       <section className="more-view__hero">
         <span>Compet 2026</span>
         <h2>More</h2>
+        <p className="more-view__subtitle">Official FIFA World Cup Companion</p>
       </section>
-      <div className="more-view__grid">
-        {items.map(item => (
-          <button key={item.view} type="button" className="more-tile" onClick={() => onNavigate(item.view)}>
-            <span className="more-tile__icon">{item.icon}</span>
-            <span>
-              <b>{item.title}</b>
-              <small>{item.desc}</small>
-            </span>
+
+      {/* ── Section 2: Tournament Progress ──────────────────── */}
+      <section className="more-section">
+        <h3 className="more-section__heading">Tournament Progress</h3>
+        <div className="more-progress-card">
+          <div className="more-progress-card__header">
+            <span className="more-progress-card__stage">{stageLabel}</span>
+            <span className="more-progress-card__count">{completedTotal} / {totalMatches}</span>
+          </div>
+          <div className="more-progress-bar">
+            <div className="more-progress-bar__fill" style={{ width: `${progressPct}%` }} />
+          </div>
+          <div className="more-progress-card__footer">
+            <span>{progressPct}% complete</span>
+            {countdown && <span className="more-progress-card__next">Next match in {countdown}</span>}
+          </div>
+          {/* Breakdown row: GS + KO counts */}
+          <div className="more-progress-card__breakdown">
+            <span>Group Stage: {completedGS}/72</span>
+            <span>Knockout: {completedKO}/32</span>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Section 3: Quick Access ─────────────────────────── */}
+      <section className="more-section">
+        <h3 className="more-section__heading">Quick Access</h3>
+        <div className="more-quick-grid">
+          {quickAccess.map((item, i) => (
+            <button
+              key={item.view}
+              type="button"
+              className="more-quick-card"
+              style={{ animationDelay: `${i * 60}ms` }}
+              onClick={() => onNavigate(item.view)}
+            >
+              <span className="more-quick-card__icon">{item.icon}</span>
+              <b className="more-quick-card__title">{item.title}</b>
+              <small className="more-quick-card__desc">{item.desc}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Section 4: Stadiums ─────────────────────────────── */}
+      <section className="more-section">
+        <h3 className="more-section__heading">Stadiums</h3>
+        <div className="more-venue-grid">
+          {venueList.map((v, i) => (
+            <div
+              key={v.key}
+              className="more-venue-card"
+              style={{ animationDelay: `${i * 40}ms` }}
+            >
+              <div className="more-venue-card__top">
+                <span className="more-venue-card__flag">{countryFlag(v.country)}</span>
+                <b className="more-venue-card__name">{v.common}</b>
+              </div>
+              <span className="more-venue-card__city">{v.city}, {v.country}</span>
+              <div className="more-venue-card__stats">
+                <span>🏟 {fmtNum(v.cap)}</span>
+                <span>⚽ {v.matches} match{v.matches !== 1 ? "es" : ""}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Section 5: Host Cities ──────────────────────────── */}
+      <section className="more-section">
+        <h3 className="more-section__heading">Host Cities</h3>
+        <div className="more-cities-list">
+          {hostCities.map((c, i) => (
+            <div
+              key={c.city}
+              className="more-city-row"
+              style={{ animationDelay: `${i * 50}ms` }}
+            >
+              <span className="more-city-row__flag">{countryFlag(c.country)}</span>
+              <div className="more-city-row__info">
+                <b>{c.city}</b>
+                <small>{c.country} · {c.venues.join(", ")}</small>
+              </div>
+              <span className="more-city-row__badge">{c.matches} match{c.matches !== 1 ? "es" : ""}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Section 6: Tournament Calendar ──────────────────── */}
+      <section className="more-section">
+        <h3 className="more-section__heading">Tournament Calendar</h3>
+        <div className="more-timeline">
+          {milestones.map((m, i) => (
+            <div
+              key={m.label}
+              className={`more-timeline__item more-timeline__item--${m.status}`}
+              style={{ animationDelay: `${i * 50}ms` }}
+            >
+              <div className="more-timeline__dot" />
+              <div className="more-timeline__content">
+                <b>{m.label}</b>
+                <small>{m.date}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Section 7: History ──────────────────────────────── */}
+      <section className="more-section">
+        <h3 className="more-section__heading">World Cup History</h3>
+
+        {/* Past winners */}
+        <div className="more-history-grid">
+          {pastWinners.map((w, i) => (
+            <div
+              key={w.year}
+              className="more-history-card"
+              style={{ animationDelay: `${i * 50}ms` }}
+            >
+              <span className="more-history-card__year">{w.year}</span>
+              <span className="more-history-card__flag">{w.flag}</span>
+              <b className="more-history-card__winner">{w.winner}</b>
+              <small className="more-history-card__detail">
+                vs {w.runner} · {w.host}
+              </small>
+            </div>
+          ))}
+        </div>
+
+        {/* Records */}
+        <h4 className="more-section__subheading">Records</h4>
+        <div className="more-records-list">
+          {records.map((r, i) => (
+            <div
+              key={r.label}
+              className="more-record-row"
+              style={{ animationDelay: `${i * 40}ms` }}
+            >
+              <span className="more-record-row__label">{r.label}</span>
+              <span className="more-record-row__value">{r.value}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Section 8: App Settings ─────────────────────────── */}
+      <section className="more-section more-section--settings">
+        <h3 className="more-section__heading">Settings</h3>
+        <div className="more-settings-list">
+          <button type="button" className="more-settings-row" onClick={() => onNavigate("about")}>
+            <span className="more-settings-row__icon">ℹ️</span>
+            <span>About Compet 2026</span>
+            <span className="more-settings-row__chevron">›</span>
           </button>
-        ))}
-      </div>
+          <button type="button" className="more-settings-row" onClick={() => {}}>
+            <span className="more-settings-row__icon">🔔</span>
+            <span>Notifications</span>
+            <span className="more-settings-row__chevron">›</span>
+          </button>
+          <button type="button" className="more-settings-row" onClick={handleShare}>
+            <span className="more-settings-row__icon">📤</span>
+            <span>Share the App</span>
+            <span className="more-settings-row__chevron">›</span>
+          </button>
+          <div className="more-settings-row more-settings-row--version">
+            <span className="more-settings-row__icon">⚙️</span>
+            <span>Version</span>
+            <span className="more-settings-row__version">v1.0.0</span>
+          </div>
+        </div>
+      </section>
+
     </main>
   );
 }

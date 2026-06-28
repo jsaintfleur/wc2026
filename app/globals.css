@@ -5057,3 +5057,323 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 @media (display-mode: standalone) {
   .install-banner { display: none; }
 }
+
+/* =========================================================
+ * 2026 app shell + knockout bracket refinement
+ * ========================================================= */
+.wrap {
+  padding-bottom: calc(86px + env(safe-area-inset-bottom));
+}
+
+.tabs {
+  position: fixed;
+  top: auto;
+  right: auto;
+  bottom: 0;
+  left: 50%;
+  z-index: 70;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  width: min(100%, 760px);
+  padding: 8px max(8px, env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-right));
+  gap: 4px;
+  transform: translateX(-50%);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  border-bottom: 0;
+  background:
+    linear-gradient(180deg, rgba(18, 25, 42, 0.95), rgba(5, 8, 14, 0.98)),
+    rgba(5, 8, 14, 0.98);
+  box-shadow: 0 -18px 48px rgba(0,0,0,0.38);
+  overflow: visible;
+}
+
+.tab {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 54px;
+  padding: 6px 3px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  color: rgba(235,243,255,0.68);
+  font-size: 10px;
+  letter-spacing: .4px;
+  line-height: 1.05;
+  text-transform: none;
+  transition: transform .18s ease, color .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.tab__icon {
+  display: grid;
+  place-items: center;
+  min-height: 22px;
+  color: inherit;
+  font-family: var(--disp);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.tab__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab[aria-selected="true"] {
+  color: #fff;
+  border-color: rgba(245,158,11,0.3);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(245,158,11,0.24), transparent 58%),
+    linear-gradient(145deg, rgba(124,58,237,0.32), rgba(255,255,255,0.06));
+  box-shadow: 0 10px 24px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.tab:hover {
+  color: #fff;
+}
+
+.tab:active {
+  transform: translateY(1px) scale(.98);
+}
+
+.teams-view,
+.more-view {
+  padding: 12px 12px 28px;
+}
+
+.teams-view__hero,
+.more-view__hero {
+  margin-bottom: 12px;
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(245,158,11,0.18), transparent 38%),
+    linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025)),
+    rgba(8, 12, 21, 0.9);
+  box-shadow: 0 18px 44px rgba(0,0,0,0.28);
+}
+
+.teams-view__hero span,
+.more-view__hero span {
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.teams-view__hero h2,
+.more-view__hero h2 {
+  margin: 4px 0 4px;
+  font-family: var(--disp);
+  font-size: 40px;
+  line-height: .95;
+  text-transform: uppercase;
+}
+
+.teams-view__hero p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.teams-view__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.team-tile,
+.more-tile {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
+    rgba(8, 12, 21, 0.86);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+  cursor: pointer;
+}
+
+.team-tile {
+  display: grid;
+  gap: 4px;
+  min-height: 104px;
+  padding: 14px;
+}
+
+.team-tile__flag {
+  font-size: 26px;
+}
+
+.team-tile__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--disp);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.team-tile__meta {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+
+.more-view__grid {
+  display: grid;
+  gap: 10px;
+}
+
+.more-tile {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+}
+
+.more-tile__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: rgba(245,158,11,0.12);
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.more-tile b,
+.more-tile small {
+  display: block;
+}
+
+.more-tile b {
+  font-family: var(--disp);
+  font-size: 17px;
+}
+
+.more-tile small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ko-road__scroll {
+  grid-template-columns: repeat(4, 132px) 184px repeat(4, 132px);
+  min-width: 1260px;
+  align-items: start;
+  scroll-snap-type: x mandatory;
+}
+
+.ko-road__column {
+  min-height: 760px;
+}
+
+.ko-road__stack {
+  display: grid;
+  grid-template-rows: repeat(16, 42px);
+  gap: 0;
+  align-content: start;
+}
+
+.ko-road__column--r32 .ko-road__stack {
+  gap: 0;
+}
+
+.ko-road__center {
+  display: grid;
+  grid-template-rows: repeat(16, 42px);
+  gap: 0;
+  min-height: 760px;
+  align-content: start;
+}
+
+.ko-road-card {
+  align-self: center;
+  min-height: 88px;
+}
+
+.ko-road__third {
+  align-self: center;
+}
+
+.ko-road-card--left::after,
+.ko-road-card--right::after {
+  width: 16px;
+}
+
+.ko-road-card--left::after {
+  right: -17px;
+}
+
+.ko-road-card--right::after {
+  left: -17px;
+}
+
+.ko-road-card--center {
+  min-height: 104px;
+}
+
+.stats-scorer__bar--combined {
+  background: linear-gradient(90deg, #f59e0b, #a855f7);
+}
+
+@media (min-width: 768px) {
+  .wrap {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom));
+  }
+
+  .tabs {
+    width: min(720px, calc(100% - 32px));
+    border-radius: 24px 24px 0 0;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .tab {
+    font-size: 11px;
+    padding: 7px 6px;
+  }
+
+  .teams-view__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 430px) {
+  .ko-road__scroll {
+    grid-template-columns: repeat(4, 122px) 174px repeat(4, 122px);
+    min-width: 1168px;
+  }
+
+  .ko-road__stack,
+  .ko-road__center {
+    grid-template-rows: repeat(16, 40px);
+  }
+
+  .ko-road__column,
+  .ko-road__center {
+    min-height: 730px;
+  }
+
+  .team-tile__name {
+    font-size: 15px;
+  }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
@@ -21,7 +21,7 @@ function isStaleStatus(ts: number, status: string, now = Date.now()): boolean {
   return now - ts > STALE_LIVE_THRESHOLD;
 }
 
-type ViewType = "home" | "schedule" | "groups" | "bracket" | "stats" | "venues" | "about";
+type ViewType = "home" | "schedule" | "groups" | "bracket" | "teams" | "more" | "stats" | "venues" | "about";
 type LiveStatus = "init" | "off" | "idle" | "active" | "paused" | "nofix";
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -881,6 +881,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
         // ── Goals ──
         if (ev.type !== "Goal") continue;
+        if (/shootout/i.test(ev.detail || "")) continue;
         totalGoals++;
 
         const isPen = ev.detail === "Penalty";
@@ -942,12 +943,29 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
     const topScorers = Object.values(scorers).sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, 20);
     const topAssisters = Object.values(assisters).sort((a, b) => b.assists - a.assists || a.name.localeCompare(b.name)).slice(0, 20);
+    const combined: Record<string, { name: string; team: string; goals: number; assists: number; total: number }> = {};
+    Object.values(scorers).forEach(s => {
+      const key = `${s.name}|${s.team}`;
+      combined[key] = combined[key] || { name: s.name, team: s.team, goals: 0, assists: 0, total: 0 };
+      combined[key].goals = s.goals;
+      combined[key].total = combined[key].goals + combined[key].assists;
+    });
+    Object.values(assisters).forEach(a => {
+      const key = `${a.name}|${a.team}`;
+      combined[key] = combined[key] || { name: a.name, team: a.team, goals: 0, assists: 0, total: 0 };
+      combined[key].assists = a.assists;
+      combined[key].total = combined[key].goals + combined[key].assists;
+    });
+    const topCombined = Object.values(combined)
+      .filter(p => p.total > 0)
+      .sort((a, b) => b.total - a.total || b.goals - a.goals || a.name.localeCompare(b.name))
+      .slice(0, 20);
     const topTeams = Object.values(teamGoals).sort((a, b) => b.goals - a.goals || a.team.localeCompare(b.team)).slice(0, 12);
     const mostCarded = Object.values(cardPlayers).sort((a, b) => (b.yellows + b.reds * 3) - (a.yellows + a.reds * 3) || a.name.localeCompare(b.name)).slice(0, 15);
     const bucketLabels = ["1-15", "16-30", "31-45", "46-60", "61-75", "76-90", "90+"];
 
     return {
-      topScorers, topAssisters, topTeams, mostCarded,
+      topScorers, topAssisters, topCombined, topTeams, mostCarded,
       minuteBuckets, bucketLabels,
       totalGoals, normalGoals, penGoals, ownGoals,
       totalYellows, totalReds, totalSubs,
@@ -989,13 +1007,24 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
   const tabs: { key: ViewType; label: string }[] = [
     { key: "home", label: "Home" },
-    { key: "schedule", label: "Schedule" },
-    { key: "groups", label: "Tables" },
-    { key: "bracket", label: "Bracket" },
-    { key: "stats", label: "Stats" },
-    { key: "venues", label: "Venues" },
-    { key: "about", label: "About" },
+    { key: "schedule", label: "Matches" },
+    { key: "groups", label: "Groups" },
+    { key: "bracket", label: "Knockout" },
+    { key: "teams", label: "Teams" },
+    { key: "more", label: "More" },
   ];
+
+  const navIcon: Record<ViewType, string> = {
+    home: "⌂",
+    schedule: "▦",
+    groups: "◌",
+    bracket: "♕",
+    teams: "◍",
+    more: "•••",
+    stats: "↗",
+    venues: "⌖",
+    about: "i",
+  };
 
   return (
     <div className={`wrap${view === "bracket" ? " wrap--knockout" : ""}${view === "home" ? " wrap--home" : ""}`}>
@@ -1036,7 +1065,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
             aria-selected={view === t.key}
             onClick={() => handleTab(t.key)}
           >
-            {t.label}
+            <span className="tab__icon" aria-hidden="true">{navIcon[t.key]}</span>
+            <span className="tab__label">{t.label}</span>
           </button>
         ))}
       </nav>
@@ -1110,6 +1140,10 @@ export default function Tournament({ data }: { data: TournamentData }) {
           />
         ) : view === "stats" ? (
           <StatsView data={data} fixtures={fixtures} fl={fl} computeLeaders={computeLeaders} />
+        ) : view === "teams" ? (
+          <TeamsView data={data} onTeamClick={setTeamDrawer} />
+        ) : view === "more" ? (
+          <MoreView onNavigate={handleTab} />
         ) : (
           <main
             ref={mainRef}
@@ -1214,29 +1248,87 @@ function LandingGate({ data, fixtures, findLive, nowMs, onGroupStage, onKnockout
       <section className="landing-gate__hero">
         <div>
           <span>Canada · Mexico · United States</span>
-          <h1>Compet 2026</h1>
-          <p>Live scores, tables, knockout paths and match detail built for the World Cup.</p>
+          <h1>Road to the Final</h1>
+          <p>Knockout bracket, live matches, group tables and match detail built for the World Cup.</p>
         </div>
         <div className="landing-gate__mark">
-          <span>48</span>
-          <b>Teams</b>
+          <span>32</span>
+          <b>Knockout</b>
         </div>
       </section>
 
       <section className="landing-choice" aria-label="Choose tournament stage">
-        <button type="button" className="landing-choice__card landing-choice__card--group" onClick={onGroupStage}>
-          <span className="landing-choice__eyebrow">Group Stage</span>
-          <b>Live Fixtures & Tables</b>
-          <small>{groupDone} of {groupTotal} matches completed</small>
-          <em>{nextGroup ? `Next: ${nextGroup.t1} vs ${nextGroup.t2}` : "Latest group results ready"}</em>
-        </button>
         <button type="button" className="landing-choice__card landing-choice__card--ko" onClick={onKnockout}>
           <span className="landing-choice__eyebrow">Knockout Stage</span>
           <b>Actual Bracket</b>
           <small>{koDone} of {koTotal} matches completed</small>
           <em>{nextKo ? `Opens ${DOW[parseISO(nextKo.iso).getDay()]} ${parseISO(nextKo.iso).getDate()} ${MON[parseISO(nextKo.iso).getMonth()]}` : "Road to the Final"}</em>
         </button>
+        <button type="button" className="landing-choice__card landing-choice__card--group" onClick={onGroupStage}>
+          <span className="landing-choice__eyebrow">Group Stage</span>
+          <b>Live Fixtures & Tables</b>
+          <small>{groupDone} of {groupTotal} matches completed</small>
+          <em>{nextGroup ? `Next: ${nextGroup.t1} vs ${nextGroup.t2}` : "Latest group results ready"}</em>
+        </button>
       </section>
+    </main>
+  );
+}
+
+function TeamsView({ data, onTeamClick }: {
+  data: TournamentData;
+  onTeamClick: (team: string) => void;
+}) {
+  const teams = Object.entries(data.groups).flatMap(([group, groupTeams]) =>
+    groupTeams.map(team => ({ team, group, flag: data.flags[team] || "⚽", host: data.hosts.includes(team) }))
+  );
+
+  return (
+    <main className="teams-view" aria-label="Teams">
+      <section className="teams-view__hero">
+        <span>48 Nations</span>
+        <h2>Teams</h2>
+        <p>Browse every squad hub, group assignment and match path.</p>
+      </section>
+      <div className="teams-view__grid">
+        {teams.map(({ team, group, flag, host }) => (
+          <button key={team} type="button" className="team-tile" onClick={() => onTeamClick(team)}>
+            <span className="team-tile__flag">{flag}</span>
+            <span className="team-tile__name">{team}</span>
+            <span className="team-tile__meta">Group {group}{host ? " · Host" : ""}</span>
+          </button>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+function MoreView({ onNavigate }: {
+  onNavigate: (view: ViewType) => void;
+}) {
+  const items: { view: ViewType; icon: string; title: string; desc: string }[] = [
+    { view: "stats", icon: "↗", title: "Stats", desc: "Scorers, assists, cards and team leaderboards." },
+    { view: "venues", icon: "⌖", title: "Venues", desc: "Stadiums, cities and host country details." },
+    { view: "about", icon: "i", title: "About", desc: "Data notes, live updates and app details." },
+  ];
+
+  return (
+    <main className="more-view" aria-label="More">
+      <section className="more-view__hero">
+        <span>Compet 2026</span>
+        <h2>More</h2>
+      </section>
+      <div className="more-view__grid">
+        {items.map(item => (
+          <button key={item.view} type="button" className="more-tile" onClick={() => onNavigate(item.view)}>
+            <span className="more-tile__icon">{item.icon}</span>
+            <span>
+              <b>{item.title}</b>
+              <small>{item.desc}</small>
+            </span>
+          </button>
+        ))}
+      </div>
     </main>
   );
 }
@@ -1375,25 +1467,43 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     });
   }, [byRound, findLive, fixtures, loserFromFixture, standingsByGroup, teamName, winnerFromFixture]);
 
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
-    const r32 = rounds.find(round => round.key === "r32");
+  const validationWarnings = useMemo(() => {
     const warnings: string[] = [];
+    const expectedCounts: Record<KnockoutRoundKey, number> = { r32: 16, r16: 8, qf: 4, sf: 2, third: 1, final: 1 };
+    const actualR32Teams = new Set<string>();
+
+    for (const round of rounds) {
+      const expected = expectedCounts[round.key];
+      if (round.cards.length !== expected) warnings.push(`${round.label} has ${round.cards.length} slots, expected ${expected}`);
+      round.cards.forEach(card => {
+        if (!card.match.ts || !card.match.v) warnings.push(`${round.label} match ${card.matchNo} is missing date/time or venue data`);
+        card.teams.forEach((team, index) => {
+          if (!team.name.trim()) warnings.push(`${round.label} match ${card.matchNo} side ${index + 1} has an empty team slot`);
+          const isPlaceholder = team.placeholder || team.name === "TBD" || /Group|Winner|Best/i.test(team.name);
+          if (round.key === "r32" && !isPlaceholder) {
+            const normalized = canon(team.name);
+            if (actualR32Teams.has(normalized)) warnings.push(`Duplicate R32 team "${team.name}"`);
+            actualR32Teams.add(normalized);
+          }
+        });
+      });
+    }
+
+    const r32 = rounds.find(round => round.key === "r32");
     if (!r32 || r32.cards.length !== 16) warnings.push(`Round of 32 slot count is ${r32?.cards.length ?? 0}, expected 16`);
     R32_SEEDS.forEach((pair, index) => {
       pair.forEach(seed => {
         if (seed !== "3rd" && !/^([12][A-L])$/.test(seed)) warnings.push(`Invalid R32 seed "${seed}" at slot ${index + 1}`);
       });
     });
-    rounds.forEach(round => {
-      round.cards.forEach(card => {
-        card.teams.forEach((team, index) => {
-          if (!team.name.trim()) warnings.push(`${round.label} match ${card.matchNo} side ${index + 1} has an empty team slot`);
-        });
-      });
-    });
-    if (warnings.length) console.warn("[Knockout validation]", warnings);
+    return warnings;
   }, [rounds]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    if (validationWarnings.length) console.warn("[Knockout validation]", validationWarnings);
+    else console.info("[Knockout validation] Bracket slots passed integrity checks");
+  }, [validationWarnings]);
 
   const progress = calculateKnockoutProgress(rounds);
   const completed = progress.completed;
@@ -1503,6 +1613,14 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     }, card.fixture);
   }
 
+  function bracketGridRow(round: KnockoutRoundKey, index: number): string {
+    if (round === "r32") return `${index * 2 + 1} / span 2`;
+    if (round === "r16") return `${index * 4 + 2} / span 2`;
+    if (round === "qf") return `${index * 8 + 4} / span 2`;
+    if (round === "sf") return "8 / span 2";
+    return "auto";
+  }
+
   function renderRoadTeam(card: KnockoutCardModel, team: KnockoutParticipant, teamIndex: number) {
     const score = teamIndex === 0 ? card.fixture?.gh : card.fixture?.ga;
     const selected = selectedTeamName && canon(selectedTeamName) === canon(team.name);
@@ -1521,13 +1639,14 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     );
   }
 
-  function renderRoadCard(card: KnockoutCardModel, tone: "left" | "right" | "center" = "left") {
+  function renderRoadCard(card: KnockoutCardModel, tone: "left" | "right" | "center" = "left", style?: CSSProperties) {
     const isSelected = selectedPathKeys.has(card.key);
     const status = card.isLive ? (card.fixture?.elapsed ? `${card.fixture.elapsed}'` : "LIVE") : card.isDone ? "FT" : "Scheduled";
     return (
       <article
         key={`road-${card.key}`}
         className={`ko-road-card ko-road-card--${tone}${card.isLive ? " ko-road-card--live" : ""}${card.isDone ? " ko-road-card--done" : ""}${isSelected ? " ko-road-card--path" : ""}${shouldDim && !isSelected ? " ko-road-card--dim" : ""}`}
+        style={style}
       >
         <div className="ko-road-card__top">
           <span>M{card.matchNo}</span>
@@ -1608,21 +1727,21 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
               <div key={`left-${column.key}`} data-round={column.key} data-side="left" className={`ko-road__column ko-road__column--${column.key}${activeRound === column.key ? " ko-road__column--active" : ""}`}>
                 <div className="ko-road__round"><span>{column.label}</span><small>{column.detail}</small></div>
                 <div className="ko-road__stack">
-                  {column.cards.map(card => renderRoadCard(card, "left"))}
+                  {column.cards.map((card, index) => renderRoadCard(card, "left", { gridRow: bracketGridRow(column.key, index) }))}
                 </div>
               </div>
             ))}
           </div>
 
           <div className="ko-road__center" ref={roadCenterRef} aria-label="World Cup final path">
-            <div className="ko-road__trophy">
+            <div className="ko-road__trophy" style={{ gridRow: "4 / span 3" }}>
               <WorldCupTrophy className="ko-road__cup-img" />
               <span>FIFA World Cup</span>
               <small>Final designed in memory</small>
             </div>
-            {finalCard && renderRoadCard(finalCard, "center")}
+            {finalCard && renderRoadCard(finalCard, "center", { gridRow: "8 / span 3" })}
             {thirdCard && (
-              <div className="ko-road__third">
+              <div className="ko-road__third" style={{ gridRow: "12 / span 3" }}>
                 <span>Third Place</span>
                 {renderRoadCard(thirdCard, "center")}
               </div>
@@ -1634,7 +1753,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
               <div key={`right-${column.key}`} data-round={column.key} data-side="right" className={`ko-road__column ko-road__column--${column.key}${activeRound === column.key ? " ko-road__column--active" : ""}`}>
                 <div className="ko-road__round"><span>{column.label}</span><small>{column.detail}</small></div>
                 <div className="ko-road__stack">
-                  {column.cards.map(card => renderRoadCard(card, "right"))}
+                  {column.cards.map((card, index) => renderRoadCard(card, "right", { gridRow: bracketGridRow(column.key, index) }))}
                 </div>
               </div>
             ))}
@@ -1717,7 +1836,10 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
         </div>
       </div>
 
-      <p className="ko-stage__note">No unverified scores are shown. Future teams remain TBD until qualifying and live fixture data confirm the matchup.</p>
+      <p className="ko-stage__note">
+        No unverified scores are shown. Future teams remain TBD until qualifying and live fixture data confirm the matchup.
+        {process.env.NODE_ENV === "development" && validationWarnings.length > 0 ? ` Dev validation: ${validationWarnings.length} bracket warning${validationWarnings.length === 1 ? "" : "s"}.` : ""}
+      </p>
     </section>
   );
 }
@@ -2778,6 +2900,7 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
   computeLeaders: () => {
     topScorers: { name: string; team: string; goals: number; penalties: number }[];
     topAssisters: { name: string; team: string; assists: number }[];
+    topCombined: { name: string; team: string; goals: number; assists: number; total: number }[];
     topTeams: { team: string; goals: number }[];
     mostCarded: { name: string; team: string; yellows: number; reds: number }[];
     minuteBuckets: number[];
@@ -2796,13 +2919,13 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
 }) {
   const stats = useMemo(() => computeLeaders(), [fixtures, computeLeaders]);
   const {
-    topScorers, topAssisters, topTeams, mostCarded,
+    topScorers, topAssisters, topCombined, topTeams, mostCarded,
     minuteBuckets, bucketLabels,
     totalGoals, normalGoals, penGoals, ownGoals,
     totalYellows, totalReds, totalSubs,
     matchesPlayed, avgGoals, cleanSheets,
   } = stats;
-  const hasData = topScorers.length > 0 || topAssisters.length > 0;
+  const hasData = topScorers.length > 0 || topAssisters.length > 0 || topCombined.length > 0;
   const hasCards = totalYellows > 0 || totalReds > 0;
   const maxBucket = Math.max(...minuteBuckets, 1);
   const maxScorerGoals = topScorers.length > 0 ? topScorers[0].goals : 1;
@@ -2866,21 +2989,21 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
           <h3 className="stats-heading">Goal Types</h3>
           <div className="stats-type-row">
             <div className="stats-type-item">
-              <div className="stats-type-bar" style={{ "--bar-pct": `${(normalGoals / totalGoals) * 100}%` } as React.CSSProperties}>
+              <div className="stats-type-bar" style={{ "--bar-pct": `${(normalGoals / totalGoals) * 100}%` } as CSSProperties}>
                 <span className="stats-type-fill stats-type-fill--normal" />
               </div>
               <span className="stats-type-count">{normalGoals}</span>
               <span className="stats-type-label">Open Play</span>
             </div>
             <div className="stats-type-item">
-              <div className="stats-type-bar" style={{ "--bar-pct": `${(penGoals / totalGoals) * 100}%` } as React.CSSProperties}>
+              <div className="stats-type-bar" style={{ "--bar-pct": `${(penGoals / totalGoals) * 100}%` } as CSSProperties}>
                 <span className="stats-type-fill stats-type-fill--pen" />
               </div>
               <span className="stats-type-count">{penGoals}</span>
               <span className="stats-type-label">Penalty</span>
             </div>
             <div className="stats-type-item">
-              <div className="stats-type-bar" style={{ "--bar-pct": `${(ownGoals / totalGoals) * 100}%` } as React.CSSProperties}>
+              <div className="stats-type-bar" style={{ "--bar-pct": `${(ownGoals / totalGoals) * 100}%` } as CSSProperties}>
                 <span className="stats-type-fill stats-type-fill--og" />
               </div>
               <span className="stats-type-count">{ownGoals}</span>
@@ -2898,7 +3021,7 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
             {minuteBuckets.map((count, i) => (
               <div key={bucketLabels[i]} className="stats-bar-col">
                 <span className="stats-bar-val">{count || ""}</span>
-                <div className="stats-bar" style={{ "--bar-h": `${(count / maxBucket) * 100}%` } as React.CSSProperties} />
+                <div className="stats-bar" style={{ "--bar-h": `${(count / maxBucket) * 100}%` } as CSSProperties} />
                 <span className="stats-bar-label">{bucketLabels[i]}</span>
               </div>
             ))}
@@ -2921,7 +3044,7 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
                   <span className="stats-scorer__team">{s.team}</span>
                 </div>
                 <div className="stats-scorer__bar-wrap">
-                  <div className="stats-scorer__bar" style={{ "--bar-w": `${(s.goals / maxScorerGoals) * 100}%` } as React.CSSProperties} />
+                  <div className="stats-scorer__bar" style={{ "--bar-w": `${(s.goals / maxScorerGoals) * 100}%` } as CSSProperties} />
                 </div>
                 <span className="stats-scorer__goals">{s.goals}</span>
                 {s.penalties > 0 && <span className="stats-scorer__pen">({s.penalties}p)</span>}
@@ -2941,7 +3064,7 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
                       <span className="stats-scorer__team">{s.team}</span>
                     </div>
                     <div className="stats-scorer__bar-wrap">
-                      <div className="stats-scorer__bar" style={{ "--bar-w": `${(s.goals / maxScorerGoals) * 100}%` } as React.CSSProperties} />
+                      <div className="stats-scorer__bar" style={{ "--bar-w": `${(s.goals / maxScorerGoals) * 100}%` } as CSSProperties} />
                     </div>
                     <span className="stats-scorer__goals">{s.goals}</span>
                     {s.penalties > 0 && <span className="stats-scorer__pen">({s.penalties}p)</span>}
@@ -2967,9 +3090,32 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
                   <span className="stats-scorer__team">{a.team}</span>
                 </div>
                 <div className="stats-scorer__bar-wrap">
-                  <div className="stats-scorer__bar stats-scorer__bar--assist" style={{ "--bar-w": `${(a.assists / (topAssisters[0]?.assists || 1)) * 100}%` } as React.CSSProperties} />
+                  <div className="stats-scorer__bar stats-scorer__bar--assist" style={{ "--bar-w": `${(a.assists / (topAssisters[0]?.assists || 1)) * 100}%` } as CSSProperties} />
                 </div>
                 <span className="stats-scorer__goals">{a.assists}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Goals + assists ── */}
+      {topCombined.length > 0 && (
+        <section className="stats-section">
+          <h3 className="stats-heading">Goals + Assists</h3>
+          <div className="stats-scorer-list">
+            {topCombined.slice(0, 10).map((p, i) => (
+              <div key={`${p.name}-${p.team}`} className={`stats-scorer stagger-rise${i < 3 ? ` stats-scorer--${["gold","silver","bronze"][i]}` : ""}`}>
+                <span className="stats-scorer__rank">{i + 1}</span>
+                <span className="stats-scorer__flag">{fl(p.team)}</span>
+                <div className="stats-scorer__info">
+                  <span className="stats-scorer__name">{p.name}</span>
+                  <span className="stats-scorer__team">{p.team} · {p.goals}G {p.assists}A</span>
+                </div>
+                <div className="stats-scorer__bar-wrap">
+                  <div className="stats-scorer__bar stats-scorer__bar--combined" style={{ "--bar-w": `${(p.total / (topCombined[0]?.total || 1)) * 100}%` } as CSSProperties} />
+                </div>
+                <span className="stats-scorer__goals">{p.total}</span>
               </div>
             ))}
           </div>
@@ -3012,7 +3158,7 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
                   <span className="stats-scorer__name">{t.team}</span>
                 </div>
                 <div className="stats-scorer__bar-wrap">
-                  <div className="stats-scorer__bar stats-scorer__bar--team" style={{ "--bar-w": `${(t.goals / maxTeamGoals) * 100}%` } as React.CSSProperties} />
+                  <div className="stats-scorer__bar stats-scorer__bar--team" style={{ "--bar-w": `${(t.goals / maxTeamGoals) * 100}%` } as CSSProperties} />
                 </div>
                 <span className="stats-scorer__goals">{t.goals}</span>
               </div>

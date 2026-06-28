@@ -1056,7 +1056,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         </section>
       )}
 
-      <nav className="tabs" role="tablist" aria-label="Views">
+      <nav className="app-nav" role="tablist" aria-label="Views">
         {tabs.map(t => (
           <button
             key={t.key}

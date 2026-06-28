@@ -1076,6 +1076,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     let totalYellows = 0;
     let totalReds = 0;
     let totalSubs = 0;
+    let matchesWithAssistData = 0;
 
     /* ── Collect all finished matches (deduped) ───────────────── */
     type FinishedMatch = {
@@ -1200,6 +1201,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
             assisters[aKey].assists++;
           }
         }
+        if (fm.events!.some(e => e.type === "Goal" && e.assist)) matchesWithAssistData++;
       }
 
       /* ── Path 2: PlayerMatchStat fallback (when events missing) */
@@ -1347,7 +1349,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       minuteBuckets, bucketLabels,
       totalGoals, totalGoalsFromEvents, normalGoals, penGoals, ownGoals,
       totalYellows, totalReds, totalSubs,
-      matchesPlayed, matchesWithEvents, avgGoals, cleanSheets,
+      matchesPlayed, matchesWithEvents, matchesWithAssistData, avgGoals, cleanSheets,
     };
   }
 
@@ -4224,6 +4226,7 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
     totalSubs: number;
     matchesPlayed: number;
     matchesWithEvents: number;
+    matchesWithAssistData: number;
     avgGoals: number;
     cleanSheets: number;
   };
@@ -4235,7 +4238,7 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
     minuteBuckets, bucketLabels,
     totalGoals, totalGoalsFromEvents, normalGoals, penGoals, ownGoals,
     totalYellows, totalReds, totalSubs,
-    matchesPlayed, matchesWithEvents, avgGoals, cleanSheets,
+    matchesPlayed, matchesWithEvents, matchesWithAssistData, avgGoals, cleanSheets,
   } = stats;
   const hasScorers = topScorers.length > 0;
   const hasTeams = topTeams.length > 0;
@@ -4410,6 +4413,9 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
       {topAssisters.length > 0 && (
         <section className="stats-section">
           <h3 className="stats-heading">Top Assists</h3>
+          {matchesWithAssistData < matchesPlayed && (
+            <p className="stats-coverage">Assist data available for {matchesWithAssistData} of {matchesPlayed} matches</p>
+          )}
           <div className="stats-scorer-list">
             {topAssisters.slice(0, 10).map((a, i) => (
               <div key={`${a.name}-${a.team}`} className={`stats-scorer stagger-rise${i < 3 ? ` stats-scorer--${["gold","silver","bronze"][i]}` : ""}`}>
@@ -4433,6 +4439,9 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
       {topCombined.length > 0 && (
         <section className="stats-section">
           <h3 className="stats-heading">Goals + Assists</h3>
+          {matchesWithAssistData < matchesPlayed && (
+            <p className="stats-coverage">Assist data available for {matchesWithAssistData} of {matchesPlayed} matches</p>
+          )}
           <div className="stats-scorer-list">
             {topCombined.slice(0, 10).map((p, i) => (
               <div key={`${p.name}-${p.team}`} className={`stats-scorer stagger-rise${i < 3 ? ` stats-scorer--${["gold","silver","bronze"][i]}` : ""}`}>

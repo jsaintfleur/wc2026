@@ -479,6 +479,42 @@ body::after {
   color: #BFE0D2;
 }
 
+/* Compact contextual hero for inner views */
+.hero--compact {
+  min-height: auto;
+  padding: 18px 18px 16px;
+  display: flex;
+  align-items: center;
+}
+.hero--compact .hero__pitch-lines {
+  width: 120px;
+  height: 120px;
+  right: -20px;
+  top: -10px;
+  opacity: 0.6;
+}
+.hero__context {
+  position: relative;
+  z-index: 2;
+}
+.hero__context-title {
+  font-family: var(--disp);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: .3px;
+  background: linear-gradient(180deg, #ffffff 20%, rgba(255,255,255,0.75) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero__context-sub {
+  font-size: 12px;
+  color: #BFE0D2;
+  margin-top: 4px;
+  letter-spacing: .3px;
+}
+
 /* Bottom navigation bar — fixed at viewport bottom */
 .app-nav {
   position: fixed;

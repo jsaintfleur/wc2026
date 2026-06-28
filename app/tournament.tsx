@@ -1219,21 +1219,15 @@ export default function Tournament({ data }: { data: TournamentData }) {
       </header>
 
       {view !== "bracket" && view !== "home" && (
-        <section className="hero">
+        <section className="hero hero--compact">
           <div className="hero__pitch-lines" aria-hidden="true" />
-          <div className="hero__eyebrow">Canada &middot; Mexico &middot; United States</div>
-          <h1 className="hero__title">COMPET<br />2026</h1>
-          <div className="hero__sub">Live scores, fixtures, tables and bracket picks</div>
-          <div className="hero__host-row" aria-label="Host nations">
-            <span>🇨🇦 Canada</span>
-            <span>🇲🇽 Mexico</span>
-            <span>🇺🇸 United States</span>
-          </div>
-          <div className="hero__stats">
-            <div className="stat"><b>48</b><span>Teams</span></div>
-            <div className="stat"><b>104</b><span>Matches</span></div>
-            <div className="stat"><b>16</b><span>Venues</span></div>
-            <div className="stat"><b>3</b><span>Hosts</span></div>
+          <div className="hero__context">
+            <h1 className="hero__context-title">
+              {view === "schedule" ? "Matches" : view === "groups" ? "Groups" : view === "teams" ? "Teams" : view === "stats" ? "Statistics" : view === "more" ? "More" : view === "venues" ? "Venues" : view === "about" ? "About" : "COMPET 2026"}
+            </h1>
+            <p className="hero__context-sub">
+              {view === "schedule" ? `${data.gs.length} group stage · ${data.ko.length} knockout` : view === "groups" ? `${Object.keys(data.groups).length} groups · 48 teams` : view === "teams" ? "48 nations competing" : view === "stats" ? "Goals, assists & cards" : view === "more" ? "Venues, about & more" : ""}
+            </p>
           </div>
         </section>
       )}

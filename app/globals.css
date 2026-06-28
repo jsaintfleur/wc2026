@@ -1371,7 +1371,7 @@ body::after {
 /* knockout */
 .wrap:has(.ko-stage),
 .wrap--knockout {
-  max-width: 980px;
+  max-width: 1280px;
 }
 
 .wrap--knockout .bar {
@@ -1419,10 +1419,14 @@ body::after {
 }
 
 .ko-control__top {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(54px, .35fr);
   gap: 14px;
-  align-items: flex-start;
+  align-items: center;
+}
+
+.ko-control__title {
+  min-width: 0;
 }
 
 .ko-stage__eyebrow {
@@ -1445,7 +1449,40 @@ body::after {
   text-transform: uppercase;
 }
 
+.ko-stage__trophy-mark {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 78px;
+  padding: 5px 10px 7px;
+  border-radius: 18px;
+  border: 1px solid rgba(245,158,11,0.22);
+  background:
+    radial-gradient(circle at 50% 16%, rgba(245,158,11,0.22), transparent 56%),
+    rgba(255,255,255,0.035);
+  box-shadow: 0 14px 32px rgba(0,0,0,0.2), 0 0 22px rgba(245,158,11,0.08);
+}
+
+.ko-stage__trophy-img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 14px rgba(245,158,11,0.22));
+}
+
+.ko-stage__trophy-mark span {
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .7px;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .ko-control__stage {
+  justify-self: end;
   flex: 0 0 auto;
   min-width: 54px;
   padding: 10px 9px;
@@ -1624,7 +1661,7 @@ body::after {
 
 .ko-road {
   margin: 0 0 12px;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 22px;
   background:
@@ -1666,8 +1703,8 @@ body::after {
 
 .ko-road__scroll {
   display: grid;
-  grid-template-columns: max-content 232px max-content;
-  gap: 18px;
+  grid-template-columns: max-content 268px max-content;
+  gap: 22px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
@@ -1682,8 +1719,8 @@ body::after {
 
 .ko-road__side {
   display: grid;
-  grid-template-columns: repeat(4, 184px);
-  gap: 12px;
+  grid-template-columns: repeat(4, 204px);
+  gap: 14px;
   align-items: stretch;
 }
 
@@ -1773,8 +1810,8 @@ body::after {
 .ko-road__trophy {
   display: grid;
   justify-items: center;
-  gap: 5px;
-  padding: 12px 10px;
+  gap: 6px;
+  padding: 14px 12px;
   border: 1px solid rgba(245,158,11,0.22);
   border-radius: 20px;
   background:
@@ -1782,42 +1819,11 @@ body::after {
     rgba(255,255,255,0.035);
 }
 
-.ko-road__cup {
-  position: relative;
-  width: 58px;
+.ko-road__cup-img {
+  width: 66px;
   height: 66px;
+  object-fit: contain;
   filter: drop-shadow(0 13px 24px rgba(245,158,11,0.24));
-}
-
-.ko-road__cup::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 2px;
-  width: 36px;
-  height: 42px;
-  transform: translateX(-50%);
-  border-radius: 48% 48% 34% 34%;
-  background:
-    radial-gradient(circle at 36% 20%, rgba(255,255,255,0.8), transparent 14%),
-    linear-gradient(135deg, #fff1a8 0%, var(--gold-bright) 34%, var(--gold) 62%, #8f5b09 100%);
-  clip-path: polygon(15% 0, 85% 0, 76% 58%, 60% 82%, 60% 100%, 40% 100%, 40% 82%, 24% 58%);
-}
-
-.ko-road__cup::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: 44px;
-  height: 20px;
-  transform: translateX(-50%);
-  border-radius: 8px 8px 14px 14px;
-  background:
-    linear-gradient(180deg, #ffe58a, var(--gold) 58%, #6f4506);
-  box-shadow:
-    0 -20px 0 -13px #0b8a50,
-    0 -14px 0 -9px #c91835;
 }
 
 .ko-road__trophy span,
@@ -1847,7 +1853,7 @@ body::after {
 .ko-road-card {
   position: relative;
   min-width: 0;
-  padding: 8px;
+  padding: 9px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 14px;
   background:
@@ -1961,7 +1967,7 @@ body::after {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--disp);
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 800;
 }
 
@@ -2395,7 +2401,20 @@ body::after {
 
 @media (min-width: 761px) {
   .ko-stage {
-    padding-inline: 12px;
+    padding-inline: 14px;
+  }
+
+  .wrap--knockout .tabs {
+    justify-content: center;
+  }
+
+  .ko-control {
+    margin-inline: auto;
+    max-width: 980px;
+  }
+
+  .ko-road {
+    min-height: 620px;
   }
 
   .ko-mobile-list {
@@ -2408,6 +2427,17 @@ body::after {
 }
 
 @media (max-width: 430px) {
+  .ko-control__top {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .ko-stage__trophy-mark {
+    order: 3;
+    grid-column: 1 / -1;
+    justify-self: center;
+    min-width: 96px;
+  }
+
   .ko-control__grid div {
     padding: 9px;
   }

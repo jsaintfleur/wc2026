@@ -21,7 +21,7 @@ function isStaleStatus(ts: number, status: string, now = Date.now()): boolean {
   return now - ts > STALE_LIVE_THRESHOLD;
 }
 
-type ViewType = "home" | "schedule" | "groups" | "knockout" | "bracket" | "stats" | "venues" | "about";
+type ViewType = "home" | "schedule" | "groups" | "bracket" | "stats" | "venues" | "about";
 type LiveStatus = "init" | "off" | "idle" | "active" | "paused" | "nofix";
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -976,7 +976,6 @@ export default function Tournament({ data }: { data: TournamentData }) {
     if (view === "groups") return renderGroups(animate);
     if (view === "venues") return renderVenues(animate);
     if (view === "stats") return ""; // stats rendered as React, not HTML string
-    if (view === "knockout") return ""; // knockout rendered as React schedule
     if (view === "bracket") return ""; // bracket rendered as React bracket
     return renderAbout();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -992,7 +991,6 @@ export default function Tournament({ data }: { data: TournamentData }) {
     { key: "home", label: "Home" },
     { key: "schedule", label: "Schedule" },
     { key: "groups", label: "Tables" },
-    { key: "knockout", label: "Knockout" },
     { key: "bracket", label: "Bracket" },
     { key: "stats", label: "Stats" },
     { key: "venues", label: "Venues" },
@@ -1104,14 +1102,6 @@ export default function Tournament({ data }: { data: TournamentData }) {
           />
         ) : view === "bracket" ? (
           <KnockoutStageView
-            data={data}
-            fixtures={fixtures}
-            findLive={findLive}
-            nowMs={nowMs}
-            onMatchClick={(match, fixture) => setMatchDetail({ match, fixture })}
-          />
-        ) : view === "knockout" ? (
-          <KnockoutScheduleView
             data={data}
             fixtures={fixtures}
             findLive={findLive}
@@ -1248,183 +1238,6 @@ function LandingGate({ data, fixtures, findLive, nowMs, onGroupStage, onKnockout
         </button>
       </section>
     </main>
-  );
-}
-
-function KnockoutScheduleView({ data, fixtures, findLive, nowMs, onMatchClick }: {
-  data: TournamentData;
-  fixtures: LiveFixture[];
-  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
-  nowMs: number;
-  onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
-}) {
-  const [roundFilter, setRoundFilter] = useState<KnockoutRoundKey | "all">("all");
-  const standingsByGroup = useMemo(() => {
-    const groupMap: Record<string, GroupStanding> = {};
-    for (const g of Object.keys(data.groups)) {
-      groupMap[g] = completedGroupStanding(g, data, fixtures, findLive, nowMs);
-    }
-    return groupMap;
-  }, [data, findLive, fixtures, nowMs]);
-
-  const cards = useMemo(() => {
-    const winners: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
-    function sourcePair(round: KnockoutRoundKey, index: number): [number, number] {
-      return KO_SOURCE_PAIRS[round]?.[index] || [index * 2, index * 2 + 1];
-    }
-    function previousWinner(round: KnockoutRoundKey, index: number): string | null {
-      if (round === "r16") return winners.r32?.[index] || null;
-      if (round === "qf") return winners.r16?.[index] || null;
-      if (round === "sf") return winners.qf?.[index] || null;
-      if (round === "final") return winners.sf?.[index] || null;
-      return null;
-    }
-    function sourceLabel(round: KnockoutRoundKey, index: number, side: number): string {
-      if (round === "r32") return ordinalSeedLabel(R32_SEEDS[index]?.[side] || "TBD");
-      const [a, b] = sourcePair(round, index);
-      const sourceRound = round === "r16" ? KO_ROUNDS[0] : round === "qf" ? KO_ROUNDS[1] : round === "sf" ? KO_ROUNDS[2] : KO_ROUNDS[3];
-      return `Winner M${sourceRound.matchNumbers[side === 0 ? a : b] || "TBD"}`;
-    }
-
-    const all: KnockoutCardModel[] = [];
-    for (const config of KO_ROUNDS) {
-      const scheduled = data.ko.filter(match => match.round === config.dataRound);
-      const roundCards = scheduled.map((match, index) => {
-        const matchNo = config.matchNumbers[index] || Number(match.mr) || 0;
-        const fixture = findLive({ ts: match.ts, v: match.v }, fixtures);
-        const isLive = !!fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(match.ts, fixture.status);
-        const isDone = isCompletedKnockoutFixture(fixture);
-        const winnerName = isDone && fixture.gh != null && fixture.ga != null && fixture.gh !== fixture.ga
-          ? (fixture.gh > fixture.ga ? canon(fixture.home) : canon(fixture.away))
-          : null;
-        let teams: [KnockoutParticipant, KnockoutParticipant];
-        if (fixture?.home && fixture?.away) {
-          const home = canon(fixture.home);
-          const away = canon(fixture.away);
-          teams = [
-            { name: home, winner: winnerName === home },
-            { name: away, winner: winnerName === away },
-          ];
-        } else if (config.key === "r32") {
-          const [seedA, seedB] = R32_SEEDS[index] || ["TBD", "TBD"];
-          teams = [resolveGroupSeed(seedA, standingsByGroup), resolveGroupSeed(seedB, standingsByGroup)];
-        } else {
-          const [sourceA, sourceB] = sourcePair(config.key, index);
-          const first = previousWinner(config.key, sourceA);
-          const second = previousWinner(config.key, sourceB);
-          teams = [
-            { name: first || sourceLabel(config.key, index, 0), placeholder: !first },
-            { name: second || sourceLabel(config.key, index, 1), placeholder: !second },
-          ];
-        }
-        return {
-          key: `${config.key}-schedule-${matchNo}-${index}`,
-          round: config.key,
-          roundIndex: index,
-          match,
-          matchNo,
-          fixture,
-          teams,
-          source: "",
-          isDone,
-          isLive,
-          winnerName,
-          loserName: null,
-        };
-      });
-      winners[config.key] = roundCards.map(card => card.winnerName);
-      all.push(...roundCards);
-    }
-    return all;
-  }, [data.ko, fixtures, findLive, standingsByGroup]);
-
-  const visibleCards = cards.filter(card => roundFilter === "all" || card.round === roundFilter);
-  const completedCards = visibleCards.filter(card => card.isDone).sort((a, b) => b.match.ts - a.match.ts);
-  const openCards = visibleCards.filter(card => !card.isDone).sort((a, b) => a.match.ts - b.match.ts);
-  const nextCard = openCards.find(card => card.match.ts >= nowMs) || openCards[0];
-
-  function venueName(code: string) {
-    return data.venues[code] || { common: "", city: "", country: "" };
-  }
-  function fmtDate(match: KnockoutMatch) {
-    const dt = parseISO(match.iso);
-    return `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`;
-  }
-  function openMatch(card: KnockoutCardModel) {
-    const [teamA, teamB] = card.teams;
-    onMatchClick({
-      no: card.matchNo,
-      iso: card.match.iso,
-      local: card.match.local,
-      et: card.match.et,
-      g: "KO",
-      t1: teamA.placeholder ? "TBD" : teamA.name,
-      t2: teamB.placeholder ? "TBD" : teamB.name,
-      v: card.match.v,
-      ts: card.match.ts,
-    }, card.fixture);
-  }
-  function renderCard(card: KnockoutCardModel) {
-    const venue = venueName(card.match.v);
-    const status = card.isLive ? (card.fixture?.elapsed ? `${card.fixture.elapsed}'` : "LIVE") : card.isDone ? "FT" : "Scheduled";
-    return (
-      <article key={card.key} className={`ko-list-card${card.isLive ? " ko-list-card--live" : ""}${card.isDone ? " ko-list-card--done" : ""}`}>
-        <button type="button" className="ko-list-card__tap" onClick={() => openMatch(card)}>
-          <div className="ko-list-card__meta">
-            <span>Match {card.matchNo}</span>
-            <b>{status}</b>
-          </div>
-          <div className="ko-list-card__teams">
-            {card.teams.map((team, index) => {
-              const score = index === 0 ? card.fixture?.gh : card.fixture?.ga;
-              return (
-                <div key={`${card.key}-${index}`} className={`ko-list-team${team.winner ? " ko-list-team--winner" : ""}${team.placeholder ? " ko-list-team--tbd" : ""}`}>
-                  <span>{team.placeholder ? "TBD" : (data.flags[team.name] || "⚽")}</span>
-                  <b>{team.name}</b>
-                  {team.seed && <small>{team.seed}</small>}
-                  {score != null && <strong>{score}</strong>}
-                </div>
-              );
-            })}
-          </div>
-          <div className="ko-list-card__foot">
-            <span>{fmtDate(card.match)} · {card.match.et}</span>
-            <span>{venue.common}</span>
-          </div>
-        </button>
-      </article>
-    );
-  }
-
-  return (
-    <section className="ko-schedule" aria-label="Knockout match schedule">
-      <div className="ko-schedule__hero">
-        <span>Knockout Stage</span>
-        <h2>Matches</h2>
-        <p>{nextCard ? `Next up: Match ${nextCard.matchNo} · ${fmtDate(nextCard.match)}` : "All knockout matches completed."}</p>
-      </div>
-      <div className="ko-schedule__filters" role="group" aria-label="Filter knockout round">
-        <button type="button" aria-pressed={roundFilter === "all"} onClick={() => setRoundFilter("all")}>All</button>
-        {KO_ROUNDS.map(round => (
-          <button key={round.key} type="button" aria-pressed={roundFilter === round.key} onClick={() => setRoundFilter(round.key)}>
-            {round.short}
-          </button>
-        ))}
-      </div>
-      {completedCards.length > 0 && (
-        <details className="finished-drawer ko-schedule__finished">
-          <summary>
-            <span>Finished Knockout Games</span>
-            <b>{completedCards.length}</b>
-            <small>Latest results</small>
-          </summary>
-          <div className="finished-drawer__body">{completedCards.map(renderCard)}</div>
-        </details>
-      )}
-      <div className="ko-schedule__list">
-        {openCards.map(renderCard)}
-      </div>
-    </section>
   );
 }
 
@@ -1660,18 +1473,28 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     setSelectedPathKey("");
     setSelectedTeamName("");
     window.setTimeout(() => {
+      const scroller = roadScrollRef.current;
+      const centerChild = (element: HTMLElement | null | undefined) => {
+        if (!scroller || !element) return;
+        const left = element.offsetLeft - (scroller.clientWidth - element.clientWidth) / 2;
+        scroller.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+      };
       if (key === "final" || key === "third") {
-        roadCenterRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+        centerChild(roadCenterRef.current);
         return;
       }
       const column = roadScrollRef.current?.querySelector<HTMLElement>(`.ko-road__column[data-round="${key}"]`);
-      column?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      centerChild(column);
     }, 40);
   }
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      roadCenterRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      const scroller = roadScrollRef.current;
+      const center = roadCenterRef.current;
+      if (!scroller || !center) return;
+      const left = center.offsetLeft - (scroller.clientWidth - center.clientWidth) / 2;
+      scroller.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
     }, 180);
     return () => window.clearTimeout(id);
   }, []);
@@ -1733,9 +1556,13 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     <section className="ko-stage" aria-label="Knockout Stage">
       <div className="ko-control">
         <div className="ko-control__top">
-          <div>
+          <div className="ko-control__title">
             <div className="ko-stage__eyebrow">FIFA World Cup 2026</div>
             <h2>Knockout Stage</h2>
+          </div>
+          <div className="ko-stage__trophy-mark" aria-hidden="true">
+            <WorldCupTrophy className="ko-stage__trophy-img" />
+            <span>Final Path</span>
           </div>
           <div className="ko-control__stage">{currentRound ? currentRound.short : "KO"}</div>
         </div>
@@ -1800,7 +1627,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
 
           <div className="ko-road__center" ref={roadCenterRef} aria-label="World Cup final path">
             <div className="ko-road__trophy">
-              <span className="ko-road__cup" aria-hidden="true" />
+              <WorldCupTrophy className="ko-road__cup-img" />
               <span>FIFA World Cup</span>
               <small>Final designed in memory</small>
             </div>

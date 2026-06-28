@@ -5453,8 +5453,17 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   gap: 6px;
 }
 
+.more-country-badge {
+  width: 22px;
+  height: 15px;
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
 .more-venue-card__flag {
-  font-size: 16px;
+  display: flex;
+  align-items: center;
   line-height: 1;
 }
 
@@ -5504,8 +5513,14 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 .more-city-row__flag {
-  font-size: 18px;
+  display: flex;
+  align-items: center;
   line-height: 1;
+}
+
+.more-city-row__flag .more-country-badge {
+  width: 26px;
+  height: 17px;
 }
 
 .more-city-row__info b {

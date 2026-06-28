@@ -1319,7 +1319,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         ) : view === "stats" ? (
           <StatsView data={data} fixtures={fixtures} fl={fl} computeLeaders={computeLeaders} />
         ) : view === "teams" ? (
-          <TeamsView data={data} onTeamClick={setTeamDrawer} />
+          <TeamsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} />
         ) : view === "more" ? (
           <MoreView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
         ) : (
@@ -1681,30 +1681,130 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
   );
 }
 
-function TeamsView({ data, onTeamClick }: {
+function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
   data: TournamentData;
+  fixtures: LiveFixture[];
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
+  nowMs: number;
   onTeamClick: (team: string) => void;
 }) {
-  const teams = Object.entries(data.groups).flatMap(([group, groupTeams]) =>
-    groupTeams.map(team => ({ team, group, flag: data.flags[team] || "⚽", host: data.hosts.includes(team) }))
-  );
+  const [filter, setFilter] = useState<string>("ALL");
+  const [search, setSearch] = useState("");
+
+  /* -- build team data with records ------------------------------- */
+  const teamsData = useMemo(() => {
+    const groupEntries = Object.entries(data.groups);
+    const teams: { team: string; group: string; flag: string; host: boolean; w: number; d: number; l: number; gf: number; ga: number; pts: number; form: string[] }[] = [];
+
+    for (const [group, groupTeams] of groupEntries) {
+      const standing = completedGroupStanding(group, data, fixtures, findLive, nowMs);
+      for (const t of groupTeams) {
+        const row = standing.rows.find(r => r.t === t);
+        const form: string[] = [];
+        for (const m of data.gs.filter(m => m.g === group && (m.t1 === t || m.t2 === t))) {
+          const f = findLive(m, fixtures);
+          const gh = f?.gh ?? m.dbGh;
+          const ga = f?.ga ?? m.dbGa;
+          const status = f?.status ?? m.dbStatus;
+          if (gh == null || ga == null || !status || !DONE_STATUSES.has(status)) continue;
+          const isHome = m.t1 === t;
+          const tg = isHome ? gh : ga;
+          const og = isHome ? ga : gh;
+          form.push(tg > og ? "W" : tg < og ? "L" : "D");
+        }
+        teams.push({
+          team: t,
+          group,
+          flag: data.flags[t] || "⚽",
+          host: data.hosts.includes(t),
+          w: row?.w ?? 0, d: row?.d ?? 0, l: row?.l ?? 0,
+          gf: row?.gf ?? 0, ga: row?.ga ?? 0, pts: row?.pts ?? 0,
+          form,
+        });
+      }
+    }
+    return teams;
+  }, [data, fixtures, findLive, nowMs]);
+
+  const groups = useMemo(() => ["ALL", ...Object.keys(data.groups).sort()], [data.groups]);
+
+  const filtered = useMemo(() => {
+    let result = teamsData;
+    if (filter !== "ALL") result = result.filter(t => t.group === filter);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(t => t.team.toLowerCase().includes(q));
+    }
+    return result;
+  }, [teamsData, filter, search]);
 
   return (
     <main className="teams-view" aria-label="Teams">
       <section className="teams-view__hero">
         <span>48 Nations</span>
         <h2>Teams</h2>
-        <p>Browse every squad hub, group assignment and match path.</p>
+        <p>Browse squads, group records and tournament paths.</p>
       </section>
+
+      {/* -- search + group filter --------------------------------- */}
+      <div className="teams-view__controls">
+        <input
+          type="search"
+          className="teams-view__search"
+          placeholder="Search teams…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          aria-label="Search teams"
+        />
+        <div className="teams-view__chips" role="group" aria-label="Filter by group">
+          {groups.map(g => (
+            <button
+              key={g}
+              type="button"
+              className={`teams-view__chip${filter === g ? " teams-view__chip--active" : ""}`}
+              aria-pressed={filter === g}
+              onClick={() => setFilter(g)}
+            >
+              {g === "ALL" ? "All" : g}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* -- team grid --------------------------------------------- */}
       <div className="teams-view__grid">
-        {teams.map(({ team, group, flag, host }) => (
+        {filtered.map(({ team, group, flag, host, w, d, l, gf, ga, pts, form }) => (
           <button key={team} type="button" className="team-tile" onClick={() => onTeamClick(team)}>
-            <span className="team-tile__flag">{flag}</span>
+            <div className="team-tile__top">
+              <span className="team-tile__flag">{flag}</span>
+              {host && <span className="team-tile__host">Host</span>}
+            </div>
             <span className="team-tile__name">{team}</span>
-            <span className="team-tile__meta">Group {group}{host ? " · Host" : ""}</span>
+            <span className="team-tile__group">Group {group}</span>
+            {(w + d + l) > 0 && (
+              <div className="team-tile__record">
+                <span className="team-tile__pts">{pts}<small>pts</small></span>
+                <span className="team-tile__wdl">{w}W {d}D {l}L</span>
+                <span className="team-tile__gd">{gf}:{ga}</span>
+              </div>
+            )}
+            {form.length > 0 && (
+              <div className="team-tile__form">
+                {form.map((r, i) => (
+                  <span key={i} className={`team-tile__form-dot team-tile__form-dot--${r.toLowerCase()}`}>{r}</span>
+                ))}
+              </div>
+            )}
           </button>
         ))}
       </div>
+
+      {filtered.length === 0 && (
+        <div className="teams-view__empty">
+          No teams match your search.
+          <button type="button" onClick={() => { setSearch(""); setFilter("ALL"); }}>Clear filters</button>
+        </div>
+      )}
     </main>
   );
 }

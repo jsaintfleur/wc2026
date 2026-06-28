@@ -26,6 +26,27 @@
   --body: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
+
+  /* spacing scale (4px base) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* radius scale */
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 22px;
+  --r-full: 999px;
+
+  /* transition presets */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: .15s;
+  --dur-normal: .25s;
 }
 
 * { box-sizing: border-box; }
@@ -5637,6 +5658,66 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   font-size: 13px;
 }
 
+/* -- Teams controls: search + group chips ----------------------- */
+.teams-view__controls {
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.teams-view__search {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--r-md);
+  background: rgba(255,255,255,0.04);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--dur-fast);
+}
+.teams-view__search::placeholder { color: var(--muted); }
+.teams-view__search:focus { border-color: rgba(245,158,11,0.35); }
+
+.teams-view__chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.teams-view__chips::-webkit-scrollbar { display: none; }
+
+.teams-view__chip {
+  appearance: none;
+  flex: 0 0 auto;
+  padding: 5px 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--disp);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all var(--dur-fast);
+}
+.teams-view__chip:hover {
+  border-color: rgba(255,255,255,0.15);
+  color: var(--ink);
+}
+.teams-view__chip--active {
+  background: rgba(245,158,11,0.15);
+  border-color: rgba(245,158,11,0.3);
+  color: var(--gold-bright);
+}
+
+/* -- Team grid ---------------------------------------------------- */
 .teams-view__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5647,7 +5728,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .more-tile {
   appearance: none;
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 18px;
+  border-radius: var(--r-lg);
   background:
     linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
     rgba(8, 12, 21, 0.86);
@@ -5656,17 +5737,40 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   text-align: left;
   box-shadow: 0 12px 32px rgba(0,0,0,0.22);
   cursor: pointer;
+  transition: transform var(--dur-fast), border-color var(--dur-fast);
 }
+.team-tile:hover, .more-tile:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245,158,11,0.2);
+}
+.team-tile:active { transform: scale(0.97); }
 
 .team-tile {
-  display: grid;
-  gap: 4px;
-  min-height: 104px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   padding: 14px;
 }
 
-.team-tile__flag {
-  font-size: 26px;
+.team-tile__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.team-tile__flag { font-size: 28px; line-height: 1; }
+
+.team-tile__host {
+  font-family: var(--disp);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: #1a1500;
+  background: linear-gradient(135deg, var(--gold), var(--gold-bright));
+  padding: 2px 7px;
+  border-radius: var(--r-full);
 }
 
 .team-tile__name {
@@ -5679,13 +5783,100 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   font-weight: 800;
 }
 
-.team-tile__meta {
+.team-tile__group {
   color: var(--muted);
+  font-family: var(--disp);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: .5px;
   text-transform: uppercase;
 }
+
+.team-tile__record {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.team-tile__pts {
+  font-family: var(--disp);
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+}
+.team-tile__pts small {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-left: 2px;
+  text-transform: uppercase;
+}
+
+.team-tile__wdl {
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  letter-spacing: .3px;
+}
+
+.team-tile__gd {
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.team-tile__form {
+  display: flex;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.team-tile__form-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  font-family: var(--disp);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+}
+.team-tile__form-dot--w { background: rgba(34,197,94,0.22); color: #22c55e; }
+.team-tile__form-dot--d { background: rgba(245,158,11,0.18); color: var(--gold-bright); }
+.team-tile__form-dot--l { background: rgba(239,68,68,0.18); color: #ef4444; }
+
+/* -- Empty state -------------------------------------------------- */
+.teams-view__empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.teams-view__empty button {
+  appearance: none;
+  display: inline-block;
+  margin-top: 12px;
+  padding: 8px 16px;
+  border: 1px solid rgba(245,158,11,0.25);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--dur-fast);
+}
+.teams-view__empty button:hover { background: rgba(245,158,11,0.1); }
 
 /* =========================================================
  * MoreView — comprehensive dashboard styles

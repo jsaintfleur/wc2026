@@ -1205,7 +1205,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
   return (
     <div className={`wrap${view === "bracket" ? " wrap--knockout" : ""}${view === "home" ? " wrap--home" : ""}`}>
-      <header className="bar">
+      <a href="#main-content" className="skip-link">Skip to content</a>
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true" id="live-announcer" />
+      <header className="bar" role="banner">
         <div className="bar__mark">
           <img src="/wc26-logo.png" alt="FIFA World Cup 26" className="bar__logo" draggable={false} />
           <TriondaBall id="hb" className="bar__ball" />
@@ -1296,7 +1298,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         </div>
       )}
 
-      <div key={view} className="view-transition">
+      <main id="main-content" key={view} className="view-transition" role="main">
         {view === "home" ? (
           <LandingGate
             data={data}
@@ -1329,7 +1331,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
             dangerouslySetInnerHTML={{ __html: viewContent }}
           />
         )}
-      </div>
+      </main>
 
       {showInstall && (
         <div className="install-banner">

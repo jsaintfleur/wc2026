@@ -6849,3 +6849,27 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
     font-size: 15px;
   }
 }
+
+/* ── Performance Optimizations ────────────────────────────── */
+
+/* Promote animated elements to GPU compositing layers */
+.tix, .gcard, .vcard, .team-tile, .more-tile { will-change: transform; }
+.goal-toast { will-change: transform, opacity; }
+.search-overlay__panel { will-change: transform, opacity; }
+.app-nav .tab__icon { will-change: transform; }
+
+/* Content containment — reduce layout/paint cost for large lists */
+.tix { contain: layout style; }
+.gcard { contain: layout style; }
+.team-tile { contain: layout style; }
+.vcard { contain: layout style; }
+
+/* Off-screen group cards and match cards skip rendering work */
+.section { content-visibility: auto; contain-intrinsic-size: auto 500px; }
+
+/* Reduce paint area for fixed/sticky elements */
+.bar { contain: layout style; }
+.app-nav { contain: layout style; }
+
+/* Font display swap — avoid invisible text during font loading */
+@font-face { font-display: swap; }

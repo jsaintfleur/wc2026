@@ -1303,8 +1303,10 @@ export default function Tournament({ data }: { data: TournamentData }) {
             fixtures={fixtures}
             findLive={findLive}
             nowMs={nowMs}
-            onGroupStage={() => handleTab("schedule")}
-            onKnockout={() => handleTab("bracket")}
+            computeLeaders={computeLeaders}
+            onNavigate={handleTab}
+            onTeamClick={setTeamDrawer}
+            onMatchClick={(match, fixture) => setMatchDetail({ match, fixture })}
           />
         ) : view === "bracket" ? (
           <KnockoutStageView
@@ -1394,59 +1396,287 @@ type KnockoutCardModel = {
   loserName: string | null;
 };
 
-function LandingGate({ data, fixtures, findLive, nowMs, onGroupStage, onKnockout }: {
+function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNavigate, onTeamClick, onMatchClick }: {
   data: TournamentData;
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
-  onGroupStage: () => void;
-  onKnockout: () => void;
+  computeLeaders: () => { topScorers: { name: string; team: string; goals: number; penalties: number }[]; topAssisters: { name: string; team: string; assists: number }[]; totalGoals: number; matchesPlayed: number; avgGoals: number; cleanSheets: number; [key: string]: unknown };
+  onNavigate: (v: ViewType) => void;
+  onTeamClick: (t: string) => void;
+  onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
 }) {
-  const groupTotal = data.gs.length;
-  const groupDone = data.gs.filter(match => {
-    const f = findLive(match, fixtures);
-    return !!(
-      (f && DONE_STATUSES.has(f.status)) ||
-      (match.dbStatus && DONE_STATUSES.has(match.dbStatus) && match.dbGh != null && match.dbGa != null)
-    );
-  }).length;
-  const koTotal = data.ko.length;
-  const koDone = data.ko.filter(match => {
-    const f = findLive({ ts: match.ts, v: match.v }, fixtures);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const fl = (t: string) => data.flags[t] || "⚽";
+
+  /* -- tournament progress stats ---------------------------------- */
+  const groupDone = useMemo(() => data.gs.filter(m => {
+    const f = findLive(m, fixtures);
+    return !!((f && DONE_STATUSES.has(f.status)) || (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null));
+  }).length, [data.gs, fixtures, findLive]);
+
+  const koDone = useMemo(() => data.ko.filter(m => {
+    const f = findLive({ ts: m.ts, v: m.v }, fixtures);
     return isCompletedKnockoutFixture(f);
-  }).length;
-  const nextGroup = data.gs.filter(match => match.ts >= nowMs).sort((a, b) => a.ts - b.ts)[0];
-  const nextKo = data.ko.filter(match => match.ts >= nowMs).sort((a, b) => a.ts - b.ts)[0];
+  }).length, [data.ko, fixtures, findLive]);
+
+  const totalMatches = data.gs.length + data.ko.length;
+  const totalDone = groupDone + koDone;
+  const progressPct = totalMatches > 0 ? Math.round((totalDone / totalMatches) * 100) : 0;
+
+  const stageLabel = koDone >= 31 ? "Final" : koDone >= 30 ? "Third Place" : koDone >= 28 ? "Semifinals" : koDone >= 24 ? "Quarterfinals" : koDone >= 16 ? "Round of 16" : koDone >= 0 && groupDone >= 72 ? "Round of 32" : "Group Stage";
+
+  /* -- live matches ----------------------------------------------- */
+  const liveMatches = useMemo(() => {
+    const live: { match: GroupStageMatch; fixture: LiveFixture }[] = [];
+    for (const m of data.gs) {
+      const f = findLive(m, fixtures);
+      if (f && LIVE_STATUSES.has(f.status)) live.push({ match: m, fixture: f });
+    }
+    return live;
+  }, [data.gs, fixtures, findLive]);
+
+  /* -- next match countdown --------------------------------------- */
+  const nextMatch = useMemo(() => {
+    let nextGs: GroupStageMatch | null = null;
+    for (const m of data.gs) { if (m.ts > now && (!nextGs || m.ts < nextGs.ts)) nextGs = m; }
+    let nextKo: KnockoutMatch | null = null;
+    for (const k of data.ko) { if (k.ts > now && (!nextKo || k.ts < nextKo.ts)) nextKo = k; }
+    if (nextGs && (!nextKo || nextGs.ts <= nextKo.ts)) return { type: "gs" as const, match: nextGs, ts: nextGs.ts };
+    if (nextKo) return { type: "ko" as const, match: nextKo, ts: nextKo.ts };
+    return null;
+  }, [data.gs, data.ko, now]);
+
+  /* -- recent results (last 6 completed matches) ------------------ */
+  const recentResults = useMemo(() => {
+    const results: { match: GroupStageMatch; fixture: LiveFixture }[] = [];
+    const sorted = [...data.gs].sort((a, b) => b.ts - a.ts);
+    for (const m of sorted) {
+      const f = findLive(m, fixtures);
+      if (f && DONE_STATUSES.has(f.status) && f.gh != null && f.ga != null) {
+        results.push({ match: m, fixture: f });
+      } else if (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null) {
+        const synth: LiveFixture = { ts: m.ts, status: m.dbStatus, elapsed: null, venue: m.v, round: `Group ${m.g}`, home: m.t1, away: m.t2, gh: m.dbGh, ga: m.dbGa, events: m.dbEvents };
+        results.push({ match: m, fixture: synth });
+      }
+      if (results.length >= 6) break;
+    }
+    return results;
+  }, [data.gs, fixtures, findLive]);
+
+  /* -- top scorer & assister -------------------------------------- */
+  const leaders = useMemo(() => computeLeaders(), [computeLeaders]);
+  const topScorer = leaders.topScorers[0] || null;
+  const topAssister = leaders.topAssisters[0] || null;
+
+  /* -- countdown math --------------------------------------------- */
+  const countdown = useMemo(() => {
+    if (!nextMatch) return null;
+    const diff = Math.max(0, nextMatch.ts - now);
+    const totalSec = Math.floor(diff / 1000);
+    const d = Math.floor(totalSec / 86400);
+    const h = Math.floor((totalSec % 86400) / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return { d, h, m, s };
+  }, [nextMatch, now]);
+
+  /* -- quick access items ----------------------------------------- */
+  const quickItems: { icon: string; label: string; key: ViewType }[] = [
+    { icon: "⚔️", label: "Knockout", key: "bracket" },
+    { icon: "📊", label: "Groups", key: "groups" },
+    { icon: "📅", label: "Matches", key: "schedule" },
+    { icon: "🏆", label: "Stats", key: "stats" },
+    { icon: "🌍", label: "Teams", key: "teams" },
+    { icon: "•••", label: "More", key: "more" },
+  ];
+
+  const pad = (n: number) => String(n).padStart(2, "0");
 
   return (
-    <main className="landing-gate" aria-label="Compet 2026 start">
-      <div className="landing-gate__pitch" aria-hidden="true" />
-      <section className="landing-gate__hero">
-        <div>
-          <span>Canada · Mexico · United States</span>
-          <h1>Road to the Final</h1>
-          <p>Knockout bracket, live matches, group tables and match detail built for the World Cup.</p>
+    <main className="home-dash" aria-label="Tournament Dashboard">
+
+      {/* ── Section 1: Live Match or Next-Match Countdown ────── */}
+      {liveMatches.length > 0 ? (
+        <section className="home-dash__live" aria-label="Live matches">
+          {liveMatches.slice(0, 2).map(({ match, fixture }, i) => (
+            <button key={i} type="button" className="home-live-card" onClick={() => onMatchClick(match, fixture)}>
+              <div className="home-live-card__badge">
+                <span className="home-live-card__pulse" />
+                {fixture.status === "HT" ? "HT" : `${fixture.elapsed || ""}'`}
+              </div>
+              <div className="home-live-card__teams">
+                <div className="home-live-card__side">
+                  <span className="home-live-card__flag">{fl(match.t1)}</span>
+                  <span className="home-live-card__name">{match.t1}</span>
+                </div>
+                <div className="home-live-card__score">{fixture.gh ?? 0} – {fixture.ga ?? 0}</div>
+                <div className="home-live-card__side">
+                  <span className="home-live-card__flag">{fl(match.t2)}</span>
+                  <span className="home-live-card__name">{match.t2}</span>
+                </div>
+              </div>
+              <div className="home-live-card__venue">{data.venues[match.v]?.common || match.v}</div>
+            </button>
+          ))}
+        </section>
+      ) : nextMatch && countdown ? (
+        <section className="home-dash__next" aria-label="Next match countdown">
+          <div className="home-next__eyebrow">Next Match</div>
+          <div className="home-next__countdown" suppressHydrationWarning>
+            {countdown.d > 0 && <><span className="home-next__digit">{countdown.d}</span><span className="home-next__unit">d</span></>}
+            <span className="home-next__digit">{pad(countdown.h)}</span><span className="home-next__sep">:</span>
+            <span className="home-next__digit">{pad(countdown.m)}</span><span className="home-next__sep">:</span>
+            <span className="home-next__digit">{pad(countdown.s)}</span>
+          </div>
+          {nextMatch.type === "gs" ? (
+            <div className="home-next__match">
+              <span className="home-next__team"><span>{fl(nextMatch.match.t1)}</span> {nextMatch.match.t1}</span>
+              <span className="home-next__vs">vs</span>
+              <span className="home-next__team"><span>{fl(nextMatch.match.t2)}</span> {nextMatch.match.t2}</span>
+            </div>
+          ) : (
+            <div className="home-next__match"><span className="home-next__round">{nextMatch.match.round}</span></div>
+          )}
+          <div className="home-next__meta">
+            {(() => {
+              const iso = nextMatch.type === "gs" ? nextMatch.match.iso : nextMatch.match.iso;
+              const d = parseISO(iso);
+              const et = nextMatch.type === "gs" ? nextMatch.match.et : nextMatch.match.et;
+              const v = data.venues[nextMatch.type === "gs" ? nextMatch.match.v : nextMatch.match.v];
+              return `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]} · ${et}${v ? ` · ${v.common}` : ""}`;
+            })()}
+          </div>
+        </section>
+      ) : null}
+
+      {/* ── Section 2: Tournament Progress ───────────────────── */}
+      <section className="home-dash__progress">
+        <div className="home-progress__header">
+          <span className="home-progress__stage">{stageLabel}</span>
+          <span className="home-progress__count">{totalDone}/{totalMatches}</span>
         </div>
-        <div className="landing-gate__mark">
-          <span>32</span>
-          <b>Knockout</b>
+        <div className="home-progress__bar">
+          <div className="home-progress__fill" style={{ width: `${progressPct}%` }} />
+        </div>
+        <div className="home-progress__stats">
+          <button type="button" className="home-progress__stat" onClick={() => onNavigate("schedule")}>
+            <b>{groupDone}</b><span>/{data.gs.length} Group</span>
+          </button>
+          <button type="button" className="home-progress__stat" onClick={() => onNavigate("bracket")}>
+            <b>{koDone}</b><span>/{data.ko.length} Knockout</span>
+          </button>
+          <div className="home-progress__stat">
+            <b>{leaders.totalGoals}</b><span>Goals</span>
+          </div>
+          <div className="home-progress__stat">
+            <b>{leaders.avgGoals}</b><span>Per Match</span>
+          </div>
         </div>
       </section>
 
-      <section className="landing-choice" aria-label="Choose tournament stage">
-        <button type="button" className="landing-choice__card landing-choice__card--ko" onClick={onKnockout}>
-          <span className="landing-choice__eyebrow">Knockout Stage</span>
-          <b>Actual Bracket</b>
-          <small>{koDone} of {koTotal} matches completed</small>
-          <em>{nextKo ? `Opens ${DOW[parseISO(nextKo.iso).getDay()]} ${parseISO(nextKo.iso).getDate()} ${MON[parseISO(nextKo.iso).getMonth()]}` : "Road to the Final"}</em>
-        </button>
-        <button type="button" className="landing-choice__card landing-choice__card--group" onClick={onGroupStage}>
-          <span className="landing-choice__eyebrow">Group Stage</span>
-          <b>Live Fixtures & Tables</b>
-          <small>{groupDone} of {groupTotal} matches completed</small>
-          <em>{nextGroup ? `Next: ${nextGroup.t1} vs ${nextGroup.t2}` : "Latest group results ready"}</em>
-        </button>
+      {/* ── Section 3: Quick Access Grid ─────────────────────── */}
+      <section className="home-dash__quick" aria-label="Quick access">
+        {quickItems.map(item => (
+          <button key={item.key} type="button" className="home-quick__btn" onClick={() => onNavigate(item.key)}>
+            <span className="home-quick__icon">{item.icon}</span>
+            <span className="home-quick__label">{item.label}</span>
+          </button>
+        ))}
       </section>
+
+      {/* ── Section 4: Golden Boot / Top Assist ──────────────── */}
+      {(topScorer || topAssister) && (
+        <section className="home-dash__leaders">
+          <h3 className="home-section__title">Tournament Leaders</h3>
+          <div className="home-leaders__grid">
+            {topScorer && (
+              <button type="button" className="home-leader-card home-leader-card--gold" onClick={() => onTeamClick(topScorer.team)}>
+                <div className="home-leader-card__award">🥇 Golden Boot</div>
+                <div className="home-leader-card__player">
+                  <span className="home-leader-card__flag">{fl(topScorer.team)}</span>
+                  <div>
+                    <b>{topScorer.name}</b>
+                    <span>{topScorer.team}</span>
+                  </div>
+                </div>
+                <div className="home-leader-card__stat">{topScorer.goals}<small>goals</small></div>
+              </button>
+            )}
+            {topAssister && (
+              <button type="button" className="home-leader-card home-leader-card--silver" onClick={() => onTeamClick(topAssister.team)}>
+                <div className="home-leader-card__award">🎯 Top Assists</div>
+                <div className="home-leader-card__player">
+                  <span className="home-leader-card__flag">{fl(topAssister.team)}</span>
+                  <div>
+                    <b>{topAssister.name}</b>
+                    <span>{topAssister.team}</span>
+                  </div>
+                </div>
+                <div className="home-leader-card__stat">{topAssister.assists}<small>assists</small></div>
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ── Section 5: Latest Results ────────────────────────── */}
+      {recentResults.length > 0 && (
+        <section className="home-dash__results">
+          <div className="home-section__header">
+            <h3 className="home-section__title">Latest Results</h3>
+            <button type="button" className="home-section__more" onClick={() => onNavigate("schedule")}>See all →</button>
+          </div>
+          <div className="home-results__scroll">
+            {recentResults.map(({ match, fixture }, i) => (
+              <button key={i} type="button" className="home-result-card" onClick={() => onMatchClick(match, fixture)}>
+                <div className="home-result-card__group">Group {match.g}</div>
+                <div className="home-result-card__teams">
+                  <span className="home-result-card__side">
+                    <span>{fl(match.t1)}</span>
+                    <b className={fixture.gh != null && fixture.ga != null && fixture.gh > fixture.ga ? "home-result-card--winner" : ""}>{match.t1}</b>
+                  </span>
+                  <span className="home-result-card__score">{fixture.gh} – {fixture.ga}</span>
+                  <span className="home-result-card__side">
+                    <span>{fl(match.t2)}</span>
+                    <b className={fixture.gh != null && fixture.ga != null && fixture.ga > fixture.gh ? "home-result-card--winner" : ""}>{match.t2}</b>
+                  </span>
+                </div>
+                <div className="home-result-card__ft">{fixture.status === "AET" ? "AET" : fixture.status === "PEN" ? "PENS" : "FT"}</div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Section 6: Tournament Snapshot ────────────────────── */}
+      <section className="home-dash__snapshot">
+        <div className="home-section__header">
+          <h3 className="home-section__title">Tournament</h3>
+        </div>
+        <div className="home-snapshot__grid">
+          <button type="button" className="home-snapshot__card home-snapshot__card--ko" onClick={() => onNavigate("bracket")}>
+            <span className="home-snapshot__icon">⚔️</span>
+            <div>
+              <b>Knockout Bracket</b>
+              <span>{koDone > 0 ? `${koDone} of ${data.ko.length} decided` : stageLabel === "Round of 32" ? "Round of 32 begins" : "Starts after group stage"}</span>
+            </div>
+          </button>
+          <button type="button" className="home-snapshot__card home-snapshot__card--stats" onClick={() => onNavigate("stats")}>
+            <span className="home-snapshot__icon">📊</span>
+            <div>
+              <b>Statistics</b>
+              <span>{leaders.totalGoals} goals in {leaders.matchesPlayed} matches</span>
+            </div>
+          </button>
+        </div>
+      </section>
+
     </main>
   );
 }

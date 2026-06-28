@@ -5603,6 +5603,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .stats-empty__sub { font-size: 12px; opacity: 0.6; }
 .stats-empty--inline { padding: 24px 16px; }
 .stats-empty--inline::before { content: "📋"; font-size: 28px; margin-bottom: 10px; }
+.stats-coverage { font-size: 11px; color: var(--muted); text-align: center; margin-top: 8px; opacity: 0.7; }
 .stats-skeleton {
   max-width: 320px;
   margin: 16px auto 0;

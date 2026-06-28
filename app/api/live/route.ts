@@ -498,13 +498,23 @@ export async function GET(request: NextRequest) {
   };
 
   // Merge strategy: start with API-Football (richer data with stats/lineups),
-  // then fill in any missing matches from worldcup26.ir, then verified results
+  // then fill in any missing matches from worldcup26.ir, then verified results.
+  // For matches where API-Football lacks events but wc26 has scorer data,
+  // back-fill the wc26 events so stats/scorers aren't lost.
   let base: unknown[] = [];
   if (apifFixtures.length > 0) {
     base = [...apifFixtures];
-    // Add wc26 matches not already covered by API-Football
     for (const wf of wc26.fixtures) {
-      if (!base.some(f => sameFixture(f, wf))) base.push(wf);
+      const idx = base.findIndex(f => sameFixture(f, wf));
+      if (idx === -1) {
+        base.push(wf);
+      } else {
+        const existing = base[idx] as { events?: unknown[] };
+        const wc26Fix = wf as { events?: unknown[] };
+        if ((!existing.events || existing.events.length === 0) && wc26Fix.events && wc26Fix.events.length > 0) {
+          (base[idx] as Record<string, unknown>).events = wc26Fix.events;
+        }
+      }
     }
   } else if (wc26.ok) {
     base = wc26.fixtures;

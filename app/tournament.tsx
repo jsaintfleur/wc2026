@@ -1112,6 +1112,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     }
 
     const matchesPlayed = finishedMap.size;
+    let matchesWithEvents = 0;
     let cleanSheets = 0;
 
     /* ── Process each finished match ──────────────────────────── */
@@ -1133,6 +1134,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
       const hasEvents = fm.events && fm.events.length > 0;
       const hasPlayers = fm.players && fm.players.length > 0;
+      if (hasEvents) matchesWithEvents++;
 
       /* ── Path 1: Event-level data (richest) ──────────────── */
       if (hasEvents) {
@@ -1279,21 +1281,11 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
     /* ── Compute match counts per scorer ──────────────────────── */
     for (const fm of finishedMap.values()) {
-      const homeScorers = new Set<string>();
-      const awayScorers = new Set<string>();
-      if (fm.events) {
-        for (const ev of fm.events) {
-          if (ev.type !== "Goal" || /shootout/i.test(ev.detail || "") || ev.detail === "Own Goal") continue;
-          if (ev.player) {
-            if (ev.team === fm.home) homeScorers.add(`${ev.player}|${ev.team}`);
-            else awayScorers.add(`${ev.player}|${ev.team}`);
-          }
-        }
-      }
-      /* Count matches played for each scorer (any finished match where their team played) */
+      const canonHome = canon(fm.home);
+      const canonAway = canon(fm.away);
       for (const [pKey, s] of Object.entries(scorers)) {
-        const team = s.team;
-        if (team === fm.home || team === fm.away) s.matches++;
+        const canonTeam = canon(s.team);
+        if (canonTeam === canonHome || canonTeam === canonAway) s.matches++;
       }
     }
 
@@ -1335,9 +1327,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
     return {
       topScorers, topAssisters, topCombined, topTeams, mostCarded,
       minuteBuckets, bucketLabels,
-      totalGoals, normalGoals, penGoals, ownGoals,
+      totalGoals, totalGoalsFromEvents, normalGoals, penGoals, ownGoals,
       totalYellows, totalReds, totalSubs,
-      matchesPlayed, avgGoals, cleanSheets,
+      matchesPlayed, matchesWithEvents, avgGoals, cleanSheets,
     };
   }
 
@@ -4205,6 +4197,7 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
     minuteBuckets: number[];
     bucketLabels: string[];
     totalGoals: number;
+    totalGoalsFromEvents: number;
     normalGoals: number;
     penGoals: number;
     ownGoals: number;
@@ -4212,6 +4205,7 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
     totalReds: number;
     totalSubs: number;
     matchesPlayed: number;
+    matchesWithEvents: number;
     avgGoals: number;
     cleanSheets: number;
   };
@@ -4221,9 +4215,9 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
   const {
     topScorers, topAssisters, topCombined, topTeams, mostCarded,
     minuteBuckets, bucketLabels,
-    totalGoals, normalGoals, penGoals, ownGoals,
+    totalGoals, totalGoalsFromEvents, normalGoals, penGoals, ownGoals,
     totalYellows, totalReds, totalSubs,
-    matchesPlayed, avgGoals, cleanSheets,
+    matchesPlayed, matchesWithEvents, avgGoals, cleanSheets,
   } = stats;
   const hasScorers = topScorers.length > 0;
   const hasTeams = topTeams.length > 0;
@@ -4291,38 +4285,41 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
         </>
       )}
 
-      {/* ── Goal type breakdown ── */}
-      {totalGoals > 0 && (
+      {/* ── Goal type breakdown (uses event-based totals) ── */}
+      {totalGoalsFromEvents > 0 && (
         <section className="stats-section">
           <h3 className="stats-heading">Goal Types</h3>
           <div className="stats-type-row">
             <div className="stats-type-item">
-              <div className="stats-type-bar" style={{ "--bar-pct": `${(normalGoals / totalGoals) * 100}%` } as CSSProperties}>
+              <div className="stats-type-bar" style={{ "--bar-pct": `${(normalGoals / totalGoalsFromEvents) * 100}%` } as CSSProperties}>
                 <span className="stats-type-fill stats-type-fill--normal" />
               </div>
               <span className="stats-type-count">{normalGoals}</span>
               <span className="stats-type-label">Open Play</span>
             </div>
             <div className="stats-type-item">
-              <div className="stats-type-bar" style={{ "--bar-pct": `${(penGoals / totalGoals) * 100}%` } as CSSProperties}>
+              <div className="stats-type-bar" style={{ "--bar-pct": `${(penGoals / totalGoalsFromEvents) * 100}%` } as CSSProperties}>
                 <span className="stats-type-fill stats-type-fill--pen" />
               </div>
               <span className="stats-type-count">{penGoals}</span>
               <span className="stats-type-label">Penalty</span>
             </div>
             <div className="stats-type-item">
-              <div className="stats-type-bar" style={{ "--bar-pct": `${(ownGoals / totalGoals) * 100}%` } as CSSProperties}>
+              <div className="stats-type-bar" style={{ "--bar-pct": `${(ownGoals / totalGoalsFromEvents) * 100}%` } as CSSProperties}>
                 <span className="stats-type-fill stats-type-fill--og" />
               </div>
               <span className="stats-type-count">{ownGoals}</span>
               <span className="stats-type-label">Own Goal</span>
             </div>
           </div>
+          {matchesWithEvents < matchesPlayed && (
+            <p className="stats-coverage">Based on {matchesWithEvents} of {matchesPlayed} matches with event data</p>
+          )}
         </section>
       )}
 
-      {/* ── Goals by minute distribution ── */}
-      {totalGoals > 0 && (
+      {/* ── Goals by minute distribution (only from matches with events) ── */}
+      {totalGoalsFromEvents > 0 && (
         <section className="stats-section">
           <h3 className="stats-heading">When Goals Are Scored</h3>
           <div className="stats-chart">

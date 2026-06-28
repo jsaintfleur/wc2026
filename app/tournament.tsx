@@ -405,6 +405,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const prevScoresRef = useRef<Map<string, string>>(new Map());
   const scrolledRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
+  const [showBackTop, setShowBackTop] = useState(false);
 
   /* PWA install prompt — captured from beforeinstallprompt event */
   const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
@@ -543,6 +544,13 @@ export default function Tournament({ data }: { data: TournamentData }) {
     prevScoresRef.current = next;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fixtures]);
+
+  /* Show back-to-top button after scrolling past the fold */
+  useEffect(() => {
+    const onScroll = () => setShowBackTop(window.scrollY > 400);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   /* Cmd+K / Ctrl+K opens search overlay */
   useEffect(() => {
@@ -1390,6 +1398,17 @@ export default function Tournament({ data }: { data: TournamentData }) {
       <div className="foot">
         All data is unofficial &middot; FIFA is the source of record &middot; Knockout teams fill in as results are confirmed
       </div>
+
+      {showBackTop && (
+        <button
+          type="button"
+          className="back-top-fab"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          aria-label="Back to top"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
+        </button>
+      )}
 
       {goalToast && (
         <div className={`goal-toast${toastExiting ? " goal-toast--exit" : ""}`} role="status" aria-live="assertive">

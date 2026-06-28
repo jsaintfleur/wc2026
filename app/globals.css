@@ -6878,6 +6878,38 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   }
 }
 
+/* ── Back to Top FAB ─────────────────────────────────────── */
+.back-top-fab {
+  position: fixed;
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  right: max(16px, calc((100vw - 600px) / 2 + 16px));
+  z-index: 50;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 50%;
+  background: rgba(13, 18, 32, 0.9);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  animation: viewEnter .25s var(--ease-out);
+  transition: color .15s, border-color .15s, transform .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.back-top-fab:hover {
+  color: #fff;
+  border-color: rgba(245,158,11,0.3);
+  transform: translateY(-2px);
+}
+.back-top-fab:active {
+  transform: scale(0.9);
+  transition-duration: .06s;
+}
+
 /* ── Performance Optimizations ────────────────────────────── */
 
 /* Promote animated elements to GPU compositing layers */

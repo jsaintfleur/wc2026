@@ -1719,7 +1719,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
       <div className="ko-road" aria-label="Road to the World Cup">
         <div className="ko-road__intro">
           <span>Road to the Final</span>
-          <b>{selectedTeamName ? `${selectedTeamName}'s path` : "RD32 -> R16 -> QF -> SF -> Final <- SF <- QF <- R16 <- RD32"}</b>
+          <b>{selectedTeamName ? `${selectedTeamName}'s path` : "Tap a team to trace their road to the trophy"}</b>
         </div>
         <div className="ko-road__scroll" ref={roadScrollRef}>
           <div className="ko-road__side ko-road__side--left" aria-label="Left side of bracket">
@@ -1737,7 +1737,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
             <div className="ko-road__trophy" style={{ gridRow: "4 / span 3" }}>
               <WorldCupTrophy className="ko-road__cup-img" />
               <span>FIFA World Cup</span>
-              <small>Final designed in memory</small>
+              <small>MetLife Stadium, New Jersey</small>
             </div>
             {finalCard && renderRoadCard(finalCard, "center", { gridRow: "8 / span 3" })}
             {thirdCard && (

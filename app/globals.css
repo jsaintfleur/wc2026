@@ -607,13 +607,14 @@ body::after {
 .app-nav .tab__icon {
   display: grid;
   place-items: center;
-  min-height: 22px;
+  min-height: 24px;
   color: inherit;
-  font-family: var(--disp);
-  font-size: 20px;
-  font-weight: 800;
   line-height: 1;
   transition: transform .2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.app-nav .tab__icon svg {
+  width: 22px;
+  height: 22px;
 }
 
 .app-nav .tab__label {
@@ -5600,6 +5601,24 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 .stats-empty p { margin: 0 0 8px; font-size: 14px; line-height: 1.5; }
 .stats-empty__sub { font-size: 12px; opacity: 0.6; }
+.stats-empty--inline { padding: 24px 16px; }
+.stats-empty--inline::before { content: "📋"; font-size: 28px; margin-bottom: 10px; }
+.stats-skeleton {
+  max-width: 320px;
+  margin: 16px auto 0;
+  display: grid;
+  gap: 10px;
+}
+.stats-skeleton__row {
+  height: 14px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.08) 50%, rgba(255,255,255,.04) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
+}
+.stats-skeleton__row:nth-child(2) { width: 85%; }
+.stats-skeleton__row:nth-child(3) { width: 70%; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
 /* Section wrapper — replaces old .stats-table-wrap */
 .stats-section {

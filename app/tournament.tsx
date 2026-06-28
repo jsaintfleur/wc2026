@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup } from "@/lib/data";
+import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup, type PlayerMatchStat } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import TriondaBall from "@/app/components/TriondaBall";
@@ -384,6 +384,10 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }
 
   const [view, setView] = useState<ViewType>("home");
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("view");
+    if (p && ["home","schedule","groups","bracket","teams","more","stats","venues","about"].includes(p)) setView(p as ViewType);
+  }, []);
   const [group, setGroup] = useState("ALL");
   const [team, setTeam] = useState("ALL");
   const [query, setQuery] = useState("");
@@ -1044,16 +1048,28 @@ export default function Tournament({ data }: { data: TournamentData }) {
     }).join("");
   }
 
-  /** Aggregate goal/assist tallies and tournament-wide stats from all finished match events */
+  /**
+   * Aggregate goal/assist tallies and tournament-wide stats from all
+   * available sources: match events → player stats → match scores.
+   *
+   * Data priority for goalscorers:
+   *   1. Match events (most detailed: minute, type, assist)
+   *   2. PlayerMatchStat records (goals/assists per player per match)
+   *   3. Score fallback (only gives team totals, no individual scorers)
+   *
+   * Team goals always use the most reliable path available, with
+   * score-based totals as the final fallback so that completed matches
+   * with nonzero scores always contribute to the Team Total Goals board.
+   */
   function computeLeaders() {
-    const scorers: Record<string, { name: string; team: string; goals: number; penalties: number }> = {};
+    const scorers: Record<string, { name: string; team: string; goals: number; penalties: number; assists: number; matches: number }> = {};
     const assisters: Record<string, { name: string; team: string; assists: number }> = {};
-    const teamGoals: Record<string, { team: string; goals: number }> = {};
+    const teamGoalsFromEvents: Record<string, number> = {};
+    const teamGoalsFromScores: Record<string, { goals: number; conceded: number; matches: number }> = {};
     const cardPlayers: Record<string, { name: string; team: string; yellows: number; reds: number }> = {};
 
-    // Goals-by-minute buckets: 0-15, 16-30, 31-45, 46-60, 61-75, 76-90, 90+
     const minuteBuckets = [0, 0, 0, 0, 0, 0, 0];
-    let totalGoals = 0;
+    let totalGoalsFromEvents = 0;
     let normalGoals = 0;
     let penGoals = 0;
     let ownGoals = 0;
@@ -1061,116 +1077,247 @@ export default function Tournament({ data }: { data: TournamentData }) {
     let totalReds = 0;
     let totalSubs = 0;
 
-    const allEvents: { events: MatchEvent[]; team?: string }[] = [];
+    /* ── Collect all finished matches (deduped) ───────────────── */
+    type FinishedMatch = {
+      key: string;
+      home: string;
+      away: string;
+      gh: number;
+      ga: number;
+      events?: MatchEvent[];
+      players?: PlayerMatchStat[];
+    };
+    const finishedMap = new Map<string, FinishedMatch>();
 
-    // From live fixtures (primary source — includes DB-enriched data)
-    for (const f of fixtures) {
-      if (f.events) allEvents.push({ events: f.events });
-    }
-
-    // From DB-stored events on group stage matches (fallback for matches not in current live feed)
-    for (const m of data.gs) {
-      if (m.dbEvents && m.dbEvents.length > 0) {
-        const already = fixtures.some(f => Math.abs(f.ts - m.ts) < 60000 && f.events && f.events.length > 0);
-        if (!already) allEvents.push({ events: m.dbEvents });
-      }
-    }
-
-    for (const { events } of allEvents) {
-      for (const ev of events) {
-        // ── Cards ──
-        if (ev.type === "Card") {
-          const isRed = ev.detail.includes("Red");
-          if (isRed) totalReds++;
-          else totalYellows++;
-
-          const cKey = `${ev.player}|${ev.team}`;
-          if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: ev.player, team: ev.team, yellows: 0, reds: 0 };
-          if (isRed) cardPlayers[cKey].reds++;
-          else cardPlayers[cKey].yellows++;
-          continue;
-        }
-
-        // ── Substitutions ──
-        if (ev.type === "subst") {
-          totalSubs++;
-          continue;
-        }
-
-        // ── Goals ──
-        if (ev.type !== "Goal") continue;
-        if (/shootout/i.test(ev.detail || "")) continue;
-        totalGoals++;
-
-        const isPen = ev.detail === "Penalty";
-        const isOG = ev.detail === "Own Goal";
-        if (isOG) { ownGoals++; }
-        else if (isPen) { penGoals++; }
-        else { normalGoals++; }
-
-        const m = ev.minute;
-        if (m <= 15) minuteBuckets[0]++;
-        else if (m <= 30) minuteBuckets[1]++;
-        else if (m <= 45) minuteBuckets[2]++;
-        else if (m <= 60) minuteBuckets[3]++;
-        else if (m <= 75) minuteBuckets[4]++;
-        else if (m <= 90 && !ev.extra) minuteBuckets[5]++;
-        else minuteBuckets[6]++;
-
-        const tKey = ev.team;
-        if (!teamGoals[tKey]) teamGoals[tKey] = { team: tKey, goals: 0 };
-        teamGoals[tKey].goals++;
-
-        if (isOG) continue;
-
-        const pKey = `${ev.player}|${ev.team}`;
-        if (!scorers[pKey]) scorers[pKey] = { name: ev.player, team: ev.team, goals: 0, penalties: 0 };
-        scorers[pKey].goals += 1;
-        if (isPen) scorers[pKey].penalties += 1;
-
-        if (ev.assist) {
-          const aKey = `${ev.assist}|${ev.team}`;
-          if (!assisters[aKey]) assisters[aKey] = { name: ev.assist, team: ev.team, assists: 0 };
-          assisters[aKey].assists += 1;
-        }
-      }
-    }
-
-    // Count finished matches and clean sheets
-    const finishedKeys = new Set<string>();
-    let cleanSheets = 0;
+    /* Live fixtures first (takes priority) */
     for (const f of fixtures) {
       if (!DONE_STATUSES.has(f.status) || f.gh == null || f.ga == null) continue;
       const key = canon(f.home) + ":" + canon(f.away);
-      if (finishedKeys.has(key)) continue;
-      finishedKeys.add(key);
-      if (f.gh === 0) cleanSheets++;
-      if (f.ga === 0) cleanSheets++;
+      if (finishedMap.has(key)) continue;
+      finishedMap.set(key, {
+        key, home: f.home, away: f.away, gh: f.gh, ga: f.ga,
+        events: f.events, players: f.players,
+      });
     }
+
+    /* DB group-stage matches (fallback for matches not in live feed) */
     for (const m of data.gs) {
       if (!m.dbStatus || !DONE_STATUSES.has(m.dbStatus) || m.dbGh == null || m.dbGa == null) continue;
       const key = canon(m.t1) + ":" + canon(m.t2);
-      if (finishedKeys.has(key)) continue;
-      finishedKeys.add(key);
-      if (m.dbGh === 0) cleanSheets++;
-      if (m.dbGa === 0) cleanSheets++;
+      if (finishedMap.has(key)) continue;
+      finishedMap.set(key, {
+        key, home: m.t1, away: m.t2, gh: m.dbGh, ga: m.dbGa,
+        events: m.dbEvents, players: m.dbPlayers,
+      });
     }
 
-    const matchesPlayed = finishedKeys.size;
+    const matchesPlayed = finishedMap.size;
+    let cleanSheets = 0;
+
+    /* ── Process each finished match ──────────────────────────── */
+    for (const fm of finishedMap.values()) {
+      /* Clean sheets */
+      if (fm.gh === 0) cleanSheets++;
+      if (fm.ga === 0) cleanSheets++;
+
+      /* Always record score-based team goals (most reliable) */
+      if (!teamGoalsFromScores[fm.home]) teamGoalsFromScores[fm.home] = { goals: 0, conceded: 0, matches: 0 };
+      teamGoalsFromScores[fm.home].goals += fm.gh;
+      teamGoalsFromScores[fm.home].conceded += fm.ga;
+      teamGoalsFromScores[fm.home].matches++;
+
+      if (!teamGoalsFromScores[fm.away]) teamGoalsFromScores[fm.away] = { goals: 0, conceded: 0, matches: 0 };
+      teamGoalsFromScores[fm.away].goals += fm.ga;
+      teamGoalsFromScores[fm.away].conceded += fm.gh;
+      teamGoalsFromScores[fm.away].matches++;
+
+      const hasEvents = fm.events && fm.events.length > 0;
+      const hasPlayers = fm.players && fm.players.length > 0;
+
+      /* ── Path 1: Event-level data (richest) ──────────────── */
+      if (hasEvents) {
+        for (const ev of fm.events!) {
+          if (ev.type === "Card") {
+            const isRed = ev.detail?.includes("Red") ?? false;
+            if (isRed) totalReds++; else totalYellows++;
+            if (ev.player) {
+              const cKey = `${ev.player}|${ev.team}`;
+              if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: ev.player, team: ev.team, yellows: 0, reds: 0 };
+              if (isRed) cardPlayers[cKey].reds++; else cardPlayers[cKey].yellows++;
+            }
+            continue;
+          }
+
+          if (ev.type === "subst") { totalSubs++; continue; }
+          if (ev.type !== "Goal") continue;
+          if (/shootout/i.test(ev.detail || "")) continue;
+
+          totalGoalsFromEvents++;
+          const isPen = ev.detail === "Penalty";
+          const isOG = ev.detail === "Own Goal";
+          if (isOG) ownGoals++;
+          else if (isPen) penGoals++;
+          else normalGoals++;
+
+          /* Minute buckets */
+          const m = ev.minute ?? 0;
+          if (m <= 15) minuteBuckets[0]++;
+          else if (m <= 30) minuteBuckets[1]++;
+          else if (m <= 45) minuteBuckets[2]++;
+          else if (m <= 60) minuteBuckets[3]++;
+          else if (m <= 75) minuteBuckets[4]++;
+          else if (m <= 90 && !ev.extra) minuteBuckets[5]++;
+          else minuteBuckets[6]++;
+
+          /* Event-based team goals (for granular tracking) */
+          if (ev.team) {
+            teamGoalsFromEvents[ev.team] = (teamGoalsFromEvents[ev.team] || 0) + 1;
+          }
+
+          if (isOG) continue;
+
+          /* Individual scorer */
+          if (ev.player) {
+            const pKey = `${ev.player}|${ev.team}`;
+            if (!scorers[pKey]) scorers[pKey] = { name: ev.player, team: ev.team, goals: 0, penalties: 0, assists: 0, matches: 0 };
+            scorers[pKey].goals++;
+            if (isPen) scorers[pKey].penalties++;
+          }
+
+          /* Assist */
+          if (ev.assist) {
+            const aKey = `${ev.assist}|${ev.team}`;
+            if (!assisters[aKey]) assisters[aKey] = { name: ev.assist, team: ev.team, assists: 0 };
+            assisters[aKey].assists++;
+          }
+        }
+      }
+
+      /* ── Path 2: PlayerMatchStat fallback (when events missing) */
+      if (!hasEvents && hasPlayers) {
+        for (const p of fm.players!) {
+          if (!p.name || !p.team) continue;
+
+          if (p.goals > 0) {
+            const pKey = `${p.name}|${p.team}`;
+            if (!scorers[pKey]) scorers[pKey] = { name: p.name, team: p.team, goals: 0, penalties: 0, assists: 0, matches: 0 };
+            scorers[pKey].goals += p.goals;
+          }
+          if (p.assists > 0) {
+            const aKey = `${p.name}|${p.team}`;
+            if (!assisters[aKey]) assisters[aKey] = { name: p.name, team: p.team, assists: 0 };
+            assisters[aKey].assists += p.assists;
+            if (scorers[aKey]) scorers[aKey].assists += p.assists;
+          }
+          if (p.yellowCards > 0 || p.redCards > 0) {
+            const cKey = `${p.name}|${p.team}`;
+            if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: p.name, team: p.team, yellows: 0, reds: 0 };
+            cardPlayers[cKey].yellows += p.yellowCards;
+            cardPlayers[cKey].reds += p.redCards;
+            totalYellows += p.yellowCards;
+            totalReds += p.redCards;
+          }
+        }
+      }
+
+      /* Path 3 (score-only) is handled above — teamGoalsFromScores
+         always gets populated, so team totals are never empty when
+         completed matches exist. No individual scorers from this path. */
+    }
+
+    /* ── Also check currently live fixtures for events (not yet FT) ── */
+    for (const f of fixtures) {
+      if (DONE_STATUSES.has(f.status)) continue;
+      if (!LIVE_STATUSES.has(f.status)) continue;
+      if (!f.events) continue;
+      for (const ev of f.events) {
+        if (ev.type === "Card") {
+          const isRed = ev.detail?.includes("Red") ?? false;
+          if (isRed) totalReds++; else totalYellows++;
+          if (ev.player) {
+            const cKey = `${ev.player}|${ev.team}`;
+            if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: ev.player, team: ev.team, yellows: 0, reds: 0 };
+            if (isRed) cardPlayers[cKey].reds++; else cardPlayers[cKey].yellows++;
+          }
+        }
+        if (ev.type === "subst") totalSubs++;
+        if (ev.type !== "Goal") continue;
+        if (/shootout/i.test(ev.detail || "")) continue;
+        totalGoalsFromEvents++;
+        const isPen = ev.detail === "Penalty";
+        const isOG = ev.detail === "Own Goal";
+        if (isOG) ownGoals++;
+        else if (isPen) penGoals++;
+        else normalGoals++;
+        if (ev.team) teamGoalsFromEvents[ev.team] = (teamGoalsFromEvents[ev.team] || 0) + 1;
+        if (isOG) continue;
+        if (ev.player) {
+          const pKey = `${ev.player}|${ev.team}`;
+          if (!scorers[pKey]) scorers[pKey] = { name: ev.player, team: ev.team, goals: 0, penalties: 0, assists: 0, matches: 0 };
+          scorers[pKey].goals++;
+          if (isPen) scorers[pKey].penalties++;
+        }
+        if (ev.assist) {
+          const aKey = `${ev.assist}|${ev.team}`;
+          if (!assisters[aKey]) assisters[aKey] = { name: ev.assist, team: ev.team, assists: 0 };
+          assisters[aKey].assists++;
+        }
+      }
+    }
+
+    /* ── Build team goals: prefer score-based (always accurate) ─── */
+    const topTeams = Object.entries(teamGoalsFromScores)
+      .map(([team, s]) => ({ team, goals: s.goals, conceded: s.conceded, matches: s.matches, gpm: s.matches > 0 ? +(s.goals / s.matches).toFixed(1) : 0 }))
+      .sort((a, b) => b.goals - a.goals || a.team.localeCompare(b.team))
+      .slice(0, 20);
+
+    /* Use score-based total goals as the authoritative count */
+    let totalGoalsFromScores = 0;
+    for (const s of Object.values(teamGoalsFromScores)) totalGoalsFromScores += s.goals;
+    const totalGoals = Math.max(totalGoalsFromEvents, totalGoalsFromScores);
     const avgGoals = matchesPlayed > 0 ? +(totalGoals / matchesPlayed).toFixed(1) : 0;
 
-    const topScorers = Object.values(scorers).sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name)).slice(0, 20);
-    const topAssisters = Object.values(assisters).sort((a, b) => b.assists - a.assists || a.name.localeCompare(b.name)).slice(0, 20);
+    /* ── Compute match counts per scorer ──────────────────────── */
+    for (const fm of finishedMap.values()) {
+      const homeScorers = new Set<string>();
+      const awayScorers = new Set<string>();
+      if (fm.events) {
+        for (const ev of fm.events) {
+          if (ev.type !== "Goal" || /shootout/i.test(ev.detail || "") || ev.detail === "Own Goal") continue;
+          if (ev.player) {
+            if (ev.team === fm.home) homeScorers.add(`${ev.player}|${ev.team}`);
+            else awayScorers.add(`${ev.player}|${ev.team}`);
+          }
+        }
+      }
+      /* Count matches played for each scorer (any finished match where their team played) */
+      for (const [pKey, s] of Object.entries(scorers)) {
+        const team = s.team;
+        if (team === fm.home || team === fm.away) s.matches++;
+      }
+    }
+
+    /* ── Sort and slice final leaderboards ─────────────────────── */
+    const topScorers = Object.values(scorers)
+      .filter(s => s.goals > 0)
+      .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name))
+      .slice(0, 20);
+
+    const topAssisters = Object.values(assisters)
+      .sort((a, b) => b.assists - a.assists || a.name.localeCompare(b.name))
+      .slice(0, 20);
+
     const combined: Record<string, { name: string; team: string; goals: number; assists: number; total: number }> = {};
     Object.values(scorers).forEach(s => {
       const key = `${s.name}|${s.team}`;
       combined[key] = combined[key] || { name: s.name, team: s.team, goals: 0, assists: 0, total: 0 };
       combined[key].goals = s.goals;
-      combined[key].total = combined[key].goals + combined[key].assists;
+      combined[key].assists = s.assists;
+      combined[key].total = s.goals + s.assists;
     });
     Object.values(assisters).forEach(a => {
       const key = `${a.name}|${a.team}`;
-      combined[key] = combined[key] || { name: a.name, team: a.team, goals: 0, assists: 0, total: 0 };
+      if (!combined[key]) combined[key] = { name: a.name, team: a.team, goals: 0, assists: 0, total: 0 };
       combined[key].assists = a.assists;
       combined[key].total = combined[key].goals + combined[key].assists;
     });
@@ -1178,8 +1325,11 @@ export default function Tournament({ data }: { data: TournamentData }) {
       .filter(p => p.total > 0)
       .sort((a, b) => b.total - a.total || b.goals - a.goals || a.name.localeCompare(b.name))
       .slice(0, 20);
-    const topTeams = Object.values(teamGoals).sort((a, b) => b.goals - a.goals || a.team.localeCompare(b.team)).slice(0, 12);
-    const mostCarded = Object.values(cardPlayers).sort((a, b) => (b.yellows + b.reds * 3) - (a.yellows + a.reds * 3) || a.name.localeCompare(b.name)).slice(0, 15);
+
+    const mostCarded = Object.values(cardPlayers)
+      .sort((a, b) => (b.yellows + b.reds * 3) - (a.yellows + a.reds * 3) || a.name.localeCompare(b.name))
+      .slice(0, 15);
+
     const bucketLabels = ["1-15", "16-30", "31-45", "46-60", "61-75", "76-90", "90+"];
 
     return {
@@ -1232,16 +1382,16 @@ export default function Tournament({ data }: { data: TournamentData }) {
     { key: "more", label: "More" },
   ];
 
-  const navIcon: Record<ViewType, string> = {
-    home: "⌂",
-    schedule: "▦",
-    groups: "◌",
-    bracket: "♕",
-    teams: "◍",
-    more: "•••",
-    stats: "↗",
-    venues: "⌖",
-    about: "i",
+  const navIcon: Record<ViewType, ReactNode> = {
+    home: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><polyline points="9 21 9 14 15 14 15 21"/></svg>,
+    schedule: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+    groups: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
+    bracket: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4v4h4"/><path d="M6 20v-4h4"/><path d="M10 8h4a2 2 0 012 2v4a2 2 0 01-2 2h-4"/><line x1="16" y1="12" x2="20" y2="12"/></svg>,
+    teams: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 014 10 15 15 0 01-4 10 15 15 0 01-4-10 15 15 0 014-10z"/><line x1="2" y1="12" x2="22" y2="12"/></svg>,
+    more: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>,
+    stats: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+    venues: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 6-9 13-9 13S3 16 3 10a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+    about: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
   };
 
   return (
@@ -1457,13 +1607,15 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
-  computeLeaders: () => { topScorers: { name: string; team: string; goals: number; penalties: number }[]; topAssisters: { name: string; team: string; assists: number }[]; totalGoals: number; matchesPlayed: number; avgGoals: number; cleanSheets: number; [key: string]: unknown };
+  computeLeaders: () => { topScorers: { name: string; team: string; goals: number; penalties: number; assists: number; matches: number }[]; topAssisters: { name: string; team: string; assists: number }[]; totalGoals: number; matchesPlayed: number; avgGoals: number; cleanSheets: number; [key: string]: unknown };
   onNavigate: (v: ViewType) => void;
   onTeamClick: (t: string) => void;
   onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
 }) {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(0);
+  const mounted = now > 0;
   useEffect(() => {
+    setNow(Date.now());
     const id = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 1000);
     return () => clearInterval(id);
   }, []);
@@ -1584,11 +1736,11 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
       ) : nextMatch && countdown ? (
         <section className="home-dash__next" aria-label="Next match countdown">
           <div className="home-next__eyebrow">Next Match</div>
-          <div className="home-next__countdown" suppressHydrationWarning>
-            {countdown.d > 0 && <><span className="home-next__digit">{countdown.d}</span><span className="home-next__unit">d</span></>}
-            <span className="home-next__digit">{pad(countdown.h)}</span><span className="home-next__sep">:</span>
-            <span className="home-next__digit">{pad(countdown.m)}</span><span className="home-next__sep">:</span>
-            <span className="home-next__digit">{pad(countdown.s)}</span>
+          <div className="home-next__countdown">
+            {mounted && countdown.d > 0 && <><span className="home-next__digit">{countdown.d}</span><span className="home-next__unit">d</span></>}
+            <span className="home-next__digit">{mounted ? pad(countdown.h) : "--"}</span><span className="home-next__sep">:</span>
+            <span className="home-next__digit">{mounted ? pad(countdown.m) : "--"}</span><span className="home-next__sep">:</span>
+            <span className="home-next__digit">{mounted ? pad(countdown.s) : "--"}</span>
           </div>
           {nextMatch.type === "gs" ? (
             <div className="home-next__match">
@@ -4045,10 +4197,10 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
   fixtures: LiveFixture[];
   fl: (t: string) => string;
   computeLeaders: () => {
-    topScorers: { name: string; team: string; goals: number; penalties: number }[];
+    topScorers: { name: string; team: string; goals: number; penalties: number; assists: number; matches: number }[];
     topAssisters: { name: string; team: string; assists: number }[];
     topCombined: { name: string; team: string; goals: number; assists: number; total: number }[];
-    topTeams: { team: string; goals: number }[];
+    topTeams: { team: string; goals: number; conceded: number; matches: number; gpm: number }[];
     mostCarded: { name: string; team: string; yellows: number; reds: number }[];
     minuteBuckets: number[];
     bucketLabels: string[];
@@ -4064,7 +4216,8 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
     cleanSheets: number;
   };
 }) {
-  const stats = useMemo(() => computeLeaders(), [fixtures, computeLeaders]);
+  const stats = useMemo(() => { try { return computeLeaders(); } catch (e) { console.error("[StatsView] computeLeaders crashed:", e); return null; } }, [fixtures, computeLeaders]);
+  if (!stats) return <main className="section stats-view"><div className="stats-empty"><p>Stats failed to load. Check console.</p></div></main>;
   const {
     topScorers, topAssisters, topCombined, topTeams, mostCarded,
     minuteBuckets, bucketLabels,
@@ -4072,7 +4225,9 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
     totalYellows, totalReds, totalSubs,
     matchesPlayed, avgGoals, cleanSheets,
   } = stats;
-  const hasData = topScorers.length > 0 || topAssisters.length > 0 || topCombined.length > 0;
+  const hasScorers = topScorers.length > 0;
+  const hasTeams = topTeams.length > 0;
+  const hasData = hasScorers || topAssisters.length > 0 || topCombined.length > 0 || hasTeams || matchesPlayed > 0;
   const hasCards = totalYellows > 0 || totalReds > 0;
   const maxBucket = Math.max(...minuteBuckets, 1);
   const maxScorerGoals = topScorers.length > 0 ? topScorers[0].goals : 1;
@@ -4087,8 +4242,14 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
 
       {!hasData && !hasCards && (
         <div className="stats-empty">
-          <p>Goal and assist tallies appear here once matches finish.</p>
-          <p className="stats-empty__sub">Data updates automatically from live match events.</p>
+          <p>Stats are updating. Check back shortly.</p>
+          <p className="stats-empty__sub">Goal scorers, team totals, assists, and cards will appear here as matches are played. Data updates automatically.</p>
+          <div className="stats-skeleton">
+            <div className="skeleton" style={{ height: 80, borderRadius: 14, marginBottom: 12 }} />
+            <div className="skeleton" style={{ height: 44, borderRadius: 10, marginBottom: 8 }} />
+            <div className="skeleton" style={{ height: 44, borderRadius: 10, marginBottom: 8 }} />
+            <div className="skeleton" style={{ height: 44, borderRadius: 10 }} />
+          </div>
         </div>
       )}
 
@@ -4178,6 +4339,15 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
       )}
 
       {/* ── Top Scorers with visual bars ── */}
+      {topScorers.length === 0 && hasTeams && (
+        <section className="stats-section">
+          <h3 className="stats-heading">Top Scorers</h3>
+          <div className="stats-empty stats-empty--inline">
+            <p>Individual scorer data is being processed.</p>
+            <p className="stats-empty__sub">Team totals are available below. Player-level breakdowns appear as match events are finalized.</p>
+          </div>
+        </section>
+      )}
       {topScorers.length > 0 && (
         <section className="stats-section">
           <h3 className="stats-heading">Top Scorers</h3>
@@ -4188,13 +4358,12 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
                 <span className="stats-scorer__flag">{fl(s.team)}</span>
                 <div className="stats-scorer__info">
                   <span className="stats-scorer__name">{s.name}</span>
-                  <span className="stats-scorer__team">{s.team}</span>
+                  <span className="stats-scorer__team">{s.team}{s.matches > 0 ? ` · ${s.matches}MP` : ""}{s.assists > 0 ? ` · ${s.assists}A` : ""}{s.penalties > 0 ? ` · ${s.penalties}P` : ""}</span>
                 </div>
                 <div className="stats-scorer__bar-wrap">
                   <div className="stats-scorer__bar" style={{ "--bar-w": `${(s.goals / maxScorerGoals) * 100}%` } as CSSProperties} />
                 </div>
                 <span className="stats-scorer__goals">{s.goals}</span>
-                {s.penalties > 0 && <span className="stats-scorer__pen">({s.penalties}p)</span>}
               </div>
             ))}
           </div>
@@ -4208,13 +4377,12 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
                     <span className="stats-scorer__flag">{fl(s.team)}</span>
                     <div className="stats-scorer__info">
                       <span className="stats-scorer__name">{s.name}</span>
-                      <span className="stats-scorer__team">{s.team}</span>
+                      <span className="stats-scorer__team">{s.team}{s.matches > 0 ? ` · ${s.matches}MP` : ""}{s.assists > 0 ? ` · ${s.assists}A` : ""}{s.penalties > 0 ? ` · ${s.penalties}P` : ""}</span>
                     </div>
                     <div className="stats-scorer__bar-wrap">
                       <div className="stats-scorer__bar" style={{ "--bar-w": `${(s.goals / maxScorerGoals) * 100}%` } as CSSProperties} />
                     </div>
                     <span className="stats-scorer__goals">{s.goals}</span>
-                    {s.penalties > 0 && <span className="stats-scorer__pen">({s.penalties}p)</span>}
                   </div>
                 ))}
               </div>
@@ -4298,11 +4466,12 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
           <h3 className="stats-heading">Goals by Team</h3>
           <div className="stats-scorer-list">
             {topTeams.map((t, i) => (
-              <div key={t.team} className="stats-team-row stagger-rise">
+              <div key={t.team} className={`stats-team-row stagger-rise${i < 3 ? ` stats-scorer--${["gold","silver","bronze"][i]}` : ""}`}>
                 <span className="stats-scorer__rank">{i + 1}</span>
                 <span className="stats-scorer__flag" style={{ fontSize: 20 }}>{fl(t.team)}</span>
                 <div className="stats-scorer__info">
                   <span className="stats-scorer__name">{t.team}</span>
+                  <span className="stats-scorer__team">{t.matches}MP · {t.gpm}/match · {t.conceded}GA</span>
                 </div>
                 <div className="stats-scorer__bar-wrap">
                   <div className="stats-scorer__bar stats-scorer__bar--team" style={{ "--bar-w": `${(t.goals / maxTeamGoals) * 100}%` } as CSSProperties} />
@@ -4313,6 +4482,7 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
           </div>
         </section>
       )}
+
     </main>
   );
 }

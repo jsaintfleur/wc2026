@@ -4232,10 +4232,10 @@ function StatsView({ data, fixtures, fl, computeLeaders }: {
           <p>Stats are updating. Check back shortly.</p>
           <p className="stats-empty__sub">Goal scorers, team totals, assists, and cards will appear here as matches are played. Data updates automatically.</p>
           <div className="stats-skeleton">
-            <div className="skeleton" style={{ height: 80, borderRadius: 14, marginBottom: 12 }} />
-            <div className="skeleton" style={{ height: 44, borderRadius: 10, marginBottom: 8 }} />
-            <div className="skeleton" style={{ height: 44, borderRadius: 10, marginBottom: 8 }} />
-            <div className="skeleton" style={{ height: 44, borderRadius: 10 }} />
+            <div className="skel skel--card-lg" />
+            <div className="skel skel--card" />
+            <div className="skel skel--card" />
+            <div className="skel skel--card" />
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 import type { LiveFixture, MatchEvent, PlayerMatchStat, TournamentData } from "./data";
-import { canon, canonPlayer } from "./merge";
+import { canon, canonPlayer, nrm } from "./merge";
 
 export const STATS_DONE_STATUSES = new Set(["FT", "AET", "PEN", "PEN_LIVE", "WO", "AWD"]);
 export const STATS_LIVE_STATUSES = new Set(["1H", "2H", "HT", "ET", "BT", "P", "LIVE", "SUSP", "INT"]);
@@ -72,7 +72,7 @@ function teamNames(data: TournamentData): Set<string> {
 }
 
 function playerKey(name: string, team: string): string {
-  return `${canonPlayer(name)}|${canon(team)}`;
+  return `${nrm(canonPlayer(name))}|${nrm(canon(team))}`;
 }
 
 function isValidPlayerName(name: string | null | undefined, teamSet: Set<string>): name is string {
@@ -85,17 +85,26 @@ function isValidPlayerName(name: string | null | undefined, teamSet: Set<string>
 function ensurePlayer(players: Record<string, PlayerLeader>, name: string, team: string): PlayerLeader {
   const normalizedName = canonPlayer(name);
   const normalizedTeam = canon(team);
-  const key = `${normalizedName}|${normalizedTeam}`;
-  players[key] = players[key] || {
-    name: normalizedName,
-    team: normalizedTeam,
-    goals: 0,
-    penalties: 0,
-    assists: 0,
-    yellows: 0,
-    reds: 0,
-    matches: 0,
-  };
+  // Use accent-stripped key so "Bruno Guimarães" (players array) and
+  // "Bruno Guimaraes" (events) merge into one entry. nrm() strips
+  // diacritics and lowercases — safe for keying without losing the
+  // accented display name.
+  const key = `${nrm(normalizedName)}|${nrm(normalizedTeam)}`;
+  if (!players[key]) {
+    players[key] = {
+      name: normalizedName,
+      team: normalizedTeam,
+      goals: 0,
+      penalties: 0,
+      assists: 0,
+      yellows: 0,
+      reds: 0,
+      matches: 0,
+    };
+  } else if (normalizedName.length > players[key].name.length) {
+    // Prefer the longer (accented) form as the display name
+    players[key].name = normalizedName;
+  }
   return players[key];
 }
 

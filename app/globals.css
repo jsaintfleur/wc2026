@@ -3290,6 +3290,8 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   background: var(--chalk-up);
   border-radius: 24px 24px 0 0;
   overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   animation: slideUp .38s cubic-bezier(0.16, 1, 0.3, 1);

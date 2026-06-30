@@ -388,19 +388,25 @@ export default function Tournament({ data }: { data: TournamentData }) {
   function findLive(m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]): LiveFixture | null {
     if (!fx.length) return null;
     let best: LiveFixture | null = null;
-    let bd = 75 * 60000;
+    let bd = Number.POSITIVE_INFINITY;
+    const windowMs = 75 * 60000;
     const vn = nrm(vName((m as GroupStageMatch).v || ""));
+    const hasScheduleTeams = !!(m.t1 && m.t2 && m.t1 !== "TBD" && m.t2 !== "TBD");
     for (const f of fx) {
       const dt = Math.abs((f.ts || 0) - (m.ts || 0));
-      if (dt > 75 * 60000) continue;
       const fv = nrm(f.venue);
       const venOK = vn && fv && (fv === vn || fv.indexOf(vn) > -1 || vn.indexOf(fv) > -1);
       let teamOK = false;
-      if (m.t1 && m.t2) {
+      if (hasScheduleTeams) {
         const a = canon(f.home), b = canon(f.away);
         teamOK = (a === m.t1 && b === m.t2) || (a === m.t2 && b === m.t1);
       }
-      if ((venOK || teamOK) && dt < bd) { bd = dt; best = f; }
+      const knockoutLike = /round|r32|r16|quarter|semi|final|knockout/i.test(f.round || "");
+      const timeOK = f.ts ? dt <= windowMs : (!hasScheduleTeams && knockoutLike && !!venOK);
+      const identityOK = hasScheduleTeams ? (teamOK || !!venOK) : !!venOK;
+      if (!timeOK || !identityOK) continue;
+      const distance = f.ts ? dt : windowMs + 1;
+      if (distance < bd) { bd = distance; best = f; }
     }
     return best;
   }

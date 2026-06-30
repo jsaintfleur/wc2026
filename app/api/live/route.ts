@@ -533,10 +533,17 @@ export async function GET(request: NextRequest) {
       if (idx === -1) {
         base.push(wf);
       } else {
-        const existing = base[idx] as { events?: unknown[] };
-        const wc26Fix = wf as { events?: unknown[] };
+        const existing = base[idx] as { events?: unknown[]; gh?: unknown; ga?: unknown; penHome?: unknown; penAway?: unknown; status?: unknown; elapsed?: unknown };
+        const wc26Fix = wf as { events?: unknown[]; gh?: unknown; ga?: unknown; penHome?: unknown; penAway?: unknown; status?: unknown; elapsed?: unknown };
+        const target = base[idx] as Record<string, unknown>;
+        if (existing.gh == null && wc26Fix.gh != null) target.gh = wc26Fix.gh;
+        if (existing.ga == null && wc26Fix.ga != null) target.ga = wc26Fix.ga;
+        if (existing.penHome == null && wc26Fix.penHome != null) target.penHome = wc26Fix.penHome;
+        if (existing.penAway == null && wc26Fix.penAway != null) target.penAway = wc26Fix.penAway;
+        if (!existing.status && wc26Fix.status) target.status = wc26Fix.status;
+        if (existing.elapsed == null && wc26Fix.elapsed != null) target.elapsed = wc26Fix.elapsed;
         if ((!existing.events || existing.events.length === 0) && wc26Fix.events && wc26Fix.events.length > 0) {
-          (base[idx] as Record<string, unknown>).events = wc26Fix.events;
+          target.events = wc26Fix.events;
         }
       }
     }

@@ -59,7 +59,9 @@ const KO_ROUNDS: {
   short: string;
   matchNumbers: number[];
 }[] = [
-  { key: "r32", dataRound: "Round of 32", label: "Round of 32", short: "R32", matchNumbers: [73, 76, 74, 75, 78, 77, 79, 80, 82, 81, 84, 83, 85, 88, 86, 87] },
+  // matchNumbers must be sequential (matching DB sort by matchNumber ASC)
+  // since R32_SEEDS, KO_SOURCE_PAIRS, and pick() indices all use DB order
+  { key: "r32", dataRound: "Round of 32", label: "Round of 32", short: "R32", matchNumbers: [73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88] },
   { key: "r16", dataRound: "Round of 16", label: "Round of 16", short: "R16", matchNumbers: [89, 90, 91, 92, 93, 94, 95, 96] },
   { key: "qf", dataRound: "Quarter-final", label: "Quarterfinals", short: "QF", matchNumbers: [97, 98, 99, 100] },
   { key: "sf", dataRound: "Semi-final", label: "Semifinals", short: "SF", matchNumbers: [101, 102] },

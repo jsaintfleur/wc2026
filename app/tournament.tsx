@@ -2154,9 +2154,22 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
 
       {/* ── Section 1: Hero ─────────────────────────────────── */}
       <section className="more-view__hero">
-        <span>Compet 2026</span>
-        <h2>More</h2>
-        <p className="more-view__subtitle">Official FIFA World Cup Companion</p>
+        <div className="more-view__hero-copy">
+          <span>Compet 2026</span>
+          <h2>Control Center</h2>
+          <p className="more-view__subtitle">Hosts, venues, records, settings and the fastest routes through the app.</p>
+        </div>
+        <div className="more-view__hero-panel" aria-label={`${progressPct}% tournament complete`}>
+          <small>{stageLabel}</small>
+          <strong>{progressPct}%</strong>
+          <i><em style={{ width: `${progressPct}%` }} /></i>
+          <b>{completedTotal} of {totalMatches} matches</b>
+        </div>
+        <div className="more-view__hosts" aria-label="Host countries">
+          {data.hosts.map(host => (
+            <span key={host}>{countryFlag(host)} {host}</span>
+          ))}
+        </div>
       </section>
 
       {/* ── Section 2: Tournament Progress ──────────────────── */}

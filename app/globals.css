@@ -6147,12 +6147,122 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   letter-spacing: 0.3px;
 }
 
+.more-view__hero {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 88% 10%, rgba(245,158,11,0.22), transparent 32%),
+    radial-gradient(circle at 0% 100%, rgba(34,197,94,0.14), transparent 38%),
+    linear-gradient(145deg, rgba(255,255,255,0.09), rgba(255,255,255,0.026)),
+    rgba(6, 10, 18, 0.94);
+}
+
+.more-view__hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(112deg, transparent 0 48%, rgba(255,255,255,0.055) 48% 49%, transparent 49%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 46px);
+  pointer-events: none;
+}
+
+.more-view__hero-copy,
+.more-view__hero-panel,
+.more-view__hosts {
+  position: relative;
+  z-index: 1;
+}
+
+.more-view__hero h2 {
+  max-width: 360px;
+  font-size: clamp(38px, 11vw, 58px);
+  letter-spacing: 0;
+}
+
+.more-view__hero-panel {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid rgba(245,158,11,0.18);
+  border-radius: 18px;
+  background: rgba(8,12,21,0.58);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+.more-view__hero-panel small {
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+}
+
+.more-view__hero-panel strong {
+  color: #fff;
+  font-family: var(--disp);
+  font-size: 34px;
+  line-height: .9;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.more-view__hero-panel i {
+  display: block;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+}
+
+.more-view__hero-panel em {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--gold-bright), #22c55e);
+  box-shadow: 0 0 18px rgba(245,158,11,0.24);
+}
+
+.more-view__hero-panel b {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.more-view__hosts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.more-view__hosts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: rgba(255,255,255,0.055);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 /* ── Section wrapper + heading ──────────────────────────── */
 .more-section {
   margin-top: 20px;
 }
 
 .more-section__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 10px 2px;
   color: var(--gold-bright);
   font-family: var(--disp);
@@ -6160,6 +6270,14 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   font-weight: 800;
   letter-spacing: 1.4px;
   text-transform: uppercase;
+}
+
+.more-section__heading::before {
+  content: "";
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gold-bright), rgba(34,197,94,0.75));
 }
 
 .more-section__subheading {
@@ -6181,12 +6299,13 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 /* ── Tournament Progress card ───────────────────────────── */
 .more-progress-card {
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 18px;
-  padding: 16px;
+  border-radius: 22px;
+  padding: 18px;
   background:
-    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
-    rgba(8, 12, 21, 0.86);
-  box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+    radial-gradient(circle at 100% 0%, rgba(124,58,237,0.13), transparent 36%),
+    linear-gradient(145deg, rgba(255,255,255,0.085), rgba(255,255,255,0.026)),
+    rgba(8, 12, 21, 0.9);
+  box-shadow: 0 18px 48px rgba(0,0,0,0.28);
 }
 
 .more-progress-card__header {
@@ -6198,8 +6317,9 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 
 .more-progress-card__stage {
   font-family: var(--disp);
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 800;
+  letter-spacing: 0;
 }
 
 .more-progress-card__count {
@@ -6210,16 +6330,17 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 
 /* Progress bar track + fill */
 .more-progress-bar {
-  height: 6px;
-  border-radius: 3px;
+  height: 8px;
+  border-radius: 999px;
   background: rgba(255,255,255,0.08);
   overflow: hidden;
 }
 
 .more-progress-bar__fill {
   height: 100%;
-  border-radius: 3px;
-  background: var(--gold-bright);
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--gold-bright), #22c55e);
+  box-shadow: 0 0 18px rgba(245,158,11,0.25);
   transition: width 0.6s ease;
 }
 
@@ -6260,17 +6381,23 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   gap: 6px;
   padding: 16px;
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 18px;
+  border-radius: 20px;
   background:
-    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
-    rgba(8, 12, 21, 0.86);
+    radial-gradient(circle at 100% 0%, rgba(245,158,11,0.09), transparent 34%),
+    linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.024)),
+    rgba(8, 12, 21, 0.88);
   color: var(--ink);
   font: inherit;
   text-align: left;
   box-shadow: 0 12px 32px rgba(0,0,0,0.22);
   cursor: pointer;
   animation: moreCardIn 0.4s ease both;
-  transition: border-color 0.2s, transform 0.15s;
+  transition: border-color 0.2s, transform 0.15s, box-shadow .2s;
+}
+
+.more-quick-card:hover {
+  border-color: rgba(245,158,11,0.22);
+  box-shadow: 0 18px 42px rgba(0,0,0,0.26);
 }
 
 .more-quick-card:active {
@@ -6284,6 +6411,13 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 .more-quick-card__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  aspect-ratio: 1;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.055);
   font-size: 24px;
   line-height: 1;
 }
@@ -6313,10 +6447,10 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   gap: 4px;
   padding: 14px;
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 18px;
+  border-radius: 20px;
   background:
-    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
-    rgba(8, 12, 21, 0.86);
+    linear-gradient(145deg, rgba(255,255,255,0.072), rgba(255,255,255,0.024)),
+    rgba(8, 12, 21, 0.88);
   box-shadow: 0 12px 32px rgba(0,0,0,0.22);
   animation: moreCardIn 0.4s ease both;
 }
@@ -6376,9 +6510,9 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   gap: 10px;
   padding: 12px 14px;
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 14px;
+  border-radius: 16px;
   background:
-    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
+    linear-gradient(145deg, rgba(255,255,255,0.065), rgba(255,255,255,0.022)),
     rgba(8, 12, 21, 0.86);
   box-shadow: 0 8px 20px rgba(0,0,0,0.18);
   animation: moreCardIn 0.4s ease both;
@@ -6512,10 +6646,11 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   gap: 4px;
   padding: 14px 10px;
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 18px;
+  border-radius: 20px;
   background:
-    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
-    rgba(8, 12, 21, 0.86);
+    radial-gradient(circle at 50% 0%, rgba(245,158,11,0.12), transparent 42%),
+    linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.024)),
+    rgba(8, 12, 21, 0.88);
   box-shadow: 0 12px 32px rgba(0,0,0,0.22);
   text-align: center;
   animation: moreCardIn 0.4s ease both;
@@ -6557,9 +6692,9 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 12px;
-  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.052), rgba(255,255,255,0.022));
   animation: moreCardIn 0.35s ease both;
 }
 

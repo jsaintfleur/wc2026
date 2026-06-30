@@ -1479,15 +1479,15 @@ body::after {
   border-radius: 24px;
   position: relative;
   overflow: hidden;
-  /* Layered pitch background: mown-stripe texture + rich green base */
+  /* Layered pitch background: mown-stripe texture + vivid green base */
   background:
     repeating-linear-gradient(
       90deg,
-      rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 40px,
+      rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 40px,
       transparent 40px, transparent 80px
     ),
-    radial-gradient(ellipse at 50% 20%, rgba(34,197,94,0.22), transparent 70%),
-    linear-gradient(180deg, #145a2e 0%, #0e4422 40%, #0a3018 100%);
+    radial-gradient(ellipse at 50% 30%, rgba(74,222,128,0.12), transparent 60%),
+    linear-gradient(180deg, #1a6b38 0%, #14572c 50%, #0e4422 100%);
   box-shadow:
     var(--shadow-lg),
     inset 0 1px 0 rgba(255,255,255,0.08);
@@ -2516,15 +2516,15 @@ body::after {
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: 22px;
   position: relative;
-  /* Layered pitch background: mown-stripe texture + rich green */
+  /* Layered pitch background: mown-stripe texture + vivid green */
   background:
     repeating-linear-gradient(
       0deg,
-      rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 32px,
+      rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 32px,
       transparent 32px, transparent 64px
     ),
-    radial-gradient(ellipse at 50% 50%, rgba(34,197,94,0.15), transparent 60%),
-    linear-gradient(180deg, #145a2e 0%, #0e4422 40%, #0a3018 100%);
+    radial-gradient(ellipse at 50% 50%, rgba(74,222,128,0.10), transparent 60%),
+    linear-gradient(180deg, #1a6b38 0%, #14572c 40%, #0e4422 100%);
   box-shadow:
     0 18px 48px rgba(0,0,0,0.32),
     inset 0 1px 0 rgba(255,255,255,0.06);

@@ -2547,9 +2547,15 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
         let teamA: KnockoutParticipant;
         let teamB: KnockoutParticipant;
 
-        if (fixture?.home && fixture?.away) {
-          const home = teamName(fixture.home);
-          const away = teamName(fixture.away);
+        // For R16+ matches that haven't started, prefer the bracket advancement
+        // logic over vendor team assignments — the vendor may slot teams into
+        // R16 venues in a different order than the FIFA bracket tree.
+        const trustVendorTeams = fixture?.home && fixture?.away &&
+          (config.key === "r32" || isLive || isDone);
+
+        if (trustVendorTeams) {
+          const home = teamName(fixture!.home);
+          const away = teamName(fixture!.away);
           teamA = { name: home, winner: winnerName === home, loser: loserName === home };
           teamB = { name: away, winner: winnerName === away, loser: loserName === away };
         } else if (config.key === "r32") {

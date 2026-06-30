@@ -430,6 +430,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
+  const [hostDrawer, setHostDrawer] = useState<string | null>(null);
   const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture | null } | null>(null);
   const [playerProfile, setPlayerProfile] = useState<{ name: string; team: string } | null>(null);
   const [goalToast, setGoalToast] = useState<{ team: string; player: string; minute: string; score: string; flag: string } | null>(null);
@@ -1147,7 +1148,13 @@ export default function Tournament({ data }: { data: TournamentData }) {
           <button type="button" className="bar__search-btn" onClick={() => setSearchOpen(true)} aria-label="Search">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="10.5" cy="10.5" r="7" /><line x1="15.5" y1="15.5" x2="21" y2="21" /></svg>
           </button>
-          <div className="bar__hosts" aria-label="Hosts: Canada, Mexico, United States"><span>🇨🇦</span><span>🇲🇽</span><span>🇺🇸</span></div>
+          <div className="bar__hosts" aria-label="Host countries">
+            {data.hosts.map(host => (
+              <button key={host} type="button" onClick={() => setHostDrawer(host)} aria-label={`View ${host} host profile`}>
+                {data.flags[host] || "⚽"}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -1312,6 +1319,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
       {searchOpen && <SearchOverlay data={data} fixtures={fixtures} findLive={findLive} onClose={() => setSearchOpen(false)} onTeamClick={(t) => { setSearchOpen(false); setTeamDrawer(t); }} onMatchClick={(m, f) => { setSearchOpen(false); setMatchDetail({ match: m, fixture: f }); }} onNavigate={(v) => { setSearchOpen(false); handleTab(v); }} />}
 
+      {hostDrawer && <HostCountryDrawer country={hostDrawer} data={data} onClose={() => setHostDrawer(null)} />}
       {teamDrawer && <TeamDrawer name={teamDrawer} flags={data.flags} groups={data.groups} gcolor={data.gcolor} gs={data.gs} hosts={data.hosts} onClose={() => setTeamDrawer(null)} onPlayerClick={(p, t) => { setTeamDrawer(null); setPlayerProfile({ name: p, team: t }); }} />}
       {matchDetail && <MatchDetailDrawer match={matchDetail.match} initialFixture={matchDetail.fixture} fixtures={fixtures} flags={data.flags} venues={data.venues} gcolor={data.gcolor} allMatches={data.gs} vName={vName} findLive={findLive} onClose={() => setMatchDetail(null)} onTeamClick={(t) => { setMatchDetail(null); setTeamDrawer(t); }} onPlayerClick={(p, t) => { setMatchDetail(null); setPlayerProfile({ name: p, team: t }); }} />}
       {playerProfile && <PlayerProfileDrawer playerName={playerProfile.name} teamName={playerProfile.team} flags={data.flags} data={data} onClose={() => setPlayerProfile(null)} onTeamClick={(t) => { setPlayerProfile(null); setTeamDrawer(t); }} />}
@@ -3073,6 +3081,106 @@ function PlayerProfileDrawer({ playerName, teamName, flags, data, onClose, onTea
     </div>
   );
 }
+
+function HostCountryDrawer({ country, data, onClose }: {
+  country: string;
+  data: TournamentData;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const venueCountry = country === "United States" ? "USA" : country;
+  const venues = useMemo(() => Object.entries(data.venues)
+    .filter(([, venue]) => venue.country === venueCountry)
+    .map(([key, venue]) => ({ key, ...venue }))
+    .sort((a, b) => b.cap - a.cap), [data.venues, venueCountry]);
+  const allMatches = useMemo(() => [...data.gs, ...data.ko], [data.gs, data.ko]);
+  const venueKeys = new Set(venues.map(v => v.key));
+  const hostMatches = allMatches.filter(match => venueKeys.has(match.v));
+  const matchCount = hostMatches.length;
+  const capacity = venues.reduce((sum, venue) => sum + venue.cap, 0);
+  const keyMatch = useMemo(() => {
+    const final = hostMatches.find(match => "round" in match && match.round === "Final");
+    if (final) return final;
+    const opener = hostMatches.find(match => "no" in match && match.no === 1);
+    if (opener) return opener;
+    return hostMatches.sort((a, b) => a.ts - b.ts)[0] || null;
+  }, [hostMatches]);
+  const profile = HOST_COUNTRY_PROFILES[country] || HOST_COUNTRY_PROFILES["United States"];
+
+  const keyVenue = keyMatch ? data.venues[keyMatch.v] : null;
+  const keyDate = keyMatch ? parseISO(keyMatch.iso) : null;
+
+  return (
+    <div className="drawer-overlay" onClick={onClose}>
+      <aside className="drawer host-drawer" onClick={e => e.stopPropagation()} aria-label={`${country} host profile`}>
+        <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
+        <div className="host-drawer__hero">
+          <span className="host-drawer__flag">{data.flags[country] || "⚽"}</span>
+          <div>
+            <small>Host Country</small>
+            <h2>{country}</h2>
+            <p>{profile.profile}</p>
+          </div>
+        </div>
+        <div className="host-drawer__stats">
+          <div><b>{venues.length}</b><span>Venues</span></div>
+          <div><b>{matchCount}</b><span>Matches</span></div>
+          <div><b>{capacity.toLocaleString("en-US")}</b><span>Total seats</span></div>
+        </div>
+        {keyMatch && keyVenue && keyDate && (
+          <section className="host-drawer__key">
+            <span>Key Match</span>
+            <b>{"round" in keyMatch ? keyMatch.round : `Match ${keyMatch.no}`}</b>
+            <small>{MON[keyDate.getMonth()]} {keyDate.getDate()} · {keyMatch.et} · {keyVenue.common}</small>
+          </section>
+        )}
+        <section className="host-drawer__section">
+          <h3>Venues</h3>
+          <div className="host-drawer__venues">
+            {venues.map(venue => {
+              const count = hostMatches.filter(match => match.v === venue.key).length;
+              return (
+                <div key={venue.key} className="host-drawer__venue">
+                  <div>
+                    <b>{venue.common}</b>
+                    <small>{venue.city} · {venue.fifa}</small>
+                  </div>
+                  <span>{venue.cap.toLocaleString("en-US")} · {count} match{count !== 1 ? "es" : ""}</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+        <section className="host-drawer__section">
+          <h3>Fun Facts</h3>
+          <div className="host-drawer__facts">
+            {profile.facts.map(fact => <span key={fact}>{fact}</span>)}
+          </div>
+        </section>
+      </aside>
+    </div>
+  );
+}
+
+const HOST_COUNTRY_PROFILES: Record<string, { profile: string; facts: string[] }> = {
+  Canada: {
+    profile: "Toronto and Vancouver bring Canada into the men’s World Cup hosting era with compact, high-energy city venues.",
+    facts: ["2 host cities", "BMO Field opens Canada’s home schedule", "BC Place adds a West Coast indoor venue"],
+  },
+  Mexico: {
+    profile: "Mexico anchors the tournament with three football cities and the opening match at Estadio Azteca.",
+    facts: ["First country to host matches in three men’s World Cups", "Opening match in Mexico City", "Three venues across Mexico City, Guadalajara and Monterrey"],
+  },
+  "United States": {
+    profile: "The United States carries the largest venue footprint, including the Final at MetLife Stadium.",
+    facts: ["11 host venues", "Final in New York / New Jersey", "Cross-country schedule from Los Angeles to Miami"],
+  },
+};
 
 function TeamDrawer({ name, flags, groups, gcolor, gs, hosts, onClose, onPlayerClick }: {
   name: string;

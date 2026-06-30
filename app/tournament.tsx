@@ -59,7 +59,7 @@ const KO_ROUNDS: {
   short: string;
   matchNumbers: number[];
 }[] = [
-  { key: "r32", dataRound: "Round of 32", label: "Round of 32", short: "R32", matchNumbers: [73, 76, 74, 75, 78, 77, 79, 80, 82, 81, 84, 83, 85, 88, 86, 87] },
+  { key: "r32", dataRound: "Round of 32", label: "Round of 32", short: "R32", matchNumbers: [73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88] },
   { key: "r16", dataRound: "Round of 16", label: "Round of 16", short: "R16", matchNumbers: [89, 90, 91, 92, 93, 94, 95, 96] },
   { key: "qf", dataRound: "Quarter-final", label: "Quarterfinals", short: "QF", matchNumbers: [97, 98, 99, 100] },
   { key: "sf", dataRound: "Semi-final", label: "Semifinals", short: "SF", matchNumbers: [101, 102] },
@@ -68,15 +68,27 @@ const KO_ROUNDS: {
 ];
 
 const R32_SEEDS = [
-  ["2A", "2B"], ["1C", "2F"], ["1E", "3rd"], ["1F", "2C"],
-  ["2E", "2I"], ["1I", "3rd"], ["1A", "3rd"], ["1L", "3rd"],
-  ["1G", "3rd"], ["1D", "3rd"], ["1H", "2J"], ["2K", "2L"],
-  ["1B", "3rd"], ["2D", "2G"], ["1J", "2H"], ["1K", "3rd"],
+  ["1A", "3CDEF"],
+  ["2B", "2F"],
+  ["1C", "3FGHI"],
+  ["1E", "2I"],
+  ["1F", "2C"],
+  ["1D", "3BEFI"],
+  ["1I", "2G"],
+  ["1G", "3ABCE"],
+  ["1B", "3EFGI"],
+  ["2A", "2E"],
+  ["1H", "2J"],
+  ["1J", "3HIKL"],
+  ["1K", "2L"],
+  ["1L", "3GHIJ"],
+  ["2D", "2H"],
+  ["1B", "2K"],
 ] as const;
 
 const KO_SOURCE_PAIRS: Partial<Record<KnockoutRoundKey, [number, number][]>> = {
-  r16: [[0, 3], [2, 5], [1, 4], [6, 7], [8, 9], [10, 11], [12, 15], [13, 14]],
-  qf: [[0, 1], [4, 5], [2, 3], [6, 7]],
+  r16: [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9], [10, 11], [12, 13], [14, 15]],
+  qf: [[0, 1], [2, 3], [4, 5], [6, 7]],
   sf: [[0, 1], [2, 3]],
   final: [[0, 1]],
   third: [[0, 1]],
@@ -216,8 +228,18 @@ function rankThirdPlaceTeams(
   };
 }
 
-// Given the 8 qualifying third-place groups, look up Annex C and return
-// a map from R32 slot index → { team name, source group }
+function thirdSeedGroups(seed: string): string[] {
+  const m = seed.match(/^3([A-L]+)$/);
+  return m ? [...m[1]] : [];
+}
+
+function thirdSeedLabel(seed: string): string {
+  const groups = thirdSeedGroups(seed);
+  return groups.length ? `3rd Place Group ${groups.join("/")}` : "Best 3rd";
+}
+
+// Given the 8 qualifying third-place groups, resolve any R32 third-place slot
+// that can be determined unambiguously from the slot's eligible groups.
 function resolveThirdPlaceSlots(
   standingsByGroup: Record<string, GroupStanding>,
 ): Map<number, { team: string; group: string }> | null {
@@ -225,31 +247,27 @@ function resolveThirdPlaceSlots(
   // Need all 12 groups complete and exactly 8 qualifiers
   if (!allComplete || qualified.length !== 8) return null;
 
-  const qualifyingKey = qualified.map(e => e.group).sort().join("");
-  const assignment = ANNEX_C[qualifyingKey];
-  if (!assignment) return null;
-
   // Build a team lookup by group: group letter → team name
   const teamByGroup: Record<string, string> = {};
   for (const entry of qualified) teamByGroup[entry.group] = entry.row.t;
 
-  // Map each Annex C column to the corresponding R32 slot
   const slotMap = new Map<number, { team: string; group: string }>();
-  for (let col = 0; col < 8; col++) {
-    const sourceGroup = assignment[col];
-    const r32Slot = ANNEX_C_COL_TO_R32_SLOT[col];
-    const team = teamByGroup[sourceGroup];
-    if (team && r32Slot !== undefined) {
-      slotMap.set(r32Slot, { team, group: sourceGroup });
+  R32_SEEDS.forEach(([, seedB], slotIndex) => {
+    const candidates = thirdSeedGroups(seedB);
+    if (!candidates.length) return;
+    const resolvedGroups = candidates.filter(group => teamByGroup[group]);
+    if (resolvedGroups.length === 1) {
+      const group = resolvedGroups[0];
+      slotMap.set(slotIndex, { team: teamByGroup[group], group });
     }
-  }
+  });
 
-  return slotMap.size === 8 ? slotMap : null;
+  return slotMap;
 }
 
 function ordinalSeedLabel(seed: string): string {
   const m = seed.match(/^([123])([A-L])$/);
-  if (!m) return seed === "3rd" ? "Best 3rd" : seed || "TBD";
+  if (!m) return thirdSeedGroups(seed).length ? thirdSeedLabel(seed) : seed || "TBD";
   const place = m[1] === "1" ? "1st" : m[1] === "2" ? "2nd" : "3rd";
   return `${place} Group ${m[2]}`;
 }
@@ -730,11 +748,11 @@ export default function Tournament({ data }: { data: TournamentData }) {
           const [seedA, seedB] = R32_SEEDS[index] || ["TBD", "TBD"];
           const teamAResolved = resolveGroupSeed(seedA, standingsByGroup);
           let teamBResolved: KnockoutParticipant;
-          if (seedB === "3rd" && thirdSlots) {
+          if (thirdSeedGroups(seedB).length && thirdSlots) {
             const resolved = thirdSlots.get(index);
             teamBResolved = resolved
               ? { name: resolved.team, seed: `3rd Group ${resolved.group}` }
-              : { name: "Best 3rd", placeholder: true };
+              : { name: thirdSeedLabel(seedB), placeholder: true };
           } else {
             teamBResolved = resolveGroupSeed(seedB, standingsByGroup);
           }
@@ -2491,13 +2509,12 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
         } else if (config.key === "r32") {
           const [seedA, seedB] = R32_SEEDS[index] || ["TBD", "TBD"];
           teamA = resolveGroupSeed(seedA, standingsByGroup);
-          // For "3rd" seeds, use the Annex C resolution if available
-          if (seedB === "3rd" && thirdPlaceSlots) {
+          if (thirdSeedGroups(seedB).length && thirdPlaceSlots) {
             const resolved = thirdPlaceSlots.get(index);
             if (resolved) {
               teamB = { name: resolved.team, seed: `3rd Group ${resolved.group}` };
             } else {
-              teamB = { name: "Best 3rd", placeholder: true };
+              teamB = { name: thirdSeedLabel(seedB), placeholder: true };
             }
           } else {
             teamB = resolveGroupSeed(seedB, standingsByGroup);
@@ -2556,11 +2573,27 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
 
     const r32 = rounds.find(round => round.key === "r32");
     if (!r32 || r32.cards.length !== 16) warnings.push(`Round of 32 slot count is ${r32?.cards.length ?? 0}, expected 16`);
+    const winnerSeeds = new Set<string>();
+    let thirdSeedCount = 0;
     R32_SEEDS.forEach((pair, index) => {
       pair.forEach(seed => {
-        if (seed !== "3rd" && !/^([12][A-L])$/.test(seed)) warnings.push(`Invalid R32 seed "${seed}" at slot ${index + 1}`);
+        if (thirdSeedGroups(seed).length) {
+          thirdSeedCount++;
+          return;
+        }
+        if (!/^([12][A-L])$/.test(seed)) warnings.push(`Invalid R32 seed "${seed}" at slot ${index + 1}`);
+        if (/^1[A-L]$/.test(seed)) {
+          if (winnerSeeds.has(seed)) warnings.push(`Duplicate group-winner seed "${ordinalSeedLabel(seed)}" in R32 matrix`);
+          winnerSeeds.add(seed);
+        }
       });
     });
+    const legacyAnnexWildcardSlots = Object.keys(ANNEX_C_COL_TO_R32_SLOT).length;
+    const legacyAnnexCombinations = Object.keys(ANNEX_C).length;
+    if (thirdSeedCount !== legacyAnnexWildcardSlots) {
+      warnings.push(`R32 matrix has ${thirdSeedCount} third-place wildcard slots, expected ${legacyAnnexWildcardSlots} from the 2026 wildcard model`);
+    }
+    if (!legacyAnnexCombinations) warnings.push("Third-place assignment table is unavailable");
     return warnings;
   }, [rounds]);
 
@@ -2631,16 +2664,16 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const roundMap = new Map(rounds.map(round => [round.key, round.cards]));
   const pick = (cards: KnockoutCardModel[], indices: number[]) => indices.map(i => cards[i]).filter(Boolean);
   const leftRoad = [
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [0, 3, 2, 5, 8, 9, 10, 11]) },
-    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: pick(roundMap.get("r16") || [], [0, 1, 4, 5]) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "Matches 1-8", cards: pick(roundMap.get("r32") || [], [0, 1, 2, 3, 4, 5, 6, 7]) },
+    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "W1-W8", cards: pick(roundMap.get("r16") || [], [0, 1, 2, 3]) },
     { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: pick(roundMap.get("qf") || [], [0, 1]) },
     { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: pick(roundMap.get("sf") || [], [0]) },
   ];
   const rightRoad = [
     { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: pick(roundMap.get("sf") || [], [1]) },
     { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: pick(roundMap.get("qf") || [], [2, 3]) },
-    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: pick(roundMap.get("r16") || [], [2, 3, 6, 7]) },
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [1, 4, 6, 7, 12, 15, 13, 14]) },
+    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "W9-W16", cards: pick(roundMap.get("r16") || [], [4, 5, 6, 7]) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "Matches 9-16", cards: pick(roundMap.get("r32") || [], [8, 9, 10, 11, 12, 13, 14, 15]) },
   ];
   const finalCard = (roundMap.get("final") || [])[0];
   const thirdCard = (roundMap.get("third") || [])[0];

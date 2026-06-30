@@ -58,7 +58,7 @@ const KO_ROUNDS: {
   short: string;
   matchNumbers: number[];
 }[] = [
-  { key: "r32", dataRound: "Round of 32", label: "Round of 32", short: "R32", matchNumbers: [73, 75, 74, 77, 76, 78, 79, 80, 83, 84, 81, 82, 86, 88, 85, 87] },
+  { key: "r32", dataRound: "Round of 32", label: "Round of 32", short: "R32", matchNumbers: [73, 76, 74, 75, 78, 77, 79, 80, 82, 81, 84, 83, 85, 88, 86, 87] },
   { key: "r16", dataRound: "Round of 16", label: "Round of 16", short: "R16", matchNumbers: [89, 90, 91, 92, 93, 94, 95, 96] },
   { key: "qf", dataRound: "Quarter-final", label: "Quarterfinals", short: "QF", matchNumbers: [97, 98, 99, 100] },
   { key: "sf", dataRound: "Semi-final", label: "Semifinals", short: "SF", matchNumbers: [101, 102] },
@@ -67,14 +67,14 @@ const KO_ROUNDS: {
 ];
 
 const R32_SEEDS = [
-  ["2A", "2B"], ["1F", "2C"], ["1E", "3rd"], ["1I", "3rd"],
-  ["1C", "2F"], ["2E", "2I"], ["1A", "3rd"], ["1L", "3rd"],
-  ["2K", "2L"], ["1H", "2J"], ["1D", "3rd"], ["1G", "3rd"],
-  ["1J", "2H"], ["2D", "2G"], ["1B", "3rd"], ["1K", "3rd"],
+  ["2A", "2B"], ["1C", "2F"], ["1E", "3rd"], ["1F", "2C"],
+  ["2E", "2I"], ["1I", "3rd"], ["1A", "3rd"], ["1L", "3rd"],
+  ["1G", "3rd"], ["1D", "3rd"], ["1H", "2J"], ["2K", "2L"],
+  ["1B", "3rd"], ["2D", "2G"], ["1J", "2H"], ["1K", "3rd"],
 ] as const;
 
 const KO_SOURCE_PAIRS: Partial<Record<KnockoutRoundKey, [number, number][]>> = {
-  r16: [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9], [10, 11], [12, 13], [14, 15]],
+  r16: [[2, 5], [0, 3], [1, 4], [6, 7], [11, 10], [9, 8], [14, 13], [12, 15]],
   qf: [[0, 1], [4, 5], [2, 3], [6, 7]],
   sf: [[0, 1], [2, 3]],
   final: [[0, 1]],
@@ -176,11 +176,11 @@ const ANNEX_C: Record<string, string> = {
 // R32 slots with "3rd": [2→1E, 3→1I, 6→1A, 7→1L, 10→1D, 11→1G, 14→1B, 15→1K]
 const ANNEX_C_COL_TO_R32_SLOT: Record<number, number> = {
   0: 6,   // column 0 (1A) → R32 slot 6
-  1: 14,  // column 1 (1B) → R32 slot 14
-  2: 10,  // column 2 (1D) → R32 slot 10
+  1: 12,  // column 1 (1B) → R32 slot 12
+  2: 9,   // column 2 (1D) → R32 slot 9
   3: 2,   // column 3 (1E) → R32 slot 2
-  4: 11,  // column 4 (1G) → R32 slot 11
-  5: 3,   // column 5 (1I) → R32 slot 3
+  4: 8,   // column 4 (1G) → R32 slot 8
+  5: 5,   // column 5 (1I) → R32 slot 5
   6: 15,  // column 6 (1K) → R32 slot 15
   7: 7,   // column 7 (1L) → R32 slot 7
 };
@@ -2835,13 +2835,19 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const selectedCard = allCards.find(card => card.key === selectedPathKey) || activeRoundModel?.cards[0];
 
   function nextDestination(card: KnockoutCardModel): string {
-    if (card.round === "r32") return `Winner advances to R16 Match ${89 + Math.floor(card.roundIndex / 2)}`;
+    if (card.round === "r32") {
+      const r16Index = KO_SOURCE_PAIRS.r16?.findIndex(pair => pair.includes(card.roundIndex)) ?? -1;
+      return `Winner advances to R16 Match ${r16Index >= 0 ? KO_ROUNDS[1].matchNumbers[r16Index] : "TBD"}`;
+    }
     if (card.round === "r16") {
       const qfIndex = KO_SOURCE_PAIRS.qf?.findIndex(pair => pair.includes(card.roundIndex)) ?? -1;
       return `Winner advances to QF Match ${qfIndex >= 0 ? KO_ROUNDS[2].matchNumbers[qfIndex] : "TBD"}`;
     }
-    if (card.round === "qf") return `Winner advances to SF Match ${101 + Math.floor(card.roundIndex / 2)}`;
-    if (card.round === "sf") return card.roundIndex === 0 ? "Winner advances to the Final" : "Winner advances to the Final";
+    if (card.round === "qf") {
+      const sfIndex = KO_SOURCE_PAIRS.sf?.findIndex(pair => pair.includes(card.roundIndex)) ?? -1;
+      return `Winner advances to SF Match ${sfIndex >= 0 ? KO_ROUNDS[3].matchNumbers[sfIndex] : "TBD"}`;
+    }
+    if (card.round === "sf") return "Winner advances to the Final";
     if (card.round === "third") return "Winner claims third place";
     return "Winner becomes champion";
   }
@@ -2869,17 +2875,18 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const selectedPathKeys = new Set(selectedPath.map(card => card.key));
   const shouldDim = !!selectedPathKey;
   const roundMap = new Map(rounds.map(round => [round.key, round.cards]));
+  const pick = (cards: KnockoutCardModel[], indices: number[]) => indices.map(i => cards[i]).filter(Boolean);
   const leftRoad = [
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: (roundMap.get("r32") || []).slice(0, 8) },
-    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: (roundMap.get("r16") || []).slice(0, 4) },
-    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: (roundMap.get("qf") || []).slice(0, 2) },
-    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: (roundMap.get("sf") || []).slice(0, 1) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [2, 5, 0, 3, 11, 10, 9, 8]) },
+    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: pick(roundMap.get("r16") || [], [0, 1, 4, 5]) },
+    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: pick(roundMap.get("qf") || [], [0, 1]) },
+    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: pick(roundMap.get("sf") || [], [0]) },
   ];
   const rightRoad = [
-    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: (roundMap.get("sf") || []).slice(1, 2) },
-    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: (roundMap.get("qf") || []).slice(2, 4) },
-    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: (roundMap.get("r16") || []).slice(4, 8) },
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: (roundMap.get("r32") || []).slice(8, 16) },
+    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: pick(roundMap.get("sf") || [], [1]) },
+    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: pick(roundMap.get("qf") || [], [2, 3]) },
+    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: pick(roundMap.get("r16") || [], [2, 3, 6, 7]) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [1, 4, 6, 7, 14, 13, 12, 15]) },
   ];
   const finalCard = (roundMap.get("final") || [])[0];
   const thirdCard = (roundMap.get("third") || [])[0];

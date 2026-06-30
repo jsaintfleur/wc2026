@@ -1419,14 +1419,6 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
   onPlayerClick: (playerName: string, teamName: string) => void;
   onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
 }) {
-  const [now, setNow] = useState(0);
-  const mounted = now > 0;
-  useEffect(() => {
-    queueMicrotask(() => setNow(Date.now()));
-    const id = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 1000);
-    return () => clearInterval(id);
-  }, []);
-
   const fl = (t: string) => data.flags[t] || "⚽";
 
   /* -- tournament progress stats ---------------------------------- */
@@ -1448,24 +1440,81 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
 
   /* -- live matches ----------------------------------------------- */
   const liveMatches = useMemo(() => {
-    const live: { match: GroupStageMatch; fixture: LiveFixture }[] = [];
+    const live: Array<{
+      type: "gs" | "ko";
+      match: GroupStageMatch | KnockoutMatch;
+      fixture: LiveFixture;
+      home: string;
+      away: string;
+      venue: string;
+    }> = [];
     for (const m of data.gs) {
       const f = findLive(m, fixtures);
-      if (f && LIVE_STATUSES.has(f.status)) live.push({ match: m, fixture: f });
+      if (f && LIVE_STATUSES.has(f.status)) {
+        live.push({
+          type: "gs",
+          match: m,
+          fixture: f,
+          home: m.t1,
+          away: m.t2,
+          venue: data.venues[m.v]?.common || m.v,
+        });
+      }
     }
-    return live;
-  }, [data.gs, fixtures, findLive]);
+    for (const m of data.ko) {
+      const f = findLive({ ts: m.ts, v: m.v }, fixtures);
+      if (f && LIVE_STATUSES.has(f.status)) {
+        live.push({
+          type: "ko",
+          match: m,
+          fixture: f,
+          home: f.home || "TBD",
+          away: f.away || "TBD",
+          venue: data.venues[m.v]?.common || m.v,
+        });
+      }
+    }
+    return live.sort((a, b) => a.match.ts - b.match.ts);
+  }, [data.gs, data.ko, data.venues, fixtures, findLive]);
 
   /* -- next match countdown --------------------------------------- */
   const nextMatch = useMemo(() => {
-    let nextGs: GroupStageMatch | null = null;
-    for (const m of data.gs) { if (m.ts > now && (!nextGs || m.ts < nextGs.ts)) nextGs = m; }
-    let nextKo: KnockoutMatch | null = null;
-    for (const k of data.ko) { if (k.ts > now && (!nextKo || k.ts < nextKo.ts)) nextKo = k; }
-    if (nextGs && (!nextKo || nextGs.ts <= nextKo.ts)) return { type: "gs" as const, match: nextGs, ts: nextGs.ts };
-    if (nextKo) return { type: "ko" as const, match: nextKo, ts: nextKo.ts };
-    return null;
-  }, [data.gs, data.ko, now]);
+    const scheduled = [
+      ...data.gs.map(match => {
+        const fixture = findLive(match, fixtures);
+        return {
+          type: "gs" as const,
+          match,
+          fixture,
+          ts: match.ts,
+          home: match.t1,
+          away: match.t2,
+          venue: data.venues[match.v]?.common || match.v,
+          iso: match.iso,
+          et: match.et,
+          round: `Group ${match.g}`,
+        };
+      }),
+      ...data.ko.map(match => {
+        const fixture = findLive({ ts: match.ts, v: match.v }, fixtures);
+        return {
+          type: "ko" as const,
+          match,
+          fixture,
+          ts: match.ts,
+          home: fixture?.home || "TBD",
+          away: fixture?.away || "TBD",
+          venue: data.venues[match.v]?.common || match.v,
+          iso: match.iso,
+          et: match.et,
+          round: match.round,
+        };
+      }),
+    ];
+    return scheduled
+      .filter(item => item.ts > nowMs && !DONE_STATUSES.has(item.fixture?.status || ""))
+      .sort((a, b) => a.ts - b.ts)[0] || null;
+  }, [data.gs, data.ko, data.venues, fixtures, findLive, nowMs]);
 
   /* -- recent results (last 6 completed matches) ------------------ */
   const recentResults = useMemo(() => {
@@ -1492,24 +1541,14 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
   /* -- countdown math --------------------------------------------- */
   const countdown = useMemo(() => {
     if (!nextMatch) return null;
-    const diff = Math.max(0, nextMatch.ts - now);
+    const diff = Math.max(0, nextMatch.ts - nowMs);
     const totalSec = Math.floor(diff / 1000);
     const d = Math.floor(totalSec / 86400);
     const h = Math.floor((totalSec % 86400) / 3600);
     const m = Math.floor((totalSec % 3600) / 60);
     const s = totalSec % 60;
     return { d, h, m, s };
-  }, [nextMatch, now]);
-
-  /* -- quick access items ----------------------------------------- */
-  const quickItems: { icon: AppIconName; label: string; key: ViewType }[] = [
-    { icon: "bracket", label: "Knockout", key: "bracket" },
-    { icon: "groups", label: "Groups", key: "groups" },
-    { icon: "calendar", label: "Matches", key: "schedule" },
-    { icon: "stats", label: "Stats", key: "stats" },
-    { icon: "teams", label: "Teams", key: "teams" },
-    { icon: "more", label: "More", key: "more" },
-  ];
+  }, [nextMatch, nowMs]);
 
   const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -1519,24 +1558,29 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
       {/* ── Section 1: Live Match or Next-Match Countdown ────── */}
       {liveMatches.length > 0 ? (
         <section className="home-dash__live" aria-label="Live matches">
-          {liveMatches.slice(0, 2).map(({ match, fixture }, i) => (
-            <button key={i} type="button" className="home-live-card" onClick={() => onMatchClick(match, fixture)}>
+          {liveMatches.slice(0, 2).map(({ type, match, fixture, home, away, venue }, i) => (
+            <button
+              key={i}
+              type="button"
+              className="home-live-card"
+              onClick={() => type === "gs" ? onMatchClick(match as GroupStageMatch, fixture) : onNavigate("schedule")}
+            >
               <div className="home-live-card__badge">
                 <span className="home-live-card__pulse" />
                 {fixture.status === "HT" ? "HT" : `${fixture.elapsed || ""}'`}
               </div>
               <div className="home-live-card__teams">
                 <div className="home-live-card__side">
-                  <span className="home-live-card__flag">{fl(match.t1)}</span>
-                  <span className="home-live-card__name">{match.t1}</span>
+                  <span className="home-live-card__flag">{fl(home)}</span>
+                  <span className="home-live-card__name">{home}</span>
                 </div>
                 <div className="home-live-card__score">{fixture.gh ?? 0} – {fixture.ga ?? 0}</div>
                 <div className="home-live-card__side">
-                  <span className="home-live-card__flag">{fl(match.t2)}</span>
-                  <span className="home-live-card__name">{match.t2}</span>
+                  <span className="home-live-card__flag">{fl(away)}</span>
+                  <span className="home-live-card__name">{away}</span>
                 </div>
               </div>
-              <div className="home-live-card__venue">{data.venues[match.v]?.common || match.v}</div>
+              <div className="home-live-card__venue">{venue}</div>
             </button>
           ))}
         </section>
@@ -1544,27 +1588,21 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
         <section className="home-dash__next" aria-label="Next match countdown">
           <div className="home-next__eyebrow">Next Match</div>
           <div className="home-next__countdown">
-            {mounted && countdown.d > 0 && <><span className="home-next__digit">{countdown.d}</span><span className="home-next__unit">d</span></>}
-            <span className="home-next__digit">{mounted ? pad(countdown.h) : "--"}</span><span className="home-next__sep">:</span>
-            <span className="home-next__digit">{mounted ? pad(countdown.m) : "--"}</span><span className="home-next__sep">:</span>
-            <span className="home-next__digit">{mounted ? pad(countdown.s) : "--"}</span>
+            {countdown.d > 0 && <><span className="home-next__digit">{countdown.d}</span><span className="home-next__unit">d</span></>}
+            <span className="home-next__digit">{pad(countdown.h)}</span><span className="home-next__sep">:</span>
+            <span className="home-next__digit">{pad(countdown.m)}</span><span className="home-next__sep">:</span>
+            <span className="home-next__digit">{pad(countdown.s)}</span>
           </div>
-          {nextMatch.type === "gs" ? (
-            <div className="home-next__match">
-              <span className="home-next__team"><span>{fl(nextMatch.match.t1)}</span> {nextMatch.match.t1}</span>
-              <span className="home-next__vs">vs</span>
-              <span className="home-next__team"><span>{fl(nextMatch.match.t2)}</span> {nextMatch.match.t2}</span>
-            </div>
-          ) : (
-            <div className="home-next__match"><span className="home-next__round">{nextMatch.match.round}</span></div>
-          )}
+          <div className="home-next__match">
+            <span className="home-next__team"><span>{fl(nextMatch.home)}</span> {nextMatch.home}</span>
+            <span className="home-next__vs">vs</span>
+            <span className="home-next__team"><span>{fl(nextMatch.away)}</span> {nextMatch.away}</span>
+          </div>
+          <div className="home-next__round">{nextMatch.round}</div>
           <div className="home-next__meta">
             {(() => {
-              const iso = nextMatch.type === "gs" ? nextMatch.match.iso : nextMatch.match.iso;
-              const d = parseISO(iso);
-              const et = nextMatch.type === "gs" ? nextMatch.match.et : nextMatch.match.et;
-              const v = data.venues[nextMatch.type === "gs" ? nextMatch.match.v : nextMatch.match.v];
-              return `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]} · ${et}${v ? ` · ${v.common}` : ""}`;
+              const d = parseISO(nextMatch.iso);
+              return `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]} · ${nextMatch.et}${nextMatch.venue ? ` · ${nextMatch.venue}` : ""}`;
             })()}
           </div>
         </section>
@@ -1595,17 +1633,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
         </div>
       </section>
 
-      {/* ── Section 3: Quick Access Grid ─────────────────────── */}
-      <section className="home-dash__quick" aria-label="Quick access">
-        {quickItems.map(item => (
-          <button key={item.key} type="button" className="home-quick__btn" onClick={() => onNavigate(item.key)}>
-            <span className="home-quick__icon"><AppIcon name={item.icon} /></span>
-            <span className="home-quick__label">{item.label}</span>
-          </button>
-        ))}
-      </section>
-
-      {/* ── Section 4: Golden Boot / Top Assist ──────────────── */}
+      {/* ── Section 3: Golden Boot / Top Assist ──────────────── */}
       {(topScorer || topAssister) && (
         <section className="home-dash__leaders">
           <h3 className="home-section__title">Tournament Leaders</h3>
@@ -1640,7 +1668,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
         </section>
       )}
 
-      {/* ── Section 5: Latest Results ────────────────────────── */}
+      {/* ── Section 4: Latest Results ────────────────────────── */}
       {recentResults.length > 0 && (
         <section className="home-dash__results">
           <div className="home-section__header">
@@ -1669,7 +1697,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
         </section>
       )}
 
-      {/* ── Section 6: Tournament Snapshot ────────────────────── */}
+      {/* ── Section 5: Tournament Snapshot ────────────────────── */}
       <section className="home-dash__snapshot">
         <div className="home-section__header">
           <h3 className="home-section__title">Tournament</h3>

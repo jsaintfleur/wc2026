@@ -1,120 +1,203 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canon, canonPlayer, PLAYER_NORM } from "@/lib/merge";
 
-// ESPN scoring stats page URL for FIFA World Cup 2026
-const ESPN_URL = "https://www.espn.com/soccer/stats/_/league/FIFA.WORLD/view/scoring";
+// ESPN structured JSON APIs — free, no auth, real-time
+const ESPN_STATS_URL =
+  "https://site.web.api.espn.com/apis/site/v2/sports/soccer/fifa.world/statistics?season=2026&limit=50";
+const ESPN_SCOREBOARD_URL =
+  "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
 
-// Matches the structured text output from ESPN's scoring page
-interface EspnScorer { name: string; team: string; played: number; goals: number }
-interface EspnAssist { name: string; team: string; played: number; assists: number }
+interface EspnScorer {
+  name: string;
+  team: string;
+  goals: number;
+  assists: number;
+  played: number;
+}
+
+interface MatchGoal {
+  player: string;
+  team: string;
+  minute: number;
+}
+
+interface EspnMatch {
+  date: string;
+  home: string;
+  away: string;
+  homeScore: number;
+  awayScore: number;
+  status: string;
+  goals: MatchGoal[];
+}
+
+interface Discrepancy {
+  player: string;
+  team: string;
+  espnGoals: number;
+  ourGoals: number;
+  delta: number;
+  possibleCause: string;
+}
+
 interface VerifyResult {
   ok: boolean;
   ts: number;
+  source: string;
   matchesFinished: number;
   matchesWithEvents: number;
   totalGoals: number;
   espnScorers: EspnScorer[];
-  ourScorers: { name: string; team: string; goals: number }[];
-  discrepancies: {
-    player: string;
-    team: string;
-    espnGoals: number;
-    ourGoals: number;
-    delta: number;
-    possibleCause: string;
+  ourScorers: { name: string; team: string; goals: number; assists: number }[];
+  discrepancies: Discrepancy[];
+  matchDiscrepancies: {
+    date: string;
+    home: string;
+    away: string;
+    espnScore: string;
+    ourScore: string;
   }[];
   unmappedNames: { raw: string; team: string; goals: number }[];
   newNameSuggestions: { raw: string; suggested: string; team: string; confidence: string }[];
 }
 
-// Fetch and parse ESPN scoring stats
+// Fetch top scorers from ESPN's structured JSON API
 async function fetchEspnScorers(): Promise<EspnScorer[]> {
-  const res = await fetch(ESPN_URL, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-      "Accept": "text/html",
-    },
-    next: { revalidate: 0 },
-  });
-  if (!res.ok) return [];
-  const html = await res.text();
+  try {
+    const res = await fetch(ESPN_STATS_URL, {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
 
-  // Parse the Top Scorers table from ESPN HTML
-  // ESPN uses a consistent structure: <td> cells with player name, team, P, G
-  const scorers: EspnScorer[] = [];
+    const scorers: EspnScorer[] = [];
+    // ESPN returns categories → leaders → entries
+    const categories = data?.categories || data?.leaders || [];
+    for (const cat of categories) {
+      // "scoring" category has goals data
+      if (cat.name !== "scoring" && cat.displayName !== "Scoring") continue;
 
-  // Extract from the structured data — ESPN embeds JSON-LD or we parse the table
-  // Fall back to regex-based extraction from the rendered HTML
-  const tableRegex = /class="Table"[^>]*>[\s\S]*?<\/table>/gi;
-  const tables = html.match(tableRegex) || [];
+      const leaders = cat.leaders || [];
+      for (const leader of leaders) {
+        // "goals" sub-category
+        if (leader.name !== "goals" && leader.displayName !== "Goals") continue;
 
-  // First table is Top Scorers
-  const firstTable = tables[0];
-  if (firstTable) {
-    const rowRegex = /<tr[^>]*class="Table__TR[^"]*"[^>]*>([\s\S]*?)<\/tr>/gi;
-    let match;
-    while ((match = rowRegex.exec(firstTable)) !== null) {
-      const cells = match[1].match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
-      if (cells.length >= 4) {
-        const getText = (cell: string) => cell.replace(/<[^>]*>/g, "").trim();
-        const nameCell = getText(cells[1] ?? "");
-        const teamCell = getText(cells[2] ?? "");
-        const played = parseInt(getText(cells[3] ?? ""), 10);
-        const goals = parseInt(getText(cells[4] ?? cells[3] ?? ""), 10);
+        for (const entry of leader.leaders || []) {
+          const athlete = entry.athlete || {};
+          const team = entry.team || {};
+          const stats = entry.statistics || [];
+          // Stats order: [APP, G, A] based on the categories header
+          const played = parseInt(stats[0], 10) || 0;
+          const goals = parseInt(stats[1], 10) || 0;
+          const assists = parseInt(stats[2], 10) || 0;
 
-        if (nameCell && teamCell && !isNaN(goals) && goals > 0) {
-          scorers.push({ name: nameCell, team: teamCell, played, goals });
+          scorers.push({
+            name: athlete.displayName || athlete.shortName || "",
+            team: team.displayName || team.name || "",
+            goals,
+            assists,
+            played,
+          });
         }
       }
     }
+    return scorers;
+  } catch (err) {
+    console.error("[verify] ESPN stats fetch failed:", err);
+    return [];
   }
+}
 
-  // If HTML parsing failed, try the text-based approach via the page API
-  if (scorers.length === 0) {
-    // Parse from the simple text pattern in ESPN pages
-    const lines = html.split("\n");
-    let inScorers = false;
-    for (const line of lines) {
-      if (line.includes("Top Scorers")) inScorers = true;
-      if (line.includes("Top Assists")) break;
-      if (!inScorers) continue;
+// Fetch match results from ESPN scoreboard for a specific date range
+async function fetchEspnMatches(startDate: string, endDate: string): Promise<EspnMatch[]> {
+  const matches: EspnMatch[] = [];
+  try {
+    // ESPN accepts date ranges: ?dates=YYYYMMDD-YYYYMMDD
+    const url = `${ESPN_SCOREBOARD_URL}?dates=${startDate}-${endDate}`;
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
 
-      // Look for JSON data embedded in the page
-      const jsonMatch = line.match(/"displayName":"([^"]+)".*?"goals":(\d+)/);
-      if (jsonMatch) {
-        scorers.push({ name: jsonMatch[1], team: "", played: 0, goals: parseInt(jsonMatch[2], 10) });
+    for (const event of data?.events || []) {
+      const comp = event.competitions?.[0];
+      if (!comp) continue;
+
+      const homeTeam = comp.competitors?.find((c: { homeAway: string }) => c.homeAway === "home");
+      const awayTeam = comp.competitors?.find((c: { homeAway: string }) => c.homeAway === "away");
+      if (!homeTeam || !awayTeam) continue;
+
+      const goals: MatchGoal[] = [];
+      // Extract goal details from key events or details
+      for (const detail of comp.details || []) {
+        if (detail.type?.text === "Goal" || detail.type?.id === "1") {
+          const scorer = detail.athletesInvolved?.[0];
+          if (scorer) {
+            goals.push({
+              player: scorer.displayName || scorer.shortName || "",
+              team: detail.team?.displayName || "",
+              minute: detail.clock?.displayValue
+                ? parseInt(detail.clock.displayValue, 10)
+                : 0,
+            });
+          }
+        }
       }
-    }
-  }
 
-  return scorers;
+      matches.push({
+        date: event.date || "",
+        home: homeTeam.team?.displayName || "",
+        away: awayTeam.team?.displayName || "",
+        homeScore: parseInt(homeTeam.score, 10) || 0,
+        awayScore: parseInt(awayTeam.score, 10) || 0,
+        status: comp.status?.type?.name || "",
+        goals,
+      });
+    }
+  } catch (err) {
+    console.error("[verify] ESPN scoreboard fetch failed:", err);
+  }
+  return matches;
 }
 
 // Fetch our live API data and compute scorers
-async function fetchOurScorers(baseUrl: string): Promise<{
-  scorers: { name: string; team: string; goals: number }[];
-  finished: number;
-  withEvents: number;
-  totalGoals: number;
-  unmapped: { raw: string; team: string; goals: number }[];
-}> {
-  const res = await fetch(`${baseUrl}/api/live?bust=${Date.now()}`, { next: { revalidate: 0 } });
-  if (!res.ok) return { scorers: [], finished: 0, withEvents: 0, totalGoals: 0, unmapped: [] };
+async function fetchOurData(baseUrl: string) {
+  const res = await fetch(`${baseUrl}/api/live?bust=${Date.now()}`, {
+    next: { revalidate: 0 },
+  });
+  if (!res.ok) return { scorers: [], finished: 0, withEvents: 0, totalGoals: 0, unmapped: [], matchScores: [] };
   const data = await res.json();
 
   const DONE = new Set(["FT", "AET", "PEN", "PEN_LIVE", "WO", "AWD"]);
-  const scorerMap: Record<string, { name: string; team: string; goals: number }> = {};
+  const scorerMap: Record<string, { name: string; team: string; goals: number; assists: number }> = {};
   const unmapped: { raw: string; team: string; goals: number }[] = [];
-  let finished = 0, withEvents = 0, totalGoals = 0;
+  const matchScores: { home: string; away: string; gh: number; ga: number; date: string }[] = [];
+  let finished = 0;
+  let withEvents = 0;
+  let totalGoals = 0;
 
-  // Known PLAYER_NORM values for detecting unmapped names
   const knownNorms = new Set(Object.keys(PLAYER_NORM));
-  const looksGarbled = (name: string) => /[A-Z][a-z]*[aeiouvk]{2,}[^aeiouy\s]|[bcdfghjklmnpqrstvwxyz]{4}/i.test(name);
+  const looksGarbled = (name: string) =>
+    /[A-Z][a-z]*[aeiouvk]{2,}[^aeiouy\s]|[bcdfghjklmnpqrstvwxyz]{4}/i.test(name);
 
   for (const f of data.fixtures || []) {
     if (!DONE.has(f.status)) continue;
     finished++;
-    totalGoals += (f.gh || 0) + (f.ga || 0);
+    const gh = f.gh || 0;
+    const ga = f.ga || 0;
+    totalGoals += gh + ga;
+
+    matchScores.push({
+      home: f.homeTeam || f.home || "",
+      away: f.awayTeam || f.away || "",
+      gh,
+      ga,
+      date: f.date || "",
+    });
+
     if (!f.events || f.events.length === 0) continue;
     withEvents++;
 
@@ -128,53 +211,59 @@ async function fetchOurScorers(baseUrl: string): Promise<{
       const team = ev.team ? canon(ev.team) : ev.team;
       const key = `${normalized}|${team}`;
 
-      if (!scorerMap[key]) scorerMap[key] = { name: normalized, team, goals: 0 };
+      if (!scorerMap[key]) scorerMap[key] = { name: normalized, team, goals: 0, assists: 0 };
       scorerMap[key].goals++;
 
-      // Track names that might be garbled and aren't in PLAYER_NORM
+      // Track garbled names not in PLAYER_NORM
       if (normalized === ev.player && !knownNorms.has(ev.player) && looksGarbled(ev.player)) {
-        const existing = unmapped.find(u => u.raw === ev.player);
+        const existing = unmapped.find((u) => u.raw === ev.player);
         if (existing) existing.goals++;
         else unmapped.push({ raw: ev.player, team, goals: 1 });
+      }
+
+      // Count assists from events
+      if (ev.assist && ev.assist !== ev.player) {
+        const assistNorm = canonPlayer(ev.assist);
+        const assistKey = `${assistNorm}|${team}`;
+        if (!scorerMap[assistKey]) scorerMap[assistKey] = { name: assistNorm, team, goals: 0, assists: 0 };
+        scorerMap[assistKey].assists++;
       }
     }
   }
 
   const scorers = Object.values(scorerMap).sort((a, b) => b.goals - a.goals);
-  return { scorers, finished, withEvents, totalGoals, unmapped };
+  return { scorers, finished, withEvents, totalGoals, unmapped, matchScores };
 }
 
-// Fuzzy name matching for suggesting PLAYER_NORM entries
-function suggestMatch(garbled: string, team: string, espnScorers: EspnScorer[]): { suggested: string; confidence: string } | null {
-  // Filter ESPN scorers by same team
-  const sameTeam = espnScorers.filter(s => {
-    const ct = canon(s.team);
-    const gt = canon(team);
-    return ct === gt;
-  });
-
+// Fuzzy match garbled names against ESPN data for PLAYER_NORM suggestions
+function suggestMatch(
+  garbled: string,
+  team: string,
+  espnScorers: EspnScorer[],
+): { suggested: string; confidence: string } | null {
+  const sameTeam = espnScorers.filter((s) => canon(s.team) === canon(team));
   if (sameTeam.length === 0) return null;
 
-  // Try initial-letter matching
   const garbledParts = garbled.split(/\s+/);
-  const garbledInitials = garbledParts.map(p => p[0]?.toLowerCase()).join("");
+  const garbledInitials = garbledParts.map((p) => p[0]?.toLowerCase()).join("");
 
   for (const candidate of sameTeam) {
     const candParts = candidate.name.split(/\s+/);
-    const candInitials = candParts.map(p => p[0]?.toLowerCase()).join("");
+    const candInitials = candParts.map((p) => p[0]?.toLowerCase()).join("");
 
-    // Same initials and same number of name parts
+    // Same initials and same number of name parts → high confidence
     if (garbledInitials === candInitials && garbledParts.length === candParts.length) {
       return { suggested: candidate.name, confidence: "high" };
     }
 
-    // Same first letter and similar length
-    if (garbledParts[0]?.[0]?.toLowerCase() === candParts[0]?.[0]?.toLowerCase() &&
-        Math.abs(garbled.length - candidate.name.length) <= 3) {
+    // Same first letter and similar length → medium confidence
+    if (
+      garbledParts[0]?.[0]?.toLowerCase() === candParts[0]?.[0]?.toLowerCase() &&
+      Math.abs(garbled.length - candidate.name.length) <= 3
+    ) {
       return { suggested: candidate.name, confidence: "medium" };
     }
   }
-
   return null;
 }
 
@@ -188,21 +277,23 @@ export async function GET(request: NextRequest) {
   try {
     const baseUrl = request.nextUrl.origin;
 
-    // Fetch both data sources in parallel
+    // Fetch ESPN top scorers + our data in parallel
     const [espnScorers, ourData] = await Promise.all([
       fetchEspnScorers(),
-      fetchOurScorers(baseUrl),
+      fetchOurData(baseUrl),
     ]);
 
-    // Build comparison
-    const discrepancies: VerifyResult["discrepancies"] = [];
-    const newNameSuggestions: VerifyResult["newNameSuggestions"] = [];
+    // Also fetch recent ESPN match results for score-level verification
+    // Cover the full tournament window (Jun 11 – today)
+    const espnMatches = await fetchEspnMatches("20260611", new Date().toISOString().slice(0, 10).replace(/-/g, ""));
 
-    // Compare top scorers if ESPN data is available
+    // Build discrepancies: compare top scorers
+    const discrepancies: Discrepancy[] = [];
     if (espnScorers.length > 0) {
       for (const espn of espnScorers) {
-        const ours = ourData.scorers.find(s => {
-          const nameMatch = s.name.toLowerCase() === espn.name.toLowerCase() ||
+        const ours = ourData.scorers.find((s) => {
+          const nameMatch =
+            s.name.toLowerCase() === espn.name.toLowerCase() ||
             s.name.toLowerCase().includes(espn.name.split(" ").pop()?.toLowerCase() || "") ||
             espn.name.toLowerCase().includes(s.name.split(" ").pop()?.toLowerCase() || "");
           const teamMatch = canon(s.team) === canon(espn.team);
@@ -225,13 +316,46 @@ export async function GET(request: NextRequest) {
             espnGoals: espn.goals,
             ourGoals: ours.goals,
             delta: ours.goals - espn.goals,
-            possibleCause: ours.goals < espn.goals ? "missing_events_or_name_split" : "overcounting",
+            possibleCause:
+              ours.goals < espn.goals ? "missing_events_or_name_split" : "overcounting_or_espn_delayed",
           });
         }
       }
     }
 
-    // Generate suggestions for unmapped garbled names
+    // Build match-level discrepancies by comparing scores
+    const matchDiscrepancies: VerifyResult["matchDiscrepancies"] = [];
+    for (const espnMatch of espnMatches) {
+      if (espnMatch.status !== "STATUS_FULL_TIME") continue;
+
+      // Find matching fixture in our data by team names
+      const ourMatch = ourData.matchScores.find((m) => {
+        const h1 = canon(espnMatch.home);
+        const a1 = canon(espnMatch.away);
+        const h2 = canon(m.home);
+        const a2 = canon(m.away);
+        return (h1 === h2 && a1 === a2) || (h1 === a2 && a1 === h2);
+      });
+
+      if (ourMatch) {
+        const espnScore = `${espnMatch.homeScore}-${espnMatch.awayScore}`;
+        const ourScore = `${ourMatch.gh}-${ourMatch.ga}`;
+        // Check both orientations since home/away may differ
+        const ourScoreFlipped = `${ourMatch.ga}-${ourMatch.gh}`;
+        if (espnScore !== ourScore && espnScore !== ourScoreFlipped) {
+          matchDiscrepancies.push({
+            date: espnMatch.date,
+            home: espnMatch.home,
+            away: espnMatch.away,
+            espnScore,
+            ourScore,
+          });
+        }
+      }
+    }
+
+    // Generate PLAYER_NORM suggestions for garbled names
+    const newNameSuggestions: VerifyResult["newNameSuggestions"] = [];
     for (const u of ourData.unmapped) {
       const suggestion = suggestMatch(u.raw, u.team, espnScorers);
       if (suggestion) {
@@ -247,12 +371,14 @@ export async function GET(request: NextRequest) {
     const result: VerifyResult = {
       ok: true,
       ts: Date.now(),
+      source: "ESPN JSON API (site.web.api.espn.com)",
       matchesFinished: ourData.finished,
       matchesWithEvents: ourData.withEvents,
       totalGoals: ourData.totalGoals,
-      espnScorers: espnScorers.slice(0, 20),
-      ourScorers: ourData.scorers.slice(0, 20),
+      espnScorers: espnScorers.slice(0, 25),
+      ourScorers: ourData.scorers.slice(0, 25),
       discrepancies,
+      matchDiscrepancies,
       unmappedNames: ourData.unmapped,
       newNameSuggestions,
     };
@@ -260,6 +386,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   } catch (err) {
     console.error("[verify] failed:", err);
-    return NextResponse.json({ ok: false, error: "verification failed", detail: String(err) }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "verification failed", detail: String(err) },
+      { status: 500 },
+    );
   }
 }

@@ -1,5 +1,29 @@
 import type { LiveFixture, MatchEvent, PlayerMatchStat, TournamentData } from "./data";
-import { canon, canonPlayer, nrm } from "./merge";
+import { canon, canonPlayer } from "./merge";
+
+// Non-decomposable Unicode letters that NFD normalization doesn't split.
+// We map them to their ASCII equivalents before stripping combining marks.
+const SPECIAL_CHARS: Record<string, string> = {
+  ø: "o", Ø: "O", đ: "d", Đ: "D", ð: "d", Ð: "D",
+  ł: "l", Ł: "L", ı: "i", ß: "ss", æ: "ae", Æ: "AE",
+  œ: "oe", Œ: "OE", þ: "th", Þ: "Th",
+};
+
+// Strip all diacritics and special characters to produce an ASCII-lowercase
+// key suitable for deduplication. Unlike nrm() in merge.ts (which was
+// designed for team name lookup), this handles non-decomposable letters
+// like ø, đ, and ł that are common in player names.
+function asciiFold(s: string): string {
+  let out = "";
+  for (const ch of s) {
+    out += SPECIAL_CHARS[ch] || ch;
+  }
+  return out
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
 
 export const STATS_DONE_STATUSES = new Set(["FT", "AET", "PEN", "PEN_LIVE", "WO", "AWD"]);
 export const STATS_LIVE_STATUSES = new Set(["1H", "2H", "HT", "ET", "BT", "P", "LIVE", "SUSP", "INT"]);
@@ -72,7 +96,7 @@ function teamNames(data: TournamentData): Set<string> {
 }
 
 function playerKey(name: string, team: string): string {
-  return `${nrm(canonPlayer(name))}|${nrm(canon(team))}`;
+  return `${asciiFold(canonPlayer(name))}|${asciiFold(canon(team))}`;
 }
 
 function isValidPlayerName(name: string | null | undefined, teamSet: Set<string>): name is string {
@@ -89,7 +113,7 @@ function ensurePlayer(players: Record<string, PlayerLeader>, name: string, team:
   // "Bruno Guimaraes" (events) merge into one entry. nrm() strips
   // diacritics and lowercases — safe for keying without losing the
   // accented display name.
-  const key = `${nrm(normalizedName)}|${nrm(normalizedTeam)}`;
+  const key = `${asciiFold(normalizedName)}|${asciiFold(normalizedTeam)}`;
   if (!players[key]) {
     players[key] = {
       name: normalizedName,

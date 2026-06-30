@@ -1961,29 +1961,9 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
   onTeamClick: (team: string) => void;
 }) {
 
-  /* -- helper: host country → tri-color stripe badge ----------- */
-  /* Renders a small rounded SVG with horizontal stripes in each
-     nation's flag colors. Consistent across platforms, unlike emoji. */
-  const countryBadge = (c: string) => {
-    const colors =
-      c === "USA"    ? ["#B22234", "#FFFFFF", "#3C3B6E"] :
-      c === "Mexico" ? ["#006847", "#FFFFFF", "#CE1126"] :
-                       ["#FF0000", "#FFFFFF", "#FF0000"]; // Canada
-    return (
-      <svg className="more-country-badge" viewBox="0 0 24 16" aria-label={c}>
-        <defs>
-          <clipPath id={`cb-${c.replace(/\s/g, "")}`}>
-            <rect width="24" height="16" rx="3" />
-          </clipPath>
-        </defs>
-        <g clipPath={`url(#cb-${c.replace(/\s/g, "")})`}>
-          <rect x="0"  y="0" width="8"  height="16" fill={colors[0]} />
-          <rect x="8"  y="0" width="8"  height="16" fill={colors[1]} />
-          <rect x="16" y="0" width="8"  height="16" fill={colors[2]} />
-        </g>
-        <rect width="24" height="16" rx="3" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth=".75" />
-      </svg>
-    );
+  const countryFlag = (country: string) => {
+    const key = country === "USA" ? "United States" : country;
+    return data.flags[key] || (country === "USA" ? "🇺🇸" : country === "Mexico" ? "🇲🇽" : country === "Canada" ? "🇨🇦" : "🏳️");
   };
 
   /* -- helper: format large numbers with commas ---------------- */
@@ -2233,7 +2213,7 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
               style={{ animationDelay: `${i * 40}ms` }}
             >
               <div className="more-venue-card__top">
-                <span className="more-venue-card__flag">{countryBadge(v.country)}</span>
+                <span className="more-venue-card__flag" role="img" aria-label={v.country}>{countryFlag(v.country)}</span>
                 <b className="more-venue-card__name">{v.common}</b>
               </div>
               <span className="more-venue-card__city">{v.city}, {v.country}</span>
@@ -2256,7 +2236,7 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
               className="more-city-row"
               style={{ animationDelay: `${i * 50}ms` }}
             >
-              <span className="more-city-row__flag">{countryBadge(c.country)}</span>
+              <span className="more-city-row__flag" role="img" aria-label={c.country}>{countryFlag(c.country)}</span>
               <div className="more-city-row__info">
                 <b>{c.city}</b>
                 <small>{c.country} · {c.venues.join(", ")}</small>

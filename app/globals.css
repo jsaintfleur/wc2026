@@ -6327,17 +6327,15 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   gap: 6px;
 }
 
-.more-country-badge {
-  width: 22px;
-  height: 15px;
-  border-radius: 3px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
 .more-venue-card__flag {
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  background: rgba(255,255,255,0.06);
+  font-size: 17px;
   line-height: 1;
 }
 
@@ -6389,12 +6387,13 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .more-city-row__flag {
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  font-size: 18px;
   line-height: 1;
-}
-
-.more-city-row__flag .more-country-badge {
-  width: 26px;
-  height: 17px;
 }
 
 .more-city-row__info b {

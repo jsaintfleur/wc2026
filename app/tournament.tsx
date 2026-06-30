@@ -4206,7 +4206,7 @@ function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistD
   const category = categories.find(c => c.key === active) || categories[0];
   const leaders = category.leaders.filter(isRenderableLeader);
   const max = Math.max(...leaders.map(category.value), 1);
-  const assistCoverage = category.key === "assists" && matchesPlayed > 0 && matchesWithAssistData < matchesPlayed;
+  const assistCoverage = category.key === "assists" && matchesPlayed > 0;
 
   return (
     <section className="stats-leaders" aria-label="Stat leaders">
@@ -4228,7 +4228,11 @@ function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistD
       </div>
 
       {assistCoverage && (
-        <div className="stats-leaders__coverage">Assist data synced for {matchesWithAssistData} of {matchesPlayed} completed matches; live assists update as event data arrives.</div>
+        <div className="stats-leaders__coverage">
+          {matchesWithAssistData < matchesPlayed
+            ? `Assist data available for ${matchesWithAssistData} of ${matchesPlayed} matches. ${matchesPlayed - matchesWithAssistData} matches lack detailed assist data from the source API.`
+            : `Assist data synced across all ${matchesPlayed} completed matches.`}
+        </div>
       )}
 
       {leaders.length === 0 ? (

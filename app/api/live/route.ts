@@ -17,6 +17,10 @@ const WC26_STADIUMS_URL = "https://worldcup26.ir/get/stadiums";
 
 let LAST: { fixtures: unknown[]; ts: number } | null = null;
 let STADIUM_CACHE: Record<string, string> | null = null;
+const DETAIL_CACHE = new Map<number, { data: VendorFixture; ts: number }>();
+const DETAIL_TTL = 30 * 60 * 1000;
+const DETAIL_BATCH_SIZE = 10;
+const DETAIL_QUOTA_FLOOR = 500;
 
 function hasRichDetails(fixture: unknown): boolean {
   const f = fixture as {
@@ -317,6 +321,109 @@ type VendorFixture = {
   players?: Array<{ team?: { name?: string }; players?: VendorPlayer[] }>;
 };
 
+function vendorEventType(type: string | undefined): MatchEvent["type"] {
+  if (type === "Goal" || type === "Card" || type === "subst" || type === "Var") return type;
+  if (/sub/i.test(type || "")) return "subst";
+  if (/card/i.test(type || "")) return "Card";
+  if (/var/i.test(type || "")) return "Var";
+  return "Goal";
+}
+
+function mapVendorEvents(f: VendorFixture): MatchEvent[] {
+  return (f.events || []).map((e) => ({
+    minute: e.time?.elapsed ?? 0,
+    extra: e.time?.extra ?? null,
+    type: vendorEventType(e.type),
+    detail: e.detail || "",
+    player: e.player?.name ?? "",
+    assist: e.assist?.name ?? null,
+    team: e.team?.name ?? "",
+  }));
+}
+
+function mapVendorStats(f: VendorFixture) {
+  const rawStats = f.statistics || [];
+  const parseStats = (arr: VendorStat[]) => {
+    const out: Record<string, string | number | null> = {};
+    for (const s of arr) {
+      if (s.type) out[s.type] = s.value ?? null;
+    }
+    return out;
+  };
+  return rawStats.length === 2
+    ? { home: parseStats(rawStats[0]?.statistics || []), away: parseStats(rawStats[1]?.statistics || []) }
+    : undefined;
+}
+
+function mapVendorLineups(f: VendorFixture) {
+  const rawLineups = f.lineups || [];
+  return rawLineups.length === 2
+    ? rawLineups.map((l) => ({
+      team: l.team?.name ?? "",
+      formation: l.formation ?? "",
+      startXI: (l.startXI || []).map((p) => ({
+        name: p.player?.name ?? "", number: p.player?.number ?? 0,
+        pos: p.player?.pos ?? "", grid: p.player?.grid ?? null,
+      })),
+      substitutes: (l.substitutes || []).map((p) => ({
+        name: p.player?.name ?? "", number: p.player?.number ?? 0,
+        pos: p.player?.pos ?? "", grid: p.player?.grid ?? null,
+      })),
+    }))
+    : undefined;
+}
+
+function mapVendorPlayers(f: VendorFixture) {
+  const rawPlayers = f.players || [];
+  return rawPlayers.length
+    ? rawPlayers.flatMap((t) => {
+      const teamName = t.team?.name ?? "";
+      return (t.players || []).map((p) => {
+        const s = p.statistics?.[0] || {};
+        return {
+          name: p.player?.name ?? "", number: p.player?.number ?? 0, team: teamName,
+          minutes: s.games?.minutes ?? null, rating: s.games?.rating ?? null,
+          goals: s.goals?.total ?? 0, assists: s.goals?.assists ?? 0,
+          shots: s.shots?.total ?? 0, shotsOn: s.shots?.on ?? 0,
+          passes: s.passes?.total ?? 0, passAccuracy: s.passes?.accuracy ? `${s.passes.accuracy}%` : null,
+          tackles: s.tackles?.total ?? 0,
+          duels: s.duels?.total ?? 0, duelsWon: s.duels?.won ?? 0,
+          dribbles: s.dribbles?.attempts ?? 0, dribblesSuccess: s.dribbles?.success ?? 0,
+          foulsDrawn: s.fouls?.drawn ?? 0, foulsCommitted: s.fouls?.committed ?? 0,
+          yellowCards: s.cards?.yellow ?? 0, redCards: s.cards?.red ?? 0,
+          saves: s.goals?.saves ?? 0,
+        };
+      });
+    })
+    : undefined;
+}
+
+function normalizeVendorFixture(f: VendorFixture) {
+  const events = mapVendorEvents(f);
+  const stats = mapVendorStats(f);
+  const lineups = mapVendorLineups(f);
+  const players = mapVendorPlayers(f);
+  return {
+    ts: Date.parse(f.fixture?.date ?? ""),
+    status: f.fixture?.status?.short,
+    elapsed: f.fixture?.status?.elapsed,
+    venue: f.fixture?.venue?.name,
+    round: f.league?.round,
+    home: f.teams?.home?.name,
+    away: f.teams?.away?.name,
+    gh: f.goals?.home ?? null,
+    ga: f.goals?.away ?? null,
+    penHome: f.score?.penalty?.home ?? null,
+    penAway: f.score?.penalty?.away ?? null,
+    fixtureId: f.fixture?.id ?? null,
+    events: events.length ? events : undefined,
+    stats,
+    lineups,
+    players: players?.length ? players : undefined,
+    referee: f.fixture?.referee ?? undefined,
+  };
+}
+
 async function fetchFixtures(key: string): Promise<FixtureResponse> {
   let url = `https://v3.football.api-sports.io/fixtures?league=${LEAGUE}&season=${SEASON}`;
   let r = await fetch(url, { cache: "no-store", headers: { "x-apisports-key": key } });
@@ -332,89 +439,69 @@ async function fetchFixtures(key: string): Promise<FixtureResponse> {
     remaining: r.headers.get("x-ratelimit-requests-remaining"),
   };
   if (!r.ok || body.errors?.access) return { ok: false, http: r.status, errors: body.errors || null, quota };
-  const fixtures = ((body.response || []) as VendorFixture[]).map((f) => {
-    const events = (f.events || []).map((e) => ({
-      minute: e.time?.elapsed ?? 0,
-      extra: e.time?.extra ?? null,
-      type: e.type,
-      detail: e.detail,
-      player: e.player?.name ?? "",
-      assist: e.assist?.name ?? null,
-      team: e.team?.name ?? "",
-    }));
-    const rawStats = f.statistics || [];
-    const parseStats = (arr: VendorStat[]) => {
-      const out: Record<string, string | number | null> = {};
-      for (const s of arr) {
-        if (s.type) out[s.type] = s.value ?? null;
-      }
-      return out;
-    };
-    const stats = rawStats.length === 2
-      ? { home: parseStats(rawStats[0]?.statistics || []), away: parseStats(rawStats[1]?.statistics || []) }
-      : undefined;
-    const rawLineups = f.lineups || [];
-    const lineups = rawLineups.length === 2
-      ? rawLineups.map((l) => ({
-        team: l.team?.name ?? "",
-        formation: l.formation ?? "",
-        startXI: (l.startXI || []).map((p) => ({
-          name: p.player?.name ?? "", number: p.player?.number ?? 0,
-          pos: p.player?.pos ?? "", grid: p.player?.grid ?? null,
-        })),
-        substitutes: (l.substitutes || []).map((p) => ({
-          name: p.player?.name ?? "", number: p.player?.number ?? 0,
-          pos: p.player?.pos ?? "", grid: p.player?.grid ?? null,
-        })),
-      }))
-      : undefined;
-
-    const rawPlayers = f.players || [];
-    const players = rawPlayers.length
-      ? rawPlayers.flatMap((t) => {
-        const teamName = t.team?.name ?? "";
-        return (t.players || []).map((p) => {
-          const s = p.statistics?.[0] || {};
-          return {
-            name: p.player?.name ?? "", number: p.player?.number ?? 0, team: teamName,
-            minutes: s.games?.minutes ?? null, rating: s.games?.rating ?? null,
-            goals: s.goals?.total ?? 0, assists: s.goals?.assists ?? 0,
-            shots: s.shots?.total ?? 0, shotsOn: s.shots?.on ?? 0,
-            passes: s.passes?.total ?? 0, passAccuracy: s.passes?.accuracy ? `${s.passes.accuracy}%` : null,
-            tackles: s.tackles?.total ?? 0,
-            duels: s.duels?.total ?? 0, duelsWon: s.duels?.won ?? 0,
-            dribbles: s.dribbles?.attempts ?? 0, dribblesSuccess: s.dribbles?.success ?? 0,
-            foulsDrawn: s.fouls?.drawn ?? 0, foulsCommitted: s.fouls?.committed ?? 0,
-            yellowCards: s.cards?.yellow ?? 0, redCards: s.cards?.red ?? 0,
-            saves: s.goals?.saves ?? 0,
-          };
-        });
-      })
-      : undefined;
-
-    const referee = f.fixture?.referee ?? undefined;
-
-    return {
-      ts: Date.parse(f.fixture?.date ?? ""),
-      status: f.fixture?.status?.short,
-      elapsed: f.fixture?.status?.elapsed,
-      venue: f.fixture?.venue?.name,
-      round: f.league?.round,
-      home: f.teams?.home?.name,
-      away: f.teams?.away?.name,
-      gh: f.goals?.home ?? null,
-      ga: f.goals?.away ?? null,
-      penHome: f.score?.penalty?.home ?? null,
-      penAway: f.score?.penalty?.away ?? null,
-      fixtureId: f.fixture?.id ?? null,
-      events: events.length ? events : undefined,
-      stats,
-      lineups,
-      players: players?.length ? players : undefined,
-      referee,
-    };
-  });
+  const fixtures = ((body.response || []) as VendorFixture[]).map(normalizeVendorFixture);
   return { ok: true, fixtures, quota };
+}
+
+async function fetchFixtureDetail(key: string, fixtureId: number): Promise<VendorFixture | null> {
+  const cached = DETAIL_CACHE.get(fixtureId);
+  if (cached && Date.now() - cached.ts < DETAIL_TTL) return cached.data;
+  try {
+    const r = await fetch(`https://v3.football.api-sports.io/fixtures?id=${fixtureId}`, {
+      cache: "no-store",
+      headers: { "x-apisports-key": key },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    const body = await r.json().catch(() => ({}));
+    const fixture = (body.response || [])[0] as VendorFixture | undefined;
+    if (!fixture) return null;
+    DETAIL_CACHE.set(fixtureId, { data: fixture, ts: Date.now() });
+    return fixture;
+  } catch {
+    return null;
+  }
+}
+
+function needsFixtureDetail(fixture: unknown): boolean {
+  const f = fixture as { fixtureId?: number | null; status?: string; players?: unknown[]; events?: MatchEvent[] };
+  if (!f.fixtureId || !DONE_STATUSES.has(f.status || "")) return false;
+  if (Array.isArray(f.players) && f.players.length > 0) return false;
+  const events = f.events || [];
+  return events.some(ev => ev.type === "Goal" && ev.detail !== "Own Goal" && !ev.assist);
+}
+
+async function enrichWithFixtureDetails(key: string, fixtures: unknown[], remaining?: string | null): Promise<{ requested: number; enriched: number; skipped: boolean }> {
+  const quotaRemaining = remaining == null ? Number.POSITIVE_INFINITY : Number(remaining);
+  if (Number.isFinite(quotaRemaining) && quotaRemaining < DETAIL_QUOTA_FLOOR) {
+    return { requested: 0, enriched: 0, skipped: true };
+  }
+
+  const needsDetail = fixtures.filter(needsFixtureDetail);
+  let enriched = 0;
+  for (let i = 0; i < needsDetail.length; i += DETAIL_BATCH_SIZE) {
+    const batch = needsDetail.slice(i, i + DETAIL_BATCH_SIZE);
+    const details = await Promise.all(batch.map(f => {
+      const fixtureId = (f as { fixtureId: number }).fixtureId;
+      return fetchFixtureDetail(key, fixtureId);
+    }));
+
+    details.forEach((detail, index) => {
+      if (!detail) return;
+      const normalized = normalizeVendorFixture(detail);
+      const target = batch[index] as Record<string, unknown>;
+      if (normalized.events?.some(ev => ev.type === "Goal" && !!ev.assist)) {
+        target.events = normalized.events;
+        target.assistDataMissing = false;
+      }
+      if (normalized.players?.length) target.players = normalized.players;
+      if (normalized.stats) target.stats = normalized.stats;
+      if (normalized.lineups?.length) target.lineups = normalized.lineups;
+      if (normalized.referee) target.referee = normalized.referee;
+      enriched++;
+    });
+  }
+  return { requested: needsDetail.length, enriched, skipped: false };
 }
 
 // ── Opportunistic DB persistence ──────────────────────────────────
@@ -506,7 +593,11 @@ export async function GET(request: NextRequest) {
     const apif = apiFootballKey
       ? await fetchFixtures(apiFootballKey).catch(e => ({ ok: false, http: 0, errors: String(e) } as FixtureResponse))
       : null;
-    const merged = withVerifiedResults(wc26.ok ? wc26.fixtures : (apif?.fixtures || []));
+    const debugBase = apif?.fixtures?.length ? [...apif.fixtures] : (wc26.ok ? [...wc26.fixtures] : []);
+    const detailEnrichment = apiFootballKey && debugBase.length
+      ? await enrichWithFixtureDetails(apiFootballKey, debugBase, apif?.quota?.remaining)
+      : { requested: 0, enriched: 0, skipped: !apiFootballKey };
+    const merged = withVerifiedResults(debugBase);
     const richFixtureCount = (apif?.fixtures || []).filter(hasRichDetails).length;
     return NextResponse.json({
       configured: !!apiFootballKey,
@@ -519,6 +610,7 @@ export async function GET(request: NextRequest) {
         activeMatches,
         source: apif?.ok && (apif.fixtures?.length ?? 0) > 0 ? "api-football" : "missing",
         richFixtureCount,
+        detailEnrichment,
       },
       verifiedCount: VERIFIED_RESULTS.length,
       mergedCount: merged.length,
@@ -537,7 +629,17 @@ export async function GET(request: NextRequest) {
     if (apif.ok && apif.fixtures && apif.fixtures.length > 0) apifFixtures = apif.fixtures;
   }
   const richFixtureCount = apifFixtures.filter(hasRichDetails).length;
-  const enrichment = {
+  const enrichment: {
+    required: boolean;
+    healthy: boolean;
+    activeMatches: number;
+    source: string;
+    richFixtureCount: number;
+    apiFootballConfigured: boolean;
+    apiFootballOk: boolean;
+    quota: FixtureResponse["quota"] | undefined;
+    detailEnrichment?: { requested: number; enriched: number; skipped: boolean };
+  } = {
     required: true,
     healthy: !!(apiFootballKey && apif?.ok && apifFixtures.length > 0),
     activeMatches,
@@ -583,6 +685,11 @@ export async function GET(request: NextRequest) {
   } else if (wc26.ok) {
     base = wc26.fixtures;
   }
+
+  const detailEnrichment = apiFootballKey && base.length > 0
+    ? await enrichWithFixtureDetails(apiFootballKey, base, apif?.quota?.remaining)
+    : { requested: 0, enriched: 0, skipped: !apiFootballKey };
+  enrichment.detailEnrichment = detailEnrichment;
 
   const fixtures = withVerifiedResults(base);
   const hasLiveData = wc26.ok || apifFixtures.length > 0;

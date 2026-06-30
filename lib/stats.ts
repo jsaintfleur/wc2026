@@ -64,10 +64,22 @@ type FinishedMatch = {
   ga: number;
   events?: MatchEvent[];
   players?: PlayerMatchStat[];
+  assistDataMissing?: boolean;
 };
+
+function teamNames(data: TournamentData): Set<string> {
+  return new Set(Object.values(data.groups).flat().map(team => canon(team)));
+}
 
 function playerKey(name: string, team: string): string {
   return `${canonPlayer(name)}|${canon(team)}`;
+}
+
+function isValidPlayerName(name: string | null | undefined, teamSet: Set<string>): name is string {
+  const trimmed = (name || "").trim();
+  if (!trimmed || !/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(trimmed)) return false;
+  const canonical = canon(trimmed);
+  return !teamSet.has(canonical);
 }
 
 function ensurePlayer(players: Record<string, PlayerLeader>, name: string, team: string): PlayerLeader {
@@ -121,6 +133,7 @@ function sortPlayersBy(value: keyof Pick<PlayerLeader, "goals" | "assists" | "ye
 
 export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture[]): TournamentStats {
   const players: Record<string, PlayerLeader> = {};
+  const countryTeamNames = teamNames(data);
   const teamGoalsFromScores: Record<string, { goals: number; conceded: number; matches: number }> = {};
   const minuteBuckets = [0, 0, 0, 0, 0, 0, 0];
   let totalGoalsFromEvents = 0;
@@ -146,6 +159,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
       ga: f.ga,
       events: f.events,
       players: f.players,
+      assistDataMissing: f.assistDataMissing,
     });
   }
 
@@ -165,7 +179,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
   }
 
   const processCard = (ev: MatchEvent) => {
-    if (!ev.player) return;
+    if (!isValidPlayerName(ev.player, countryTeamNames)) return;
     const player = ensurePlayer(players, ev.player, ev.team || "");
     const isRed = ev.detail?.includes("Red") ?? false;
     if (isRed) {
@@ -185,13 +199,13 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
     else normalGoals++;
     addMinuteBucket(minuteBuckets, ev);
 
-    if (!isOwnGoal(ev) && ev.player) {
+    if (!isOwnGoal(ev) && isValidPlayerName(ev.player, countryTeamNames)) {
       const scorer = ensurePlayer(players, ev.player, ev.team || "");
       scorer.goals++;
       if (isPenaltyGoal(ev)) scorer.penalties++;
     }
 
-    if (!isOwnGoal(ev) && ev.assist) {
+    if (!isOwnGoal(ev) && isValidPlayerName(ev.assist, countryTeamNames)) {
       const assister = ensurePlayer(players, ev.assist, ev.team || "");
       assister.assists++;
     }
@@ -218,6 +232,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
 
     const hasEvents = !!fm.events?.length;
     const hasPlayers = !!fm.players?.length;
+    let eventHasAssist = false;
     if (hasEvents) {
       matchesWithEvents++;
       for (const ev of fm.events!) {
@@ -231,29 +246,31 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
         }
         if (ev.type === "Goal") processGoal(ev);
       }
-      if (fm.events!.some(e => e.type === "Goal" && !isOwnGoal(e) && !!e.assist)) matchesWithAssistData++;
+      eventHasAssist = fm.events!.some(e => e.type === "Goal" && !isOwnGoal(e) && isValidPlayerName(e.assist, countryTeamNames));
     }
 
-    if (!hasEvents && hasPlayers) {
+    if (hasPlayers) {
       let matchHasAssist = false;
       for (const p of fm.players!) {
-        if (!p.name || !p.team) continue;
+        if (!isValidPlayerName(p.name, countryTeamNames) || !p.team) continue;
         const player = ensurePlayer(players, p.name, p.team);
-        if (p.goals > 0) player.goals += p.goals;
-        if (p.assists > 0) {
+        if (!hasEvents && p.goals > 0) player.goals += p.goals;
+        if (!eventHasAssist && p.assists > 0) {
           player.assists += p.assists;
           matchHasAssist = true;
         }
-        if (p.yellowCards > 0) {
+        if (!hasEvents && p.yellowCards > 0) {
           player.yellows += p.yellowCards;
           totalYellows += p.yellowCards;
         }
-        if (p.redCards > 0) {
+        if (!hasEvents && p.redCards > 0) {
           player.reds += p.redCards;
           totalReds += p.redCards;
         }
       }
-      if (matchHasAssist) matchesWithAssistData++;
+      if (eventHasAssist || matchHasAssist) matchesWithAssistData++;
+    } else if (eventHasAssist) {
+      matchesWithAssistData++;
     }
   }
 
@@ -293,7 +310,10 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
   const totalGoalsFromScores = Object.values(teamGoalsFromScores).reduce((sum, s) => sum + s.goals, 0);
   const totalGoals = Math.max(totalGoalsFromEvents, totalGoalsFromScores);
   const avgGoals = matchesPlayed > 0 ? +(totalGoals / matchesPlayed).toFixed(1) : 0;
-  const playerList = Object.values(players);
+  const playerList = Object.values(players).filter(p =>
+    isValidPlayerName(p.name, countryTeamNames) &&
+    canon(p.name) !== canon(p.team)
+  );
   const topScorers = playerList.filter(p => p.goals > 0).sort(sortPlayersBy("goals")).slice(0, 20);
   const topAssisters = playerList.filter(p => p.assists > 0).sort(sortPlayersBy("assists")).slice(0, 20);
   const topYellowCards = playerList.filter(p => p.yellows > 0).sort(sortPlayersBy("yellows")).slice(0, 20);

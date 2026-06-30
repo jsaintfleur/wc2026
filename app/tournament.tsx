@@ -1078,9 +1078,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }
 
   /** Aggregate tournament leaderboards from the shared real-time stats model. */
-  function computeLeaders(): TournamentStats {
+  const computeLeaders = useCallback((): TournamentStats => {
     return buildTournamentStats(data, fixtures);
-  }
+  }, [data, fixtures]);
 
   function renderAbout(): string {
     return `<div class="about">
@@ -1245,7 +1245,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
             nowMs={nowMs}
             computeLeaders={computeLeaders}
             onNavigate={handleTab}
-            onTeamClick={setTeamDrawer}
+            onPlayerClick={(name, team) => setPlayerProfile({ name, team })}
             onMatchClick={(match, fixture) => setMatchDetail({ match, fixture })}
           />
         ) : view === "bracket" ? (
@@ -1350,14 +1350,14 @@ type KnockoutCardModel = {
   loserName: string | null;
 };
 
-function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNavigate, onTeamClick, onMatchClick }: {
+function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNavigate, onPlayerClick, onMatchClick }: {
   data: TournamentData;
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
   computeLeaders: () => { topScorers: { name: string; team: string; goals: number; penalties: number; assists: number; matches: number }[]; topAssisters: { name: string; team: string; assists: number }[]; totalGoals: number; matchesPlayed: number; avgGoals: number; cleanSheets: number; [key: string]: unknown };
   onNavigate: (v: ViewType) => void;
-  onTeamClick: (t: string) => void;
+  onPlayerClick: (playerName: string, teamName: string) => void;
   onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
 }) {
   const [now, setNow] = useState(0);
@@ -1552,7 +1552,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
           <h3 className="home-section__title">Tournament Leaders</h3>
           <div className="home-leaders__grid">
             {topScorer && (
-              <button type="button" className="home-leader-card home-leader-card--gold" onClick={() => onTeamClick(topScorer.team)}>
+              <button type="button" className="home-leader-card home-leader-card--gold" onClick={() => onPlayerClick(topScorer.name, topScorer.team)}>
                 <div className="home-leader-card__award">🥇 Golden Boot</div>
                 <div className="home-leader-card__player">
                   <span className="home-leader-card__flag">{fl(topScorer.team)}</span>
@@ -1565,7 +1565,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
               </button>
             )}
             {topAssister && (
-              <button type="button" className="home-leader-card home-leader-card--silver" onClick={() => onTeamClick(topAssister.team)}>
+              <button type="button" className="home-leader-card home-leader-card--silver" onClick={() => onPlayerClick(topAssister.name, topAssister.team)}>
                 <div className="home-leader-card__award">🎯 Top Assists</div>
                 <div className="home-leader-card__player">
                   <span className="home-leader-card__flag">{fl(topAssister.team)}</span>
@@ -4030,6 +4030,15 @@ function playerInitials(name: string): string {
   return (parts[0]?.[0] || "?") + (parts.length > 1 ? parts[parts.length - 1][0] : "");
 }
 
+const KNOWN_TEAM_NAMES = new Set(Object.keys(TEAM_PROFILES).map(team => canon(team)));
+
+function isRenderableLeader(leader: PlayerLeader): boolean {
+  const name = leader.name?.trim();
+  if (!name || !/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(name)) return false;
+  if (canon(name) === canon(leader.team)) return false;
+  return !KNOWN_TEAM_NAMES.has(canon(name));
+}
+
 function rankFor(leaders: PlayerLeader[], index: number, value: (leader: PlayerLeader) => number): number {
   if (index === 0) return 1;
   const current = value(leaders[index]);
@@ -4052,7 +4061,8 @@ function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistD
   matchesPlayed: number;
 }) {
   const category = categories.find(c => c.key === active) || categories[0];
-  const max = Math.max(...category.leaders.map(category.value), 1);
+  const leaders = category.leaders.filter(isRenderableLeader);
+  const max = Math.max(...leaders.map(category.value), 1);
   const assistCoverage = category.key === "assists" && matchesPlayed > 0 && matchesWithAssistData < matchesPlayed;
 
   return (
@@ -4078,7 +4088,7 @@ function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistD
         <div className="stats-leaders__coverage">Assist data synced for {matchesWithAssistData} of {matchesPlayed} completed matches; live assists update as event data arrives.</div>
       )}
 
-      {category.leaders.length === 0 ? (
+      {leaders.length === 0 ? (
         <div className="stats-leaders__empty">
           <span>{category.key === "assists" ? "A" : category.key === "goals" ? "G" : category.key === "yellows" ? "Y" : "R"}</span>
           <b>{category.empty}</b>
@@ -4086,16 +4096,17 @@ function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistD
         </div>
       ) : (
         <div className="stats-leaderboard-list">
-          {category.leaders.slice(0, 12).map((leader, index) => {
+          {leaders.slice(0, 12).map((leader, index) => {
             const value = category.value(leader);
             const pct = (value / max) * 100;
-            const rank = rankFor(category.leaders, index, category.value);
+            const rank = rankFor(leaders, index, category.value);
             const meta = playerMeta(leader);
+            const initials = playerInitials(leader.name);
             return (
               <article key={`${category.key}-${leader.name}-${leader.team}`} className={`stats-leader-card${index < 3 ? " stats-leader-card--podium" : ""}`}>
                 <div className="stats-leader-card__rank">#{rank}</div>
                 <div className="stats-leader-card__photo" aria-hidden="true">
-                  <span>{playerInitials(leader.name)}</span>
+                  <span>{initials === "?" ? "◎" : initials}</span>
                 </div>
                 <div className="stats-leader-card__main">
                   <div className="stats-leader-card__name-row">

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DATA } from "@/lib/data";
-import { canon, mergeFixtures, type VendorFixture as MergeVendorFixture, type ScheduleMatch } from "@/lib/merge";
+import { DATA, type MatchEvent } from "@/lib/data";
+import { canon, canonPlayer, mergeFixtures, type VendorFixture as MergeVendorFixture, type ScheduleMatch } from "@/lib/merge";
 import { VERIFIED_RESULTS } from "@/lib/verified-results";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
@@ -104,6 +104,34 @@ function scoreNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function hasGoalAssistData(events: MatchEvent[] | undefined): boolean {
+  return !!events?.some(ev => ev.type === "Goal" && ev.detail !== "Own Goal" && !!ev.assist);
+}
+
+function sameGoalEvent(left: MatchEvent, right: MatchEvent): boolean {
+  if (left.type !== "Goal" || right.type !== "Goal") return false;
+  const minuteClose = Math.abs((left.minute || 0) - (right.minute || 0)) <= 1;
+  if (!minuteClose) return false;
+  const leftPlayer = canonPlayer(left.player || "");
+  const rightPlayer = canonPlayer(right.player || "");
+  return !!leftPlayer && leftPlayer === rightPlayer;
+}
+
+function mergeAssistNames(targetEvents: MatchEvent[] | undefined, sourceEvents: MatchEvent[] | undefined): MatchEvent[] | undefined {
+  if (!targetEvents?.length || !sourceEvents?.length || hasGoalAssistData(targetEvents)) return targetEvents;
+  const withAssists = sourceEvents.filter(ev => ev.type === "Goal" && !!ev.assist);
+  if (!withAssists.length) return targetEvents;
+  let changed = false;
+  const merged = targetEvents.map(ev => {
+    if (ev.type !== "Goal" || ev.assist) return ev;
+    const source = withAssists.find(candidate => sameGoalEvent(ev, candidate));
+    if (!source?.assist) return ev;
+    changed = true;
+    return { ...ev, assist: source.assist };
+  });
+  return changed ? merged : targetEvents;
 }
 
 // Parse scorer strings like {"D. Bobadilla 7'(OG)","F. Balogun 31'","F. Balogun 45'+5'"}
@@ -235,6 +263,7 @@ async function fetchWC26(): Promise<{ ok: boolean; fixtures: unknown[] }> {
       penHome: scoreNumber(g.home_penalty_score),
       penAway: scoreNumber(g.away_penalty_score),
       events: events.length ? events : undefined,
+      assistDataMissing: events.some(ev => ev.type === "Goal" && ev.detail !== "Own Goal") && !hasGoalAssistData(events),
     };
   });
 
@@ -542,8 +571,14 @@ export async function GET(request: NextRequest) {
         if (existing.penAway == null && wc26Fix.penAway != null) target.penAway = wc26Fix.penAway;
         if (!existing.status && wc26Fix.status) target.status = wc26Fix.status;
         if (existing.elapsed == null && wc26Fix.elapsed != null) target.elapsed = wc26Fix.elapsed;
-        if ((!existing.events || existing.events.length === 0) && wc26Fix.events && wc26Fix.events.length > 0) {
-          target.events = wc26Fix.events;
+        const existingEvents = existing.events as MatchEvent[] | undefined;
+        const wc26Events = wc26Fix.events as MatchEvent[] | undefined;
+        const enrichedWc26Events = mergeAssistNames(wc26Events, existingEvents);
+        if ((!existingEvents || existingEvents.length === 0) && enrichedWc26Events && enrichedWc26Events.length > 0) {
+          target.events = enrichedWc26Events;
+          target.assistDataMissing = !hasGoalAssistData(enrichedWc26Events);
+        } else if (hasGoalAssistData(existingEvents)) {
+          target.assistDataMissing = false;
         }
       }
     }

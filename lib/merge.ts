@@ -125,6 +125,7 @@ export interface VendorFixture {
   ga: number | null;
   penHome?: number | null;
   penAway?: number | null;
+  assistDataMissing?: boolean;
   fixtureId?: number;
   events?: MatchEvent[];
   stats?: MatchStats;

@@ -199,6 +199,7 @@ export interface LiveFixture {
   ga: number | null;
   penHome?: number | null;
   penAway?: number | null;
+  assistDataMissing?: boolean;
   events?: MatchEvent[];
   stats?: MatchStats;
   lineups?: TeamLineup[];

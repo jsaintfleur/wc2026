@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup } from "@/lib/data";
-import { nrm, canon, canonPlayer } from "@/lib/merge";
+import { nrm, canon } from "@/lib/merge";
 import { buildTournamentStats, type PlayerLeader, type TournamentStats } from "@/lib/stats";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import TriondaBall from "@/app/components/TriondaBall";
@@ -387,7 +387,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [view, setView] = useState<ViewType>("home");
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("view");
-    if (p && ["home","schedule","groups","bracket","teams","more","stats","venues","about"].includes(p)) setView(p as ViewType);
+    if (p && ["home","schedule","groups","bracket","teams","more","stats","venues","about"].includes(p)) {
+      queueMicrotask(() => setView(p as ViewType));
+    }
   }, []);
   const [group, setGroup] = useState("ALL");
   const [team, setTeam] = useState("ALL");
@@ -1223,7 +1225,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
             onMatchClick={(match, fixture) => setMatchDetail({ match, fixture })}
           />
         ) : view === "stats" ? (
-          <StatsView data={data} fixtures={fixtures} fl={fl} computeLeaders={computeLeaders} />
+          <StatsView fl={fl} computeLeaders={computeLeaders} />
         ) : view === "teams" ? (
           <TeamsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} favs={favs} toggleFav={toggleFav} />
         ) : view === "more" ? (
@@ -1328,7 +1330,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
   const [now, setNow] = useState(0);
   const mounted = now > 0;
   useEffect(() => {
-    setNow(Date.now());
+    queueMicrotask(() => setNow(Date.now()));
     const id = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 1000);
     return () => clearInterval(id);
   }, []);
@@ -3876,310 +3878,210 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   );
 }
 
-/** Stats view — tournament dashboard with visualizations */
-function StatsView({ data, fixtures, fl, computeLeaders }: {
-  data: TournamentData;
-  fixtures: LiveFixture[];
-  fl: (t: string) => string;
-  computeLeaders: () => {
-    topScorers: { name: string; team: string; goals: number; penalties: number; assists: number; matches: number }[];
-    topAssisters: { name: string; team: string; assists: number }[];
-    topCombined: { name: string; team: string; goals: number; assists: number; total: number }[];
-    topTeams: { team: string; goals: number; conceded: number; matches: number; gpm: number }[];
-    mostCarded: { name: string; team: string; yellows: number; reds: number }[];
-    minuteBuckets: number[];
-    bucketLabels: string[];
-    totalGoals: number;
-    totalGoalsFromEvents: number;
-    normalGoals: number;
-    penGoals: number;
-    ownGoals: number;
-    totalYellows: number;
-    totalReds: number;
-    totalSubs: number;
-    matchesPlayed: number;
-    matchesWithEvents: number;
-    matchesWithAssistData: number;
-    avgGoals: number;
-    cleanSheets: number;
-  };
+type StatTabKey = "goals" | "assists" | "yellows" | "reds";
+
+type LeaderboardCategory = {
+  key: StatTabKey;
+  label: string;
+  statLabel: string;
+  empty: string;
+  leaders: PlayerLeader[];
+  value: (leader: PlayerLeader) => number;
+  detail: (leader: PlayerLeader) => string;
+};
+
+function playerInitials(name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean);
+  return (parts[0]?.[0] || "?") + (parts.length > 1 ? parts[parts.length - 1][0] : "");
+}
+
+function rankFor(leaders: PlayerLeader[], index: number, value: (leader: PlayerLeader) => number): number {
+  if (index === 0) return 1;
+  const current = value(leaders[index]);
+  const previous = value(leaders[index - 1]);
+  return current === previous ? rankFor(leaders, index - 1, value) : index + 1;
+}
+
+function playerMeta(leader: PlayerLeader): { number?: number; pos?: string; club?: string } {
+  const squad = TEAM_PROFILES[leader.team]?.squad || [];
+  const found = squad.find(p => nrm(p.name) === nrm(leader.name));
+  return found ? { number: found.number, pos: found.pos, club: found.club } : {};
+}
+
+function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistData, matchesPlayed }: {
+  categories: LeaderboardCategory[];
+  active: StatTabKey;
+  onActive: (key: StatTabKey) => void;
+  fl: (team: string) => string;
+  matchesWithAssistData: number;
+  matchesPlayed: number;
 }) {
-  const stats = useMemo(() => { try { return computeLeaders(); } catch (e) { console.error("[StatsView] computeLeaders crashed:", e); return null; } }, [fixtures, computeLeaders]);
-  if (!stats) return <main className="section stats-view"><div className="stats-empty"><p>Stats failed to load. Check console.</p></div></main>;
-  const {
-    topScorers, topAssisters, topCombined, topTeams, mostCarded,
-    minuteBuckets, bucketLabels,
-    totalGoals, totalGoalsFromEvents, normalGoals, penGoals, ownGoals,
-    totalYellows, totalReds, totalSubs,
-    matchesPlayed, matchesWithEvents, matchesWithAssistData, avgGoals, cleanSheets,
-  } = stats;
-  const hasScorers = topScorers.length > 0;
-  const hasTeams = topTeams.length > 0;
-  const hasData = hasScorers || topAssisters.length > 0 || topCombined.length > 0 || hasTeams || matchesPlayed > 0;
-  const hasCards = totalYellows > 0 || totalReds > 0;
-  const maxBucket = Math.max(...minuteBuckets, 1);
-  const maxScorerGoals = topScorers.length > 0 ? topScorers[0].goals : 1;
-  const maxTeamGoals = topTeams.length > 0 ? topTeams[0].goals : 1;
+  const category = categories.find(c => c.key === active) || categories[0];
+  const max = Math.max(...category.leaders.map(category.value), 1);
+  const assistCoverage = category.key === "assists" && matchesPlayed > 0 && matchesWithAssistData < matchesPlayed;
 
   return (
-    <main className="section stats-view">
-      {/* Trophy hero */}
-      <div className="stats-trophy">
-        <WorldCupTrophy id="st" className="stats-trophy__svg" />
+    <section className="stats-leaders" aria-label="Stat leaders">
+      <div className="stats-leaders__head">
+        <div>
+          <span className="stats-leaders__eyebrow">Live Leaderboard</span>
+          <h3>Stat Leaders</h3>
+        </div>
+        <span className="stats-leaders__live"><i />Real-time</span>
       </div>
 
-      {!hasData && !hasCards && (
-        <div className="stats-empty">
-          <p>Stats are updating. Check back shortly.</p>
-          <p className="stats-empty__sub">Goal scorers, team totals, assists, and cards will appear here as matches are played. Data updates automatically.</p>
-          <div className="stats-skeleton">
-            <div className="skel skel--card-lg" />
-            <div className="skel skel--card" />
-            <div className="skel skel--card" />
-            <div className="skel skel--card" />
-          </div>
+      <div className="stats-tabs" role="tablist" aria-label="Stat leader categories">
+        {categories.map(c => (
+          <button key={c.key} type="button" role="tab" aria-selected={active === c.key} className="stats-tab" onClick={() => onActive(c.key)}>
+            <span>{c.label}</span>
+            <b>{c.leaders.length ? categoryValueTotal(c) : 0}</b>
+          </button>
+        ))}
+      </div>
+
+      {assistCoverage && (
+        <div className="stats-leaders__coverage">Assist data synced for {matchesWithAssistData} of {matchesPlayed} completed matches; live assists update as event data arrives.</div>
+      )}
+
+      {category.leaders.length === 0 ? (
+        <div className="stats-leaders__empty">
+          <span>{category.key === "assists" ? "A" : category.key === "goals" ? "G" : category.key === "yellows" ? "Y" : "R"}</span>
+          <b>{category.empty}</b>
+          <small>Real match events and player stats power this board. No placeholder leaders are shown.</small>
+        </div>
+      ) : (
+        <div className="stats-leaderboard-list">
+          {category.leaders.slice(0, 12).map((leader, index) => {
+            const value = category.value(leader);
+            const pct = (value / max) * 100;
+            const rank = rankFor(category.leaders, index, category.value);
+            const meta = playerMeta(leader);
+            return (
+              <article key={`${category.key}-${leader.name}-${leader.team}`} className={`stats-leader-card${index < 3 ? " stats-leader-card--podium" : ""}`}>
+                <div className="stats-leader-card__rank">#{rank}</div>
+                <div className="stats-leader-card__photo" aria-hidden="true">
+                  <span>{playerInitials(leader.name)}</span>
+                </div>
+                <div className="stats-leader-card__main">
+                  <div className="stats-leader-card__name-row">
+                    <b>{leader.name}</b>
+                    {meta.number != null && <small>#{meta.number}</small>}
+                    {meta.pos && <small>{meta.pos}</small>}
+                  </div>
+                  <div className="stats-leader-card__team"><span>{fl(leader.team)}</span>{leader.team}{meta.club ? ` · ${meta.club}` : ""}</div>
+                  <div className="stats-leader-card__bar"><i style={{ width: `${pct}%` }} /></div>
+                </div>
+                <div className="stats-leader-card__value">
+                  <strong>{value}</strong>
+                  <span>{category.statLabel}</span>
+                  <em>{category.detail(leader)}</em>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
+    </section>
+  );
+}
 
-      {/* ── Tournament summary cards — two rows ── */}
-      {(hasData || hasCards) && (
-        <>
-          <div className="stats-summary">
-            <div className="stats-card stagger-rise">
-              <span className="stats-card__value">{totalGoals}</span>
-              <span className="stats-card__label">Goals</span>
-            </div>
-            <div className="stats-card stagger-rise">
-              <span className="stats-card__value">{matchesPlayed}</span>
-              <span className="stats-card__label">Matches</span>
-            </div>
-            <div className="stats-card stagger-rise">
-              <span className="stats-card__value">{avgGoals}</span>
-              <span className="stats-card__label">Avg / Match</span>
-            </div>
-            <div className="stats-card stagger-rise">
-              <span className="stats-card__value">{cleanSheets}</span>
-              <span className="stats-card__label">Clean Sheets</span>
-            </div>
-          </div>
-          <div className="stats-summary stats-summary--secondary">
-            <div className="stats-card stats-card--yellow stagger-rise">
-              <span className="stats-card__value">{totalYellows}</span>
-              <span className="stats-card__label">Yellows</span>
-            </div>
-            <div className="stats-card stats-card--red stagger-rise">
-              <span className="stats-card__value">{totalReds}</span>
-              <span className="stats-card__label">Reds</span>
-            </div>
-            <div className="stats-card stats-card--sub stagger-rise">
-              <span className="stats-card__value">{totalSubs}</span>
-              <span className="stats-card__label">Subs</span>
-            </div>
-          </div>
-        </>
-      )}
+function categoryValueTotal(category: LeaderboardCategory): number {
+  return category.leaders.reduce((sum, leader) => sum + category.value(leader), 0);
+}
 
-      {/* ── Goal type breakdown (uses event-based totals) ── */}
-      {totalGoalsFromEvents > 0 && (
-        <section className="stats-section">
-          <h3 className="stats-heading">Goal Types</h3>
-          <div className="stats-type-row">
-            <div className="stats-type-item">
-              <div className="stats-type-bar" style={{ "--bar-pct": `${(normalGoals / totalGoalsFromEvents) * 100}%` } as CSSProperties}>
-                <span className="stats-type-fill stats-type-fill--normal" />
-              </div>
-              <span className="stats-type-count">{normalGoals}</span>
-              <span className="stats-type-label">Open Play</span>
-            </div>
-            <div className="stats-type-item">
-              <div className="stats-type-bar" style={{ "--bar-pct": `${(penGoals / totalGoalsFromEvents) * 100}%` } as CSSProperties}>
-                <span className="stats-type-fill stats-type-fill--pen" />
-              </div>
-              <span className="stats-type-count">{penGoals}</span>
-              <span className="stats-type-label">Penalty</span>
-            </div>
-            <div className="stats-type-item">
-              <div className="stats-type-bar" style={{ "--bar-pct": `${(ownGoals / totalGoalsFromEvents) * 100}%` } as CSSProperties}>
-                <span className="stats-type-fill stats-type-fill--og" />
-              </div>
-              <span className="stats-type-count">{ownGoals}</span>
-              <span className="stats-type-label">Own Goal</span>
-            </div>
-          </div>
-          {matchesWithEvents < matchesPlayed && (
-            <p className="stats-coverage">Based on {matchesWithEvents} of {matchesPlayed} matches with event data</p>
-          )}
-        </section>
-      )}
+/** Stats view — tournament dashboard with visualizations */
+function StatsView({ fl, computeLeaders }: {
+  fl: (t: string) => string;
+  computeLeaders: () => TournamentStats;
+}) {
+  const [activeTab, setActiveTab] = useState<StatTabKey>("goals");
+  const stats = useMemo(() => { try { return computeLeaders(); } catch { return null; } }, [computeLeaders]);
+  if (!stats) {
+    return <main className="section stats-view"><div className="stats-leaders__empty"><span>!</span><b>Stats failed to load</b><small>Live data will retry on the next refresh.</small></div></main>;
+  }
 
-      {/* ── Goals by minute distribution (only from matches with events) ── */}
-      {totalGoalsFromEvents > 0 && (
-        <section className="stats-section">
-          <h3 className="stats-heading">When Goals Are Scored</h3>
-          <div className="stats-chart">
-            {minuteBuckets.map((count, i) => (
-              <div key={bucketLabels[i]} className="stats-bar-col">
-                <span className="stats-bar-val">{count || ""}</span>
-                <div className="stats-bar" style={{ "--bar-h": `${(count / maxBucket) * 100}%` } as CSSProperties} />
-                <span className="stats-bar-label">{bucketLabels[i]}</span>
-              </div>
-            ))}
-          </div>
-          <div className="stats-chart-axis">Minutes</div>
-        </section>
-      )}
+  const {
+    topScorers, topAssisters, topYellowCards, topRedCards,
+    totalGoals, totalYellows, totalReds, matchesPlayed, matchesWithAssistData, avgGoals, cleanSheets,
+  } = stats;
 
-      {/* ── Top Scorers with visual bars ── */}
-      {topScorers.length === 0 && hasTeams && (
-        <section className="stats-section">
-          <h3 className="stats-heading">Top Scorers</h3>
-          <div className="stats-empty stats-empty--inline">
-            <p>Individual scorer data is being processed.</p>
-            <p className="stats-empty__sub">Team totals are available below. Player-level breakdowns appear as match events are finalized.</p>
-          </div>
-        </section>
-      )}
-      {topScorers.length > 0 && (
-        <section className="stats-section">
-          <h3 className="stats-heading">Top Scorers</h3>
-          <div className="stats-scorer-list">
-            {topScorers.slice(0, 10).map((s, i) => (
-              <div key={`${s.name}-${s.team}`} className={`stats-scorer stagger-rise${i < 3 ? ` stats-scorer--${["gold","silver","bronze"][i]}` : ""}`}>
-                <span className="stats-scorer__rank">{i + 1}</span>
-                <span className="stats-scorer__flag">{fl(s.team)}</span>
-                <div className="stats-scorer__info">
-                  <span className="stats-scorer__name">{s.name}</span>
-                  <span className="stats-scorer__team">{s.team}{s.matches > 0 ? ` · ${s.matches}MP` : ""}{s.assists > 0 ? ` · ${s.assists}A` : ""}{s.penalties > 0 ? ` · ${s.penalties}P` : ""}</span>
-                </div>
-                <div className="stats-scorer__bar-wrap">
-                  <div className="stats-scorer__bar" style={{ "--bar-w": `${(s.goals / maxScorerGoals) * 100}%` } as CSSProperties} />
-                </div>
-                <span className="stats-scorer__goals">{s.goals}</span>
-              </div>
-            ))}
-          </div>
-          {topScorers.length > 10 && (
-            <details className="stats-expand">
-              <summary>Show all {topScorers.length} scorers</summary>
-              <div className="stats-scorer-list">
-                {topScorers.slice(10).map((s, i) => (
-                  <div key={`${s.name}-${s.team}`} className="stats-scorer">
-                    <span className="stats-scorer__rank">{i + 11}</span>
-                    <span className="stats-scorer__flag">{fl(s.team)}</span>
-                    <div className="stats-scorer__info">
-                      <span className="stats-scorer__name">{s.name}</span>
-                      <span className="stats-scorer__team">{s.team}{s.matches > 0 ? ` · ${s.matches}MP` : ""}{s.assists > 0 ? ` · ${s.assists}A` : ""}{s.penalties > 0 ? ` · ${s.penalties}P` : ""}</span>
-                    </div>
-                    <div className="stats-scorer__bar-wrap">
-                      <div className="stats-scorer__bar" style={{ "--bar-w": `${(s.goals / maxScorerGoals) * 100}%` } as CSSProperties} />
-                    </div>
-                    <span className="stats-scorer__goals">{s.goals}</span>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
-        </section>
-      )}
+  const categories: LeaderboardCategory[] = [
+    {
+      key: "goals",
+      label: "Goals",
+      statLabel: "Goals",
+      empty: "No goal scorers yet",
+      leaders: topScorers,
+      value: leader => leader.goals,
+      detail: leader => `${leader.assists}A · ${leader.matches}MP${leader.penalties ? ` · ${leader.penalties}P` : ""}`,
+    },
+    {
+      key: "assists",
+      label: "Assists",
+      statLabel: "Assists",
+      empty: "No assists recorded yet",
+      leaders: topAssisters,
+      value: leader => leader.assists,
+      detail: leader => `${leader.goals}G · ${leader.matches}MP`,
+    },
+    {
+      key: "yellows",
+      label: "Yellow Cards",
+      statLabel: "Yellows",
+      empty: "No yellow cards yet",
+      leaders: topYellowCards,
+      value: leader => leader.yellows,
+      detail: leader => `${leader.reds}R · ${leader.matches}MP`,
+    },
+    {
+      key: "reds",
+      label: "Red Cards",
+      statLabel: "Reds",
+      empty: "No red cards yet",
+      leaders: topRedCards,
+      value: leader => leader.reds,
+      detail: leader => `${leader.yellows}Y · ${leader.matches}MP`,
+    },
+  ];
 
-      {/* ── Top Assists ── */}
-      {topAssisters.length > 0 && (
-        <section className="stats-section">
-          <h3 className="stats-heading">Top Assists</h3>
-          {matchesWithAssistData < matchesPlayed && (
-            <p className="stats-coverage">Assist data available for {matchesWithAssistData} of {matchesPlayed} matches</p>
-          )}
-          <div className="stats-scorer-list">
-            {topAssisters.slice(0, 10).map((a, i) => (
-              <div key={`${a.name}-${a.team}`} className={`stats-scorer stagger-rise${i < 3 ? ` stats-scorer--${["gold","silver","bronze"][i]}` : ""}`}>
-                <span className="stats-scorer__rank">{i + 1}</span>
-                <span className="stats-scorer__flag">{fl(a.team)}</span>
-                <div className="stats-scorer__info">
-                  <span className="stats-scorer__name">{a.name}</span>
-                  <span className="stats-scorer__team">{a.team}</span>
-                </div>
-                <div className="stats-scorer__bar-wrap">
-                  <div className="stats-scorer__bar stats-scorer__bar--assist" style={{ "--bar-w": `${(a.assists / (topAssisters[0]?.assists || 1)) * 100}%` } as CSSProperties} />
-                </div>
-                <span className="stats-scorer__goals">{a.assists}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+  const hasAnyData = categories.some(c => c.leaders.length > 0) || matchesPlayed > 0;
 
-      {/* ── Goals + assists ── */}
-      {topCombined.length > 0 && (
-        <section className="stats-section">
-          <h3 className="stats-heading">Goals + Assists</h3>
-          {matchesWithAssistData < matchesPlayed && (
-            <p className="stats-coverage">Assist data available for {matchesWithAssistData} of {matchesPlayed} matches</p>
-          )}
-          <div className="stats-scorer-list">
-            {topCombined.slice(0, 10).map((p, i) => (
-              <div key={`${p.name}-${p.team}`} className={`stats-scorer stagger-rise${i < 3 ? ` stats-scorer--${["gold","silver","bronze"][i]}` : ""}`}>
-                <span className="stats-scorer__rank">{i + 1}</span>
-                <span className="stats-scorer__flag">{fl(p.team)}</span>
-                <div className="stats-scorer__info">
-                  <span className="stats-scorer__name">{p.name}</span>
-                  <span className="stats-scorer__team">{p.team} · {p.goals}G {p.assists}A</span>
-                </div>
-                <div className="stats-scorer__bar-wrap">
-                  <div className="stats-scorer__bar stats-scorer__bar--combined" style={{ "--bar-w": `${(p.total / (topCombined[0]?.total || 1)) * 100}%` } as CSSProperties} />
-                </div>
-                <span className="stats-scorer__goals">{p.total}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+  return (
+    <main className="section stats-view stats-view--premium">
+      <section className="stats-hero-panel">
+        <div className="stats-hero-panel__copy">
+          <span>Compet 2026</span>
+          <h2>Stat Leaders</h2>
+          <p>Goals, assists and discipline update from the same live match-event pipeline.</p>
+        </div>
+        <WorldCupTrophy id="st" className="stats-hero-panel__trophy" />
+      </section>
 
-      {/* ── Discipline — most carded players ── */}
-      {mostCarded.length > 0 && (
-        <section className="stats-section">
-          <h3 className="stats-heading">Discipline</h3>
-          <div className="stats-scorer-list">
-            {mostCarded.map((c, i) => (
-              <div key={`${c.name}-${c.team}`} className="stats-scorer stagger-rise">
-                <span className="stats-scorer__rank">{i + 1}</span>
-                <span className="stats-scorer__flag">{fl(c.team)}</span>
-                <div className="stats-scorer__info">
-                  <span className="stats-scorer__name">{c.name}</span>
-                  <span className="stats-scorer__team">{c.team}</span>
-                </div>
-                <div className="stats-card-icons">
-                  {c.yellows > 0 && <span className="stats-card-icon stats-card-icon--yellow" title="Yellow cards">{c.yellows > 1 ? `${c.yellows}x` : ""}🟨</span>}
-                  {c.reds > 0 && <span className="stats-card-icon stats-card-icon--red" title="Red cards">{c.reds > 1 ? `${c.reds}x` : ""}🟥</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <div className="stats-summary stats-summary--premium" aria-label="Tournament stat summary">
+        <div className="stats-card"><span className="stats-card__value">{totalGoals}</span><span className="stats-card__label">Goals</span></div>
+        <div className="stats-card"><span className="stats-card__value">{matchesPlayed}</span><span className="stats-card__label">Matches</span></div>
+        <div className="stats-card"><span className="stats-card__value">{avgGoals}</span><span className="stats-card__label">Avg / Match</span></div>
+        <div className="stats-card"><span className="stats-card__value">{cleanSheets}</span><span className="stats-card__label">Clean Sheets</span></div>
+        <div className="stats-card stats-card--yellow"><span className="stats-card__value">{totalYellows}</span><span className="stats-card__label">Yellows</span></div>
+        <div className="stats-card stats-card--red"><span className="stats-card__value">{totalReds}</span><span className="stats-card__label">Reds</span></div>
+      </div>
 
-      {/* ── Team Goals leaderboard ── */}
-      {topTeams.length > 0 && (
-        <section className="stats-section">
-          <h3 className="stats-heading">Goals by Team</h3>
-          <div className="stats-scorer-list">
-            {topTeams.map((t, i) => (
-              <div key={t.team} className={`stats-team-row stagger-rise${i < 3 ? ` stats-scorer--${["gold","silver","bronze"][i]}` : ""}`}>
-                <span className="stats-scorer__rank">{i + 1}</span>
-                <span className="stats-scorer__flag" style={{ fontSize: 20 }}>{fl(t.team)}</span>
-                <div className="stats-scorer__info">
-                  <span className="stats-scorer__name">{t.team}</span>
-                  <span className="stats-scorer__team">{t.matches}MP · {t.gpm}/match · {t.conceded}GA</span>
-                </div>
-                <div className="stats-scorer__bar-wrap">
-                  <div className="stats-scorer__bar stats-scorer__bar--team" style={{ "--bar-w": `${(t.goals / maxTeamGoals) * 100}%` } as CSSProperties} />
-                </div>
-                <span className="stats-scorer__goals">{t.goals}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+      {!hasAnyData ? (
+        <div className="stats-leaders__empty stats-leaders__empty--page">
+          <span>↗</span>
+          <b>Leaderboards are warming up</b>
+          <small>Completed and live match events will populate this screen automatically. No mock leaders are shown.</small>
+        </div>
+      ) : (
+        <StatsLeaderboard
+          categories={categories}
+          active={activeTab}
+          onActive={setActiveTab}
+          fl={fl}
+          matchesWithAssistData={matchesWithAssistData}
+          matchesPlayed={matchesPlayed}
+        />
       )}
-
     </main>
   );
 }

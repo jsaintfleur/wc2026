@@ -422,6 +422,9 @@ async function persistFinished(fixtures: unknown[]): Promise<number> {
           homeGoals: typeof fixture.gh === "number" ? fixture.gh : null,
           awayGoals: typeof fixture.ga === "number" ? fixture.ga : null,
           events: toJson(fixture.events),
+          stats: toJson(fixture.stats),
+          lineups: toJson(fixture.lineups),
+          players: toJson(fixture.players),
           updatedAt: new Date(),
         },
         create: {
@@ -431,6 +434,9 @@ async function persistFinished(fixtures: unknown[]): Promise<number> {
           homeGoals: typeof fixture.gh === "number" ? fixture.gh : null,
           awayGoals: typeof fixture.ga === "number" ? fixture.ga : null,
           events: toJson(fixture.events),
+          stats: toJson(fixture.stats),
+          lineups: toJson(fixture.lineups),
+          players: toJson(fixture.players),
         },
       });
       written++;

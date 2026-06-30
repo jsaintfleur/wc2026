@@ -74,7 +74,7 @@ const R32_SEEDS = [
 ] as const;
 
 const KO_SOURCE_PAIRS: Partial<Record<KnockoutRoundKey, [number, number][]>> = {
-  r16: [[2, 5], [0, 3], [1, 4], [6, 7], [11, 10], [9, 8], [14, 13], [12, 15]],
+  r16: [[0, 5], [2, 4], [3, 1], [6, 7], [11, 10], [9, 8], [12, 13], [14, 15]],
   qf: [[0, 1], [4, 5], [2, 3], [6, 7]],
   sf: [[0, 1], [2, 3]],
   final: [[0, 1]],
@@ -2877,7 +2877,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const roundMap = new Map(rounds.map(round => [round.key, round.cards]));
   const pick = (cards: KnockoutCardModel[], indices: number[]) => indices.map(i => cards[i]).filter(Boolean);
   const leftRoad = [
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [2, 5, 0, 3, 11, 10, 9, 8]) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [0, 5, 2, 4, 11, 10, 9, 8]) },
     { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: pick(roundMap.get("r16") || [], [0, 1, 4, 5]) },
     { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: pick(roundMap.get("qf") || [], [0, 1]) },
     { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: pick(roundMap.get("sf") || [], [0]) },
@@ -2886,7 +2886,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: pick(roundMap.get("sf") || [], [1]) },
     { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: pick(roundMap.get("qf") || [], [2, 3]) },
     { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: pick(roundMap.get("r16") || [], [2, 3, 6, 7]) },
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [1, 4, 6, 7, 14, 13, 12, 15]) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [3, 1, 6, 7, 12, 13, 14, 15]) },
   ];
   const finalCard = (roundMap.get("final") || [])[0];
   const thirdCard = (roundMap.get("third") || [])[0];

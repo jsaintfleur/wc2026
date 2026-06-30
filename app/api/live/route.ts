@@ -51,14 +51,8 @@ function sameFixture(a: unknown, b: unknown): boolean {
   const teamsMatch = (lh === rh && la === ra) || (lh === ra && la === rh);
   if (!teamsMatch) return false;
   // Each team pair plays at most once in the entire tournament, so matching
-  // by team names alone is sufficient. We keep a generous 12-hour time
-  // window as an extra sanity check, but fall back to team-name-only when
-  // either timestamp is missing. The wider window handles worldcup26.ir's
-  // local_date field being in venue-local time instead of UTC.
-  const leftTs = left.ts || 0;
-  const rightTs = right.ts || 0;
-  if (!leftTs || !rightTs) return true;
-  return Math.abs(leftTs - rightTs) <= 12 * 60 * 60000;
+  // by canonical team names alone is sufficient and safe.
+  return true;
 }
 
 function withVerifiedResults(fixtures: unknown[] = []): unknown[] {

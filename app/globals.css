@@ -2822,12 +2822,16 @@ body::after {
 }
 
 .ko-road__trophy {
-  display: grid;
-  justify-items: center;
-  gap: 6px;
-  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 4px;
+  padding: 14px 24px;
   border: 1px solid rgba(245,158,11,0.32);
   border-radius: 20px;
+  overflow: hidden;
   background:
     radial-gradient(circle at 50% 20%, rgba(245,158,11,0.24), transparent 60%),
     radial-gradient(circle at 50% 80%, rgba(124,58,237,0.1), transparent 50%),
@@ -2838,8 +2842,8 @@ body::after {
 }
 
 .ko-road__cup-img {
-  width: 64px;
-  height: 64px;
+  width: 52px;
+  height: 52px;
   object-fit: contain;
   filter: drop-shadow(0 8px 20px rgba(245,158,11,0.36));
   animation: koCupFloat 4s ease-in-out infinite;
@@ -2854,19 +2858,21 @@ body::after {
 .ko-road__third > span {
   color: var(--gold-bright);
   font-family: var(--disp);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: .8px;
+  letter-spacing: .6px;
   text-transform: uppercase;
+  line-height: 1;
 }
 
 .ko-road__trophy small {
   color: var(--ink-soft);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .6px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .4px;
   line-height: 1;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .ko-road__third {

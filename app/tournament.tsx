@@ -3076,10 +3076,10 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
           </div>
 
           <div className="ko-road__center" ref={roadCenterRef} aria-label="World Cup final path">
-            <div className="ko-road__trophy" style={{ gridRow: "4 / span 3" }}>
+            <div className="ko-road__trophy" style={{ gridRow: "3 / span 4" }}>
               <WorldCupTrophy className="ko-road__cup-img" />
               <span>FIFA World Cup</span>
-              <small>MetLife Stadium, New Jersey</small>
+              <small>MetLife Stadium · New Jersey</small>
             </div>
             {finalCard && renderRoadCard(finalCard, "center", { gridRow: "8 / span 3" })}
             {thirdCard && (

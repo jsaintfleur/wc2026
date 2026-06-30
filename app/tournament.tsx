@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup, type PlayerMatchStat } from "@/lib/data";
+import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup } from "@/lib/data";
 import { nrm, canon, canonPlayer } from "@/lib/merge";
+import { buildTournamentStats, type PlayerLeader, type TournamentStats } from "@/lib/stats";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import TriondaBall from "@/app/components/TriondaBall";
 import WorldCupTrophy from "@/app/components/WorldCupTrophy";
@@ -74,7 +75,7 @@ const R32_SEEDS = [
 ] as const;
 
 const KO_SOURCE_PAIRS: Partial<Record<KnockoutRoundKey, [number, number][]>> = {
-  r16: [[0, 5], [2, 4], [3, 1], [6, 7], [11, 10], [9, 8], [12, 13], [14, 15]],
+  r16: [[0, 3], [2, 5], [1, 4], [6, 7], [8, 9], [10, 11], [12, 15], [13, 14]],
   qf: [[0, 1], [4, 5], [2, 3], [6, 7]],
   sf: [[0, 1], [2, 3]],
   final: [[0, 1]],
@@ -1048,309 +1049,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
     }).join("");
   }
 
-  /**
-   * Aggregate goal/assist tallies and tournament-wide stats from all
-   * available sources: match events → player stats → match scores.
-   *
-   * Data priority for goalscorers:
-   *   1. Match events (most detailed: minute, type, assist)
-   *   2. PlayerMatchStat records (goals/assists per player per match)
-   *   3. Score fallback (only gives team totals, no individual scorers)
-   *
-   * Team goals always use the most reliable path available, with
-   * score-based totals as the final fallback so that completed matches
-   * with nonzero scores always contribute to the Team Total Goals board.
-   */
-  function computeLeaders() {
-    const scorers: Record<string, { name: string; team: string; goals: number; penalties: number; assists: number; matches: number }> = {};
-    const assisters: Record<string, { name: string; team: string; assists: number }> = {};
-    const teamGoalsFromEvents: Record<string, number> = {};
-    const teamGoalsFromScores: Record<string, { goals: number; conceded: number; matches: number }> = {};
-    const cardPlayers: Record<string, { name: string; team: string; yellows: number; reds: number }> = {};
-
-    const minuteBuckets = [0, 0, 0, 0, 0, 0, 0];
-    let totalGoalsFromEvents = 0;
-    let normalGoals = 0;
-    let penGoals = 0;
-    let ownGoals = 0;
-    let totalYellows = 0;
-    let totalReds = 0;
-    let totalSubs = 0;
-    let matchesWithAssistData = 0;
-
-    /* ── Collect all finished matches (deduped) ───────────────── */
-    type FinishedMatch = {
-      key: string;
-      home: string;
-      away: string;
-      gh: number;
-      ga: number;
-      events?: MatchEvent[];
-      players?: PlayerMatchStat[];
-    };
-    const finishedMap = new Map<string, FinishedMatch>();
-
-    /* Live fixtures first (takes priority) */
-    for (const f of fixtures) {
-      if (!DONE_STATUSES.has(f.status) || f.gh == null || f.ga == null) continue;
-      const key = canon(f.home) + ":" + canon(f.away);
-      if (finishedMap.has(key)) continue;
-      finishedMap.set(key, {
-        key, home: f.home, away: f.away, gh: f.gh, ga: f.ga,
-        events: f.events, players: f.players,
-      });
-    }
-
-    /* DB group-stage matches (fallback for matches not in live feed) */
-    for (const m of data.gs) {
-      if (!m.dbStatus || !DONE_STATUSES.has(m.dbStatus) || m.dbGh == null || m.dbGa == null) continue;
-      const key = canon(m.t1) + ":" + canon(m.t2);
-      if (finishedMap.has(key)) continue;
-      finishedMap.set(key, {
-        key, home: m.t1, away: m.t2, gh: m.dbGh, ga: m.dbGa,
-        events: m.dbEvents, players: m.dbPlayers,
-      });
-    }
-
-    const matchesPlayed = finishedMap.size;
-    let matchesWithEvents = 0;
-    let cleanSheets = 0;
-
-    /* ── Process each finished match ──────────────────────────── */
-    for (const fm of finishedMap.values()) {
-      /* Clean sheets */
-      if (fm.gh === 0) cleanSheets++;
-      if (fm.ga === 0) cleanSheets++;
-
-      /* Always record score-based team goals (most reliable) */
-      if (!teamGoalsFromScores[fm.home]) teamGoalsFromScores[fm.home] = { goals: 0, conceded: 0, matches: 0 };
-      teamGoalsFromScores[fm.home].goals += fm.gh;
-      teamGoalsFromScores[fm.home].conceded += fm.ga;
-      teamGoalsFromScores[fm.home].matches++;
-
-      if (!teamGoalsFromScores[fm.away]) teamGoalsFromScores[fm.away] = { goals: 0, conceded: 0, matches: 0 };
-      teamGoalsFromScores[fm.away].goals += fm.ga;
-      teamGoalsFromScores[fm.away].conceded += fm.gh;
-      teamGoalsFromScores[fm.away].matches++;
-
-      const hasEvents = fm.events && fm.events.length > 0;
-      const hasPlayers = fm.players && fm.players.length > 0;
-      if (hasEvents) matchesWithEvents++;
-
-      /* ── Path 1: Event-level data (richest) ──────────────── */
-      if (hasEvents) {
-        for (const ev of fm.events!) {
-          if (ev.type === "Card") {
-            const isRed = ev.detail?.includes("Red") ?? false;
-            if (isRed) totalReds++; else totalYellows++;
-            if (ev.player) {
-              const cName = canonPlayer(ev.player);
-              const cTeam = ev.team ? canon(ev.team) : ev.team;
-              const cKey = `${cName}|${cTeam}`;
-              if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: cName, team: cTeam, yellows: 0, reds: 0 };
-              if (isRed) cardPlayers[cKey].reds++; else cardPlayers[cKey].yellows++;
-            }
-            continue;
-          }
-
-          if (ev.type === "subst") { totalSubs++; continue; }
-          if (ev.type !== "Goal") continue;
-          if (/shootout/i.test(ev.detail || "")) continue;
-
-          totalGoalsFromEvents++;
-          const isPen = ev.detail === "Penalty";
-          const isOG = ev.detail === "Own Goal";
-          if (isOG) ownGoals++;
-          else if (isPen) penGoals++;
-          else normalGoals++;
-
-          /* Minute buckets */
-          const m = ev.minute ?? 0;
-          if (m <= 15) minuteBuckets[0]++;
-          else if (m <= 30) minuteBuckets[1]++;
-          else if (m <= 45) minuteBuckets[2]++;
-          else if (m <= 60) minuteBuckets[3]++;
-          else if (m <= 75) minuteBuckets[4]++;
-          else if (m <= 90 && !ev.extra) minuteBuckets[5]++;
-          else minuteBuckets[6]++;
-
-          /* Event-based team goals (for granular tracking) */
-          if (ev.team) {
-            const cTeam = canon(ev.team);
-            teamGoalsFromEvents[cTeam] = (teamGoalsFromEvents[cTeam] || 0) + 1;
-          }
-
-          if (isOG) continue;
-
-          /* Individual scorer — normalize Farsi transliterations + abbreviations */
-          if (ev.player) {
-            const pName = canonPlayer(ev.player);
-            const pTeam = ev.team ? canon(ev.team) : ev.team;
-            const pKey = `${pName}|${pTeam}`;
-            if (!scorers[pKey]) scorers[pKey] = { name: pName, team: pTeam, goals: 0, penalties: 0, assists: 0, matches: 0 };
-            scorers[pKey].goals++;
-            if (isPen) scorers[pKey].penalties++;
-          }
-
-          /* Assist */
-          if (ev.assist) {
-            const aName = canonPlayer(ev.assist);
-            const aTeam = ev.team ? canon(ev.team) : ev.team;
-            const aKey = `${aName}|${aTeam}`;
-            if (!assisters[aKey]) assisters[aKey] = { name: aName, team: aTeam, assists: 0 };
-            assisters[aKey].assists++;
-          }
-        }
-        if (fm.events!.some(e => e.type === "Goal" && e.assist)) matchesWithAssistData++;
-      }
-
-      /* ── Path 2: PlayerMatchStat fallback (when events missing) */
-      if (!hasEvents && hasPlayers) {
-        for (const p of fm.players!) {
-          if (!p.name || !p.team) continue;
-
-          const pName = canonPlayer(p.name);
-          const pTeam = canon(p.team);
-          if (p.goals > 0) {
-            const pKey = `${pName}|${pTeam}`;
-            if (!scorers[pKey]) scorers[pKey] = { name: pName, team: pTeam, goals: 0, penalties: 0, assists: 0, matches: 0 };
-            scorers[pKey].goals += p.goals;
-          }
-          if (p.assists > 0) {
-            const aKey = `${pName}|${pTeam}`;
-            if (!assisters[aKey]) assisters[aKey] = { name: pName, team: pTeam, assists: 0 };
-            assisters[aKey].assists += p.assists;
-            if (scorers[aKey]) scorers[aKey].assists += p.assists;
-          }
-          if (p.yellowCards > 0 || p.redCards > 0) {
-            const cKey = `${pName}|${pTeam}`;
-            if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: pName, team: pTeam, yellows: 0, reds: 0 };
-            cardPlayers[cKey].yellows += p.yellowCards;
-            cardPlayers[cKey].reds += p.redCards;
-            totalYellows += p.yellowCards;
-            totalReds += p.redCards;
-          }
-        }
-      }
-
-      /* Path 3 (score-only) is handled above — teamGoalsFromScores
-         always gets populated, so team totals are never empty when
-         completed matches exist. No individual scorers from this path. */
-    }
-
-    /* ── Also check currently live fixtures for events (not yet FT) ── */
-    for (const f of fixtures) {
-      if (DONE_STATUSES.has(f.status)) continue;
-      if (!LIVE_STATUSES.has(f.status)) continue;
-      if (!f.events) continue;
-      for (const ev of f.events) {
-        if (ev.type === "Card") {
-          const isRed = ev.detail?.includes("Red") ?? false;
-          if (isRed) totalReds++; else totalYellows++;
-          if (ev.player) {
-            const cName = canonPlayer(ev.player);
-            const cTeam = ev.team ? canon(ev.team) : ev.team;
-            const cKey = `${cName}|${cTeam}`;
-            if (!cardPlayers[cKey]) cardPlayers[cKey] = { name: cName, team: cTeam, yellows: 0, reds: 0 };
-            if (isRed) cardPlayers[cKey].reds++; else cardPlayers[cKey].yellows++;
-          }
-        }
-        if (ev.type === "subst") totalSubs++;
-        if (ev.type !== "Goal") continue;
-        if (/shootout/i.test(ev.detail || "")) continue;
-        totalGoalsFromEvents++;
-        const isPen = ev.detail === "Penalty";
-        const isOG = ev.detail === "Own Goal";
-        if (isOG) ownGoals++;
-        else if (isPen) penGoals++;
-        else normalGoals++;
-        if (ev.team) {
-          const cTeam = canon(ev.team);
-          teamGoalsFromEvents[cTeam] = (teamGoalsFromEvents[cTeam] || 0) + 1;
-        }
-        if (isOG) continue;
-        if (ev.player) {
-          const pName = canonPlayer(ev.player);
-          const pTeam = ev.team ? canon(ev.team) : ev.team;
-          const pKey = `${pName}|${pTeam}`;
-          if (!scorers[pKey]) scorers[pKey] = { name: pName, team: pTeam, goals: 0, penalties: 0, assists: 0, matches: 0 };
-          scorers[pKey].goals++;
-          if (isPen) scorers[pKey].penalties++;
-        }
-        if (ev.assist) {
-          const aName = canonPlayer(ev.assist);
-          const aTeam = ev.team ? canon(ev.team) : ev.team;
-          const aKey = `${aName}|${aTeam}`;
-          if (!assisters[aKey]) assisters[aKey] = { name: aName, team: aTeam, assists: 0 };
-          assisters[aKey].assists++;
-        }
-      }
-    }
-
-    /* ── Build team goals: prefer score-based (always accurate) ─── */
-    const topTeams = Object.entries(teamGoalsFromScores)
-      .map(([team, s]) => ({ team, goals: s.goals, conceded: s.conceded, matches: s.matches, gpm: s.matches > 0 ? +(s.goals / s.matches).toFixed(1) : 0 }))
-      .sort((a, b) => b.goals - a.goals || a.team.localeCompare(b.team))
-      .slice(0, 20);
-
-    /* Use score-based total goals as the authoritative count */
-    let totalGoalsFromScores = 0;
-    for (const s of Object.values(teamGoalsFromScores)) totalGoalsFromScores += s.goals;
-    const totalGoals = Math.max(totalGoalsFromEvents, totalGoalsFromScores);
-    const avgGoals = matchesPlayed > 0 ? +(totalGoals / matchesPlayed).toFixed(1) : 0;
-
-    /* ── Compute match counts per scorer ──────────────────────── */
-    for (const fm of finishedMap.values()) {
-      const canonHome = canon(fm.home);
-      const canonAway = canon(fm.away);
-      for (const [pKey, s] of Object.entries(scorers)) {
-        const canonTeam = canon(s.team);
-        if (canonTeam === canonHome || canonTeam === canonAway) s.matches++;
-      }
-    }
-
-    /* ── Sort and slice final leaderboards ─────────────────────── */
-    const topScorers = Object.values(scorers)
-      .filter(s => s.goals > 0)
-      .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name))
-      .slice(0, 20);
-
-    const topAssisters = Object.values(assisters)
-      .sort((a, b) => b.assists - a.assists || a.name.localeCompare(b.name))
-      .slice(0, 20);
-
-    const combined: Record<string, { name: string; team: string; goals: number; assists: number; total: number }> = {};
-    Object.values(scorers).forEach(s => {
-      const key = `${s.name}|${s.team}`;
-      combined[key] = combined[key] || { name: s.name, team: s.team, goals: 0, assists: 0, total: 0 };
-      combined[key].goals = s.goals;
-      combined[key].assists = s.assists;
-      combined[key].total = s.goals + s.assists;
-    });
-    Object.values(assisters).forEach(a => {
-      const key = `${a.name}|${a.team}`;
-      if (!combined[key]) combined[key] = { name: a.name, team: a.team, goals: 0, assists: 0, total: 0 };
-      combined[key].assists = a.assists;
-      combined[key].total = combined[key].goals + combined[key].assists;
-    });
-    const topCombined = Object.values(combined)
-      .filter(p => p.total > 0)
-      .sort((a, b) => b.total - a.total || b.goals - a.goals || a.name.localeCompare(b.name))
-      .slice(0, 20);
-
-    const mostCarded = Object.values(cardPlayers)
-      .sort((a, b) => (b.yellows + b.reds * 3) - (a.yellows + a.reds * 3) || a.name.localeCompare(b.name))
-      .slice(0, 15);
-
-    const bucketLabels = ["1-15", "16-30", "31-45", "46-60", "61-75", "76-90", "90+"];
-
-    return {
-      topScorers, topAssisters, topCombined, topTeams, mostCarded,
-      minuteBuckets, bucketLabels,
-      totalGoals, totalGoalsFromEvents, normalGoals, penGoals, ownGoals,
-      totalYellows, totalReds, totalSubs,
-      matchesPlayed, matchesWithEvents, matchesWithAssistData, avgGoals, cleanSheets,
-    };
+  /** Aggregate tournament leaderboards from the shared real-time stats model. */
+  function computeLeaders(): TournamentStats {
+    return buildTournamentStats(data, fixtures);
   }
 
   function renderAbout(): string {
@@ -2877,7 +2578,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const roundMap = new Map(rounds.map(round => [round.key, round.cards]));
   const pick = (cards: KnockoutCardModel[], indices: number[]) => indices.map(i => cards[i]).filter(Boolean);
   const leftRoad = [
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [0, 5, 2, 4, 11, 10, 9, 8]) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [0, 3, 2, 5, 8, 9, 10, 11]) },
     { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: pick(roundMap.get("r16") || [], [0, 1, 4, 5]) },
     { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: pick(roundMap.get("qf") || [], [0, 1]) },
     { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: pick(roundMap.get("sf") || [], [0]) },
@@ -2886,7 +2587,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: pick(roundMap.get("sf") || [], [1]) },
     { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: pick(roundMap.get("qf") || [], [2, 3]) },
     { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "8 teams", cards: pick(roundMap.get("r16") || [], [2, 3, 6, 7]) },
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [3, 1, 6, 7, 12, 13, 14, 15]) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "16 teams", cards: pick(roundMap.get("r32") || [], [1, 4, 6, 7, 12, 15, 13, 14]) },
   ];
   const finalCard = (roundMap.get("final") || [])[0];
   const thirdCard = (roundMap.get("third") || [])[0];

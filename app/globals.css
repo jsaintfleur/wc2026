@@ -1661,6 +1661,113 @@ body::after {
   transition: width .6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ── Checkpoint tracker ── */
+.home-checkpoint {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  padding: 18px 8px 14px;
+  margin-bottom: 14px;
+}
+.home-checkpoint__phase {
+  appearance: none;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 72px;
+  padding: 0;
+  position: relative;
+}
+.home-checkpoint__dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255,255,255,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card);
+  transition: border-color .3s, background .3s, box-shadow .3s;
+  position: relative;
+  z-index: 1;
+}
+.home-checkpoint__dot-inner {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  transition: background .3s, transform .3s;
+}
+.home-checkpoint__dot--active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px rgba(245,158,11,0.15), 0 0 12px rgba(245,158,11,0.2);
+}
+.home-checkpoint__dot--active .home-checkpoint__dot-inner {
+  background: var(--gold);
+  transform: scale(1.15);
+}
+.home-checkpoint__dot--done {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: var(--bg);
+}
+.home-checkpoint__dot--trophy {
+  font-size: 14px;
+  line-height: 1;
+}
+.home-checkpoint__label {
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--muted);
+  transition: color .3s;
+}
+.home-checkpoint__label--active {
+  color: var(--gold-bright);
+}
+.home-checkpoint__sub {
+  font-family: var(--disp);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  letter-spacing: .2px;
+}
+.home-checkpoint__mini-bar {
+  width: 48px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+  margin-top: 2px;
+}
+.home-checkpoint__mini-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+  transition: width .6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.home-checkpoint__rail {
+  flex: 1;
+  height: 2.5px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  margin-top: 15px;
+  min-width: 24px;
+  transition: background .4s;
+}
+.home-checkpoint__rail--done {
+  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+}
+
 .home-progress__stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

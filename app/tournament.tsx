@@ -1644,9 +1644,70 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
           <span className="home-progress__stage">{stageLabel}</span>
           <span className="home-progress__count">{totalDone}/{totalMatches}</span>
         </div>
-        <div className="home-progress__bar">
-          <div className="home-progress__fill" style={{ width: `${progressPct}%` }} />
-        </div>
+
+        {/* Checkpoint tracker — three major phases with connecting rail */}
+        {(() => {
+          // Phase completion: group stage is done at 72, KO rounds before final = 31,
+          // final itself is match 32
+          const gsComplete = groupDone >= data.gs.length;
+          const gsActive = !gsComplete;
+          const gsPct = data.gs.length > 0 ? Math.min(100, Math.round((groupDone / data.gs.length) * 100)) : 0;
+
+          // KO phase = R32 (16) + R16 (8) + QF (4) + SF (2) = 30 matches
+          const koPhaseTotal = 30;
+          const koPhaseComplete = koDone >= koPhaseTotal;
+          const koPhaseActive = gsComplete && !koPhaseComplete;
+          const koPhaseDone = Math.min(koDone, koPhaseTotal);
+          const koPct = koPhaseTotal > 0 ? Math.min(100, Math.round((koPhaseDone / koPhaseTotal) * 100)) : 0;
+
+          // Final phase = third-place + final = 2 matches
+          const finalPhaseTotal = 2;
+          const finalPhaseDone = Math.max(0, koDone - koPhaseTotal);
+          const finalComplete = finalPhaseDone >= finalPhaseTotal;
+          const finalActive = koPhaseComplete && !finalComplete;
+          const finalPct = finalPhaseTotal > 0 ? Math.min(100, Math.round((finalPhaseDone / finalPhaseTotal) * 100)) : 0;
+
+          return (
+          <div className="home-checkpoint">
+            {/* ── Group Stage checkpoint ── */}
+            <button type="button" className="home-checkpoint__phase" onClick={() => onNavigate("schedule")}>
+              <div className={`home-checkpoint__dot ${gsComplete ? "home-checkpoint__dot--done" : gsActive ? "home-checkpoint__dot--active" : ""}`}>
+                {gsComplete ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> : <span className="home-checkpoint__dot-inner" />}
+              </div>
+              <span className={`home-checkpoint__label ${gsActive ? "home-checkpoint__label--active" : ""}`}>Groups</span>
+              <span className="home-checkpoint__sub">{groupDone}/{data.gs.length}</span>
+              {gsActive && <div className="home-checkpoint__mini-bar"><div className="home-checkpoint__mini-fill" style={{ width: `${gsPct}%` }} /></div>}
+            </button>
+
+            {/* ── Connector 1 ── */}
+            <div className={`home-checkpoint__rail ${gsComplete ? "home-checkpoint__rail--done" : ""}`} />
+
+            {/* ── Knockout checkpoint ── */}
+            <button type="button" className="home-checkpoint__phase" onClick={() => onNavigate("bracket")}>
+              <div className={`home-checkpoint__dot ${koPhaseComplete ? "home-checkpoint__dot--done" : koPhaseActive ? "home-checkpoint__dot--active" : ""}`}>
+                {koPhaseComplete ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> : <span className="home-checkpoint__dot-inner" />}
+              </div>
+              <span className={`home-checkpoint__label ${koPhaseActive ? "home-checkpoint__label--active" : ""}`}>Knockout</span>
+              <span className="home-checkpoint__sub">{koPhaseDone}/{koPhaseTotal}</span>
+              {koPhaseActive && <div className="home-checkpoint__mini-bar"><div className="home-checkpoint__mini-fill" style={{ width: `${koPct}%` }} /></div>}
+            </button>
+
+            {/* ── Connector 2 ── */}
+            <div className={`home-checkpoint__rail ${koPhaseComplete ? "home-checkpoint__rail--done" : ""}`} />
+
+            {/* ── Final checkpoint ── */}
+            <button type="button" className="home-checkpoint__phase" onClick={() => onNavigate("bracket")}>
+              <div className={`home-checkpoint__dot home-checkpoint__dot--trophy ${finalComplete ? "home-checkpoint__dot--done" : finalActive ? "home-checkpoint__dot--active" : ""}`}>
+                {finalComplete ? "🏆" : <span className="home-checkpoint__dot-inner" />}
+              </div>
+              <span className={`home-checkpoint__label ${finalActive ? "home-checkpoint__label--active" : ""}`}>Final</span>
+              <span className="home-checkpoint__sub">{finalPhaseDone}/{finalPhaseTotal}</span>
+              {finalActive && <div className="home-checkpoint__mini-bar"><div className="home-checkpoint__mini-fill" style={{ width: `${finalPct}%` }} /></div>}
+            </button>
+          </div>
+          );
+        })()}
+
         <div className="home-progress__stats">
           <button type="button" className="home-progress__stat" onClick={() => onNavigate("schedule")}>
             <b>{groupDone}</b><span>/{data.gs.length} Group</span>

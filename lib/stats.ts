@@ -103,6 +103,13 @@ function isShootoutGoal(ev: MatchEvent): boolean {
   return ev.type === "Goal" && /shootout/i.test(ev.detail || "");
 }
 
+// Vendor APIs (API-Football, worldcup26.ir) sometimes emit "Missed Penalty"
+// events with type="Goal" — these are NOT actual goals and must be excluded
+// from all scoring tallies.
+function isMissedPenalty(ev: MatchEvent): boolean {
+  return ev.detail === "Missed Penalty";
+}
+
 function isOwnGoal(ev: MatchEvent): boolean {
   return ev.detail === "Own Goal";
 }
@@ -192,7 +199,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
   };
 
   const processGoal = (ev: MatchEvent) => {
-    if (isShootoutGoal(ev)) return;
+    if (isShootoutGoal(ev) || isMissedPenalty(ev)) return;
     totalGoalsFromEvents++;
     if (isOwnGoal(ev)) ownGoals++;
     else if (isPenaltyGoal(ev)) penGoals++;

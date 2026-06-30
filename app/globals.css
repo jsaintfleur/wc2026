@@ -3278,6 +3278,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   display: flex;
   justify-content: center;
   align-items: flex-end;
+  overflow: hidden;
   animation: fadeIn .22s ease;
 }
 

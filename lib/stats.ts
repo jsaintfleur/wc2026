@@ -106,27 +106,71 @@ function isValidPlayerName(name: string | null | undefined, teamSet: Set<string>
   return !teamSet.has(canonical);
 }
 
-function ensurePlayer(players: Record<string, PlayerLeader>, name: string, team: string): PlayerLeader {
+// Maps API-Football player IDs → the key used in the players record, so
+// that event-based lookups (which only have names) can resolve to the same
+// entry that the ID-based path created.
+type IdIndex = Map<number, string>;
+
+// Maps name-based keys → the canonical key actually used in the players
+// record. When a player was first seen via ID, later name-only lookups
+// are redirected to that same entry.
+type NameRedirect = Map<string, string>;
+
+function ensurePlayerById(
+  players: Record<string, PlayerLeader>,
+  idIndex: IdIndex,
+  nameRedirect: NameRedirect,
+  id: number,
+  name: string,
+  team: string,
+): PlayerLeader {
   const normalizedName = canonPlayer(name);
   const normalizedTeam = canon(team);
-  // Use accent-stripped key so "Bruno Guimarães" (players array) and
-  // "Bruno Guimaraes" (events) merge into one entry. nrm() strips
-  // diacritics and lowercases — safe for keying without losing the
-  // accented display name.
-  const key = `${asciiFold(normalizedName)}|${asciiFold(normalizedTeam)}`;
+  // Stable key based on the API-Football unique player ID + team
+  const key = `id:${id}|${asciiFold(normalizedTeam)}`;
+
   if (!players[key]) {
     players[key] = {
-      name: normalizedName,
-      team: normalizedTeam,
-      goals: 0,
-      penalties: 0,
-      assists: 0,
-      yellows: 0,
-      reds: 0,
-      matches: 0,
+      name: normalizedName, team: normalizedTeam,
+      goals: 0, penalties: 0, assists: 0, yellows: 0, reds: 0, matches: 0,
     };
   } else if (normalizedName.length > players[key].name.length) {
-    // Prefer the longer (accented) form as the display name
+    players[key].name = normalizedName;
+  }
+
+  // Register the ID → key mapping
+  idIndex.set(id, key);
+
+  // Register the name-based key as a redirect to the ID-based entry so
+  // that event-based lookups (which only have names) merge correctly.
+  const nameKey = `${asciiFold(normalizedName)}|${asciiFold(normalizedTeam)}`;
+  nameRedirect.set(nameKey, key);
+
+  return players[key];
+}
+
+function ensurePlayerByName(
+  players: Record<string, PlayerLeader>,
+  nameRedirect: NameRedirect,
+  name: string,
+  team: string,
+): PlayerLeader {
+  const normalizedName = canonPlayer(name);
+  const normalizedTeam = canon(team);
+  const nameKey = `${asciiFold(normalizedName)}|${asciiFold(normalizedTeam)}`;
+
+  // If this name was already seen via an ID-based entry, redirect there
+  const redirectKey = nameRedirect.get(nameKey);
+  const key = redirectKey ?? nameKey;
+
+  if (!players[key]) {
+    players[key] = {
+      name: normalizedName, team: normalizedTeam,
+      goals: 0, penalties: 0, assists: 0, yellows: 0, reds: 0, matches: 0,
+    };
+    // Self-redirect so future lookups for the same name key resolve here
+    if (!redirectKey) nameRedirect.set(nameKey, key);
+  } else if (normalizedName.length > players[key].name.length) {
     players[key].name = normalizedName;
   }
   return players[key];
@@ -173,7 +217,15 @@ function sortPlayersBy(value: keyof Pick<PlayerLeader, "goals" | "assists" | "ye
 
 export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture[]): TournamentStats {
   const players: Record<string, PlayerLeader> = {};
+  const idIndex: IdIndex = new Map();
+  const nameRedirect: NameRedirect = new Map();
   const countryTeamNames = teamNames(data);
+
+  // Helper that picks ID-based or name-based keying depending on whether
+  // the caller has an API-Football player ID.
+  const ensure = (name: string, team: string, id?: number | null) =>
+    id ? ensurePlayerById(players, idIndex, nameRedirect, id, name, team)
+       : ensurePlayerByName(players, nameRedirect, name, team);
   const teamGoalsFromScores: Record<string, { goals: number; conceded: number; matches: number }> = {};
   const minuteBuckets = [0, 0, 0, 0, 0, 0, 0];
   let totalGoalsFromEvents = 0;
@@ -220,7 +272,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
 
   const processCard = (ev: MatchEvent) => {
     if (!isValidPlayerName(ev.player, countryTeamNames)) return;
-    const player = ensurePlayer(players, ev.player, ev.team || "");
+    const player = ensure(ev.player, ev.team || "");
     const isRed = ev.detail?.includes("Red") ?? false;
     if (isRed) {
       player.reds++;
@@ -243,13 +295,13 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
     addMinuteBucket(minuteBuckets, ev);
 
     if (!isOwnGoal(ev) && isValidPlayerName(ev.player, countryTeamNames)) {
-      const scorer = ensurePlayer(players, ev.player, ev.team || "");
+      const scorer = ensure(ev.player, ev.team || "");
       scorer.goals++;
       if (isPenaltyGoal(ev)) scorer.penalties++;
     }
 
     if (!skipAssist && !isOwnGoal(ev) && isValidPlayerName(ev.assist, countryTeamNames)) {
-      const assister = ensurePlayer(players, ev.assist, ev.team || "");
+      const assister = ensure(ev.assist, ev.team || "");
       assister.assists++;
     }
   };
@@ -301,7 +353,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
       let matchHasAssist = false;
       for (const p of fm.players!) {
         if (!isValidPlayerName(p.name, countryTeamNames) || !p.team) continue;
-        const player = ensurePlayer(players, p.name, p.team);
+        const player = ensure(p.name, p.team, p.id);
         if (!hasEvents && p.goals > 0) player.goals += p.goals;
         if (p.assists > 0) {
           player.assists += p.assists;

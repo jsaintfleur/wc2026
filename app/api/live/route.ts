@@ -331,7 +331,7 @@ interface FixtureResponse {
 
 type VendorStat = { type?: string; value?: string | number | null };
 type VendorPlayer = {
-  player?: { name?: string; number?: number; pos?: string; grid?: string | null };
+  player?: { id?: number; name?: string; number?: number; pos?: string; grid?: string | null };
   statistics?: Array<{
     games?: { minutes?: number | null; rating?: string | number | null };
     goals?: { total?: number; assists?: number; saves?: number };
@@ -428,7 +428,7 @@ function mapVendorPlayers(f: VendorFixture) {
       return (t.players || []).map((p) => {
         const s = p.statistics?.[0] || {};
         return {
-          name: p.player?.name ?? "", number: p.player?.number ?? 0, team: teamName,
+          id: p.player?.id ?? null, name: p.player?.name ?? "", number: p.player?.number ?? 0, team: teamName,
           minutes: s.games?.minutes ?? null, rating: s.games?.rating ?? null,
           goals: s.goals?.total ?? 0, assists: s.goals?.assists ?? 0,
           shots: s.shots?.total ?? 0, shotsOn: s.shots?.on ?? 0,

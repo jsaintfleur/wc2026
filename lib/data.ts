@@ -164,6 +164,9 @@ export interface TeamLineup {
 }
 
 export interface PlayerMatchStat {
+  // API-Football's unique player identifier — used as the primary key for
+  // stats aggregation so accented/transliterated name variants merge reliably.
+  id?: number | null;
   name: string;
   number: number;
   team: string;

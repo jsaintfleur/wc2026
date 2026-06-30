@@ -198,7 +198,10 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
     }
   };
 
-  const processGoal = (ev: MatchEvent) => {
+  // skipAssist: when the players array is available for this match, its
+  // per-player assist totals are more reliable than event-level assist
+  // fields (which are often null even when an assist occurred).
+  const processGoal = (ev: MatchEvent, skipAssist = false) => {
     if (isShootoutGoal(ev) || isMissedPenalty(ev)) return;
     totalGoalsFromEvents++;
     if (isOwnGoal(ev)) ownGoals++;
@@ -212,7 +215,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
       if (isPenaltyGoal(ev)) scorer.penalties++;
     }
 
-    if (!isOwnGoal(ev) && isValidPlayerName(ev.assist, countryTeamNames)) {
+    if (!skipAssist && !isOwnGoal(ev) && isValidPlayerName(ev.assist, countryTeamNames)) {
       const assister = ensurePlayer(players, ev.assist, ev.team || "");
       assister.assists++;
     }
@@ -239,7 +242,13 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
 
     const hasEvents = !!fm.events?.length;
     const hasPlayers = !!fm.players?.length;
-    let eventHasAssist = false;
+
+    // When the players array exists it came from the per-fixture API-Football
+    // endpoint and has accurate per-player assist totals. Event-level assist
+    // fields are often null even when an assist occurred, so we skip counting
+    // assists from events when we have the better source.
+    const usePlayersForAssists = hasPlayers;
+
     if (hasEvents) {
       matchesWithEvents++;
       for (const ev of fm.events!) {
@@ -251,9 +260,8 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
           totalSubs++;
           continue;
         }
-        if (ev.type === "Goal") processGoal(ev);
+        if (ev.type === "Goal") processGoal(ev, usePlayersForAssists);
       }
-      eventHasAssist = fm.events!.some(e => e.type === "Goal" && !isOwnGoal(e) && isValidPlayerName(e.assist, countryTeamNames));
     }
 
     if (hasPlayers) {
@@ -262,7 +270,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
         if (!isValidPlayerName(p.name, countryTeamNames) || !p.team) continue;
         const player = ensurePlayer(players, p.name, p.team);
         if (!hasEvents && p.goals > 0) player.goals += p.goals;
-        if (!eventHasAssist && p.assists > 0) {
+        if (p.assists > 0) {
           player.assists += p.assists;
           matchHasAssist = true;
         }
@@ -275,9 +283,11 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
           totalReds += p.redCards;
         }
       }
-      if (eventHasAssist || matchHasAssist) matchesWithAssistData++;
-    } else if (eventHasAssist) {
-      matchesWithAssistData++;
+      if (matchHasAssist) matchesWithAssistData++;
+    } else {
+      // No players array — check if events had any assists as fallback
+      const eventHasAssist = hasEvents && fm.events!.some(e => e.type === "Goal" && !isOwnGoal(e) && isValidPlayerName(e.assist, countryTeamNames));
+      if (eventHasAssist) matchesWithAssistData++;
     }
   }
 

@@ -123,6 +123,8 @@ export interface VendorFixture {
   away: string;
   gh: number | null;
   ga: number | null;
+  penHome?: number | null;
+  penAway?: number | null;
   fixtureId?: number;
   events?: MatchEvent[];
   stats?: MatchStats;

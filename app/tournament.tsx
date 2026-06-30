@@ -306,7 +306,28 @@ function isCompletedKnockoutFixture(fixture: LiveFixture | null): fixture is Liv
     DONE_STATUSES.has(fixture.status) &&
     fixture.gh != null &&
     fixture.ga != null &&
-    (fixture.gh !== fixture.ga || fixture.status === "PEN" || fixture.status === "AET");
+    (
+      fixture.gh !== fixture.ga ||
+      (fixture.penHome != null && fixture.penAway != null && fixture.penHome !== fixture.penAway)
+    );
+}
+
+function winnerNameFromKnockoutFixture(fixture: LiveFixture | null, teamName: (name: string | undefined | null) => string): string | null {
+  if (!isCompletedKnockoutFixture(fixture) || fixture.gh == null || fixture.ga == null) return null;
+  if (fixture.gh === fixture.ga) {
+    if (fixture.penHome == null || fixture.penAway == null || fixture.penHome === fixture.penAway) return null;
+    return fixture.penHome > fixture.penAway ? teamName(fixture.home) : teamName(fixture.away);
+  }
+  return fixture.gh > fixture.ga ? teamName(fixture.home) : teamName(fixture.away);
+}
+
+function loserNameFromKnockoutFixture(fixture: LiveFixture | null, teamName: (name: string | undefined | null) => string): string | null {
+  if (!isCompletedKnockoutFixture(fixture) || fixture.gh == null || fixture.ga == null) return null;
+  if (fixture.gh === fixture.ga) {
+    if (fixture.penHome == null || fixture.penAway == null || fixture.penHome === fixture.penAway) return null;
+    return fixture.penHome > fixture.penAway ? teamName(fixture.away) : teamName(fixture.home);
+  }
+  return fixture.gh > fixture.ga ? teamName(fixture.away) : teamName(fixture.home);
 }
 
 function calculateKnockoutProgress(rounds: { cards: KnockoutCardModel[] }[]) {
@@ -629,12 +650,10 @@ export default function Tournament({ data }: { data: TournamentData }) {
       return canon(name) || name;
     }
     function winnerFromFixture(fixture: LiveFixture | null): string | null {
-      if (!isCompletedKnockoutFixture(fixture) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
-      return fixture.gh > fixture.ga ? teamName(fixture.home) : teamName(fixture.away);
+      return winnerNameFromKnockoutFixture(fixture, teamName);
     }
     function loserFromFixture(fixture: LiveFixture | null): string | null {
-      if (!isCompletedKnockoutFixture(fixture) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
-      return fixture.gh > fixture.ga ? teamName(fixture.away) : teamName(fixture.home);
+      return loserNameFromKnockoutFixture(fixture, teamName);
     }
     function sourcePair(round: KnockoutRoundKey, index: number): [number, number] {
       return KO_SOURCE_PAIRS[round]?.[index] || [index * 2, index * 2 + 1];
@@ -2370,13 +2389,11 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   }, []);
 
   const winnerFromFixture = useCallback((fixture: LiveFixture | null): string | null => {
-    if (!isCompletedKnockoutFixture(fixture) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
-    return fixture.gh > fixture.ga ? teamName(fixture.home) : teamName(fixture.away);
+    return winnerNameFromKnockoutFixture(fixture, teamName);
   }, [teamName]);
 
   const loserFromFixture = useCallback((fixture: LiveFixture | null): string | null => {
-    if (!isCompletedKnockoutFixture(fixture) || fixture.gh == null || fixture.ga == null || fixture.gh === fixture.ga) return null;
-    return fixture.gh > fixture.ga ? teamName(fixture.away) : teamName(fixture.home);
+    return loserNameFromKnockoutFixture(fixture, teamName);
   }, [teamName]);
 
   const standingsByGroup = useMemo(() => {

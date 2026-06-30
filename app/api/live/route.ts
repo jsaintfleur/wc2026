@@ -82,6 +82,8 @@ type WC26Game = {
   away_team_name_en: string;
   home_score: string;
   away_score: string;
+  home_penalty_score?: string | number | null;
+  away_penalty_score?: string | number | null;
   home_scorers: string;
   away_scorers: string;
   group: string;
@@ -92,6 +94,17 @@ type WC26Game = {
   time_elapsed: string;
   type: string;
 };
+
+function scoreNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.toLowerCase() === "null") return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
 
 // Parse scorer strings like {"D. Bobadilla 7'(OG)","F. Balogun 31'","F. Balogun 45'+5'"}
 function parseScorers(raw: string, teamName: string): Array<{
@@ -217,8 +230,10 @@ async function fetchWC26(): Promise<{ ok: boolean; fixtures: unknown[] }> {
       round: scheduled?.round || roundLabel(g),
       home: g.home_team_name_en,
       away: g.away_team_name_en,
-      gh: parseInt(g.home_score, 10) || 0,
-      ga: parseInt(g.away_score, 10) || 0,
+      gh: scoreNumber(g.home_score),
+      ga: scoreNumber(g.away_score),
+      penHome: scoreNumber(g.home_penalty_score),
+      penAway: scoreNumber(g.away_penalty_score),
       events: events.length ? events : undefined,
     };
   });
@@ -256,6 +271,7 @@ type VendorFixture = {
   league?: { round?: string };
   teams?: { home?: { name?: string }; away?: { name?: string } };
   goals?: { home?: number | null; away?: number | null };
+  score?: { penalty?: { home?: number | null; away?: number | null } };
   events?: Array<{
     time?: { elapsed?: number; extra?: number | null };
     type?: string;
@@ -361,6 +377,8 @@ async function fetchFixtures(key: string): Promise<FixtureResponse> {
       away: f.teams?.away?.name,
       gh: f.goals?.home ?? null,
       ga: f.goals?.away ?? null,
+      penHome: f.score?.penalty?.home ?? null,
+      penAway: f.score?.penalty?.away ?? null,
       fixtureId: f.fixture?.id ?? null,
       events: events.length ? events : undefined,
       stats,

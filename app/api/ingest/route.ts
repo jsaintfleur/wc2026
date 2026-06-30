@@ -62,6 +62,7 @@ async function fetchFixtures(key: string): Promise<VendorFixture[]> {
     const league = f.league as Record<string, unknown> | undefined;
     const teams = f.teams as { home?: { name?: string }; away?: { name?: string } } | undefined;
     const goals = f.goals as { home?: number | null; away?: number | null } | undefined;
+    const score = f.score as { penalty?: { home?: number | null; away?: number | null } } | undefined;
     const events = ((f.events || []) as Array<{
       time?: { elapsed?: number; extra?: number | null };
       type?: string;
@@ -162,6 +163,8 @@ async function fetchFixtures(key: string): Promise<VendorFixture[]> {
       away: teams?.away?.name || "",
       gh: goals?.home ?? null,
       ga: goals?.away ?? null,
+      penHome: score?.penalty?.home ?? null,
+      penAway: score?.penalty?.away ?? null,
       fixtureId: fixture?.id ? Number(fixture.id) : undefined,
       events: events.length ? events : undefined,
       stats,

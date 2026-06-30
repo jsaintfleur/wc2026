@@ -2959,21 +2959,25 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
 
   function renderRoadCard(card: KnockoutCardModel, tone: "left" | "right" | "center" = "left", style?: CSSProperties) {
     const isSelected = selectedPathKeys.has(card.key);
-    const status = card.isLive ? (card.fixture?.elapsed ? `${card.fixture.elapsed}'` : "LIVE") : card.isDone ? "FT" : "Scheduled";
+    const status = card.isLive ? (card.fixture?.elapsed ? `${card.fixture.elapsed}'` : "LIVE") : card.isDone ? "FT" : "";
+    const v = venueName(card.match.v);
     return (
       <article
         key={`road-${card.key}`}
         className={`ko-road-card ko-road-card--${tone}${card.isLive ? " ko-road-card--live" : ""}${card.isDone ? " ko-road-card--done" : ""}${isSelected ? " ko-road-card--path" : ""}${shouldDim && !isSelected ? " ko-road-card--dim" : ""}`}
         style={style}
+        onClick={() => openMatch(card)}
+        role="button"
+        tabIndex={0}
       >
         <div className="ko-road-card__top">
           <span>M{card.matchNo}</span>
-          <b>{status}</b>
+          {status && <b className={card.isLive ? "ko-road-card__live-badge" : ""}>{status}</b>}
         </div>
         <div className="ko-road-card__teams">
           {card.teams.map((team, index) => renderRoadTeam(card, team, index))}
         </div>
-        <button type="button" className="ko-road-card__details" onClick={() => openMatch(card)}>Details</button>
+        {v.common && <div className="ko-road-card__venue">{v.city || v.common}</div>}
       </article>
     );
   }
@@ -3084,79 +3088,40 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
         </div>
       </div>
 
-      {selectedCard && (
-        <div className="ko-path" aria-label="Selected path to the Final">
-          <div className="ko-path__label">Path to Final</div>
-          <div className="ko-path__rail">
-            {selectedPath.map((card, index) => (
-              <div key={card.key} className="ko-path__step">
-                <span>{card.round === "final" ? "Final" : card.round.toUpperCase()}</span>
-                <b>{card.winnerName || `Winner M${card.matchNo}`}</b>
-                {index < selectedPath.length - 1 && <i>↓</i>}
-              </div>
-            ))}
-            <div className="ko-path__step ko-path__step--champ">
-              <span>Champion</span>
-              <b>Trophy</b>
+      {selectedTeamName && selectedPath.length > 0 && (
+        <div className="ko-journey" aria-label={`${selectedTeamName}'s road to the final`}>
+          <div className="ko-journey__header">
+            <span className="ko-journey__flag">{data.flags[selectedTeamName] || "⚽"}</span>
+            <div>
+              <div className="ko-journey__title">{selectedTeamName}</div>
+              <div className="ko-journey__sub">Road to the Final</div>
+            </div>
+            <button type="button" className="ko-journey__clear" onClick={() => { setSelectedPathKey(""); setSelectedTeamName(""); }} aria-label="Clear selection">&times;</button>
+          </div>
+          <div className="ko-journey__rail">
+            {selectedPath.map((card, index) => {
+              const v = venueName(card.match.v);
+              return (
+                <button key={card.key} type="button" className={`ko-journey__step${card.isDone ? " ko-journey__step--done" : ""}${card.isLive ? " ko-journey__step--live" : ""}`} onClick={() => openMatch(card)}>
+                  <span className="ko-journey__round">{card.round === "final" ? "Final" : card.round === "third" ? "3rd" : card.round.toUpperCase()}</span>
+                  <span className="ko-journey__vs">{card.teams.map(t => t.placeholder || t.name === "TBD" ? "TBD" : t.name).join(" vs ")}</span>
+                  {card.isDone && card.fixture && <span className="ko-journey__score">{card.fixture.gh} – {card.fixture.ga}</span>}
+                  <span className="ko-journey__venue">{fmtDate(card.match)} · {v.common || card.match.et}</span>
+                  {index < selectedPath.length - 1 && <span className="ko-journey__arrow" aria-hidden="true">→</span>}
+                </button>
+              );
+            })}
+            <div className="ko-journey__step ko-journey__step--trophy">
+              <WorldCupTrophy className="ko-journey__cup" />
+              <span className="ko-journey__round">Champion</span>
             </div>
           </div>
         </div>
       )}
 
-      <div className="ko-round-focus" aria-live="polite">
-        <div className="ko-round__head">
-          <div>
-            <span>{activeRoundModel.label}</span>
-            <small>{activeRoundModel.cards.filter(card => card.isDone).length ? `${activeRoundModel.cards.filter(card => card.isDone).length} decided` : "Awaiting qualifiers"}</small>
-          </div>
-          <b>{activeRoundModel.short}</b>
-        </div>
-        <div className="ko-mobile-list">
-          {activeRoundModel.cards.map(card => {
-            const v = venueName(card.match.v);
-            const status = card.isLive ? (card.fixture?.elapsed ? `${card.fixture.elapsed}'` : "LIVE") : card.isDone ? "FT" : "Scheduled";
-            const scoreA = card.fixture?.gh;
-            const scoreB = card.fixture?.ga;
-            const isSelected = selectedPathKeys.has(card.key);
-            return (
-              <article
-                key={card.key}
-                className={`ko-match ko-match--${card.round}${card.isLive ? " ko-match--live" : ""}${card.isDone ? " ko-match--done" : ""}${card.round === "final" ? " ko-match--final" : ""}${isSelected ? " ko-match--path" : ""}${shouldDim && !isSelected ? " ko-match--dim" : ""}`}
-              >
-                <button type="button" className="ko-match__tap" onClick={() => selectRoad(card)} aria-label={`Show path for match ${card.matchNo}`}>
-                  <div className="ko-match__meta">
-                    <span>Match {card.matchNo || card.match.mr}</span>
-                    <b>{status}</b>
-                  </div>
-                  <div className="ko-match__teams">
-                    {card.teams.map((team, teamIndex) => {
-                      const score = teamIndex === 0 ? scoreA : scoreB;
-                      return (
-                        <div key={`${card.key}-${teamIndex}`} className={`ko-team${team.winner ? " ko-team--winner" : ""}${team.name === "TBD" || team.placeholder ? " ko-team--tbd" : ""}`}>
-                          <span className="ko-team__flag">{team.name === "TBD" || team.placeholder ? "TBD" : (data.flags[team.name] || "⚽")}</span>
-                          <span className="ko-team__name">{team.name}</span>
-                          {team.seed && <span className="ko-team__seed">{team.seed}</span>}
-                          {score != null && <strong>{score}</strong>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="ko-match__foot">
-                    <span>{fmtDate(card.match)} · {card.match.et}</span>
-                    <span>{v.common}</span>
-                  </div>
-                  <div className="ko-match__advance">{nextDestination(card)}</div>
-                </button>
-                <button type="button" className="ko-match__details" onClick={() => openMatch(card)}>Match Details</button>
-              </article>
-            );
-          })}
-        </div>
-      </div>
-
       <p className="ko-stage__note">
-        No unverified scores are shown. Future teams remain TBD until qualifying and live fixture data confirm the matchup.
-        {process.env.NODE_ENV === "development" && validationWarnings.length > 0 ? ` Dev validation: ${validationWarnings.length} bracket warning${validationWarnings.length === 1 ? "" : "s"}.` : ""}
+        Tap a team to trace their road to the trophy. Tap any match for full details.
+        {process.env.NODE_ENV === "development" && validationWarnings.length > 0 ? ` Dev: ${validationWarnings.length} bracket warning${validationWarnings.length === 1 ? "" : "s"}.` : ""}
       </p>
     </section>
   );

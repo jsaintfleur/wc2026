@@ -1518,22 +1518,50 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
       .sort((a, b) => a.ts - b.ts)[0] || null;
   }, [data.gs, data.ko, data.venues, fixtures, findLive, nowMs]);
 
-  /* -- recent results (last 6 completed matches) ------------------ */
+  /* -- recent results (last 6 completed matches, GS + KO) --------- */
   const recentResults = useMemo(() => {
-    const results: { match: GroupStageMatch; fixture: LiveFixture }[] = [];
-    const sorted = [...data.gs].sort((a, b) => b.ts - a.ts);
-    for (const m of sorted) {
-      const f = findLive(m, fixtures);
-      if (f && DONE_STATUSES.has(f.status) && f.gh != null && f.ga != null) {
-        results.push({ match: m, fixture: f });
-      } else if (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null) {
-        const synth: LiveFixture = { ts: m.ts, status: m.dbStatus, elapsed: null, venue: m.v, round: `Group ${m.g}`, home: m.t1, away: m.t2, gh: m.dbGh, ga: m.dbGa, events: m.dbEvents };
-        results.push({ match: m, fixture: synth });
-      }
+    const results: { match: GroupStageMatch; fixture: LiveFixture; roundLabel: string }[] = [];
+
+    // Collect finished group stage matches
+    const candidates: { ts: number; build: () => { match: GroupStageMatch; fixture: LiveFixture; roundLabel: string } | null }[] = [];
+    for (const m of data.gs) {
+      candidates.push({ ts: m.ts, build: () => {
+        const f = findLive(m, fixtures);
+        if (f && DONE_STATUSES.has(f.status) && f.gh != null && f.ga != null) {
+          return { match: m, fixture: f, roundLabel: `Group ${m.g}` };
+        } else if (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null) {
+          const synth: LiveFixture = { ts: m.ts, status: m.dbStatus, elapsed: null, venue: m.v, round: `Group ${m.g}`, home: m.t1, away: m.t2, gh: m.dbGh, ga: m.dbGa, events: m.dbEvents };
+          return { match: m, fixture: synth, roundLabel: `Group ${m.g}` };
+        }
+        return null;
+      }});
+    }
+
+    // Collect finished knockout matches — synthesize a GroupStageMatch shape
+    // so the match detail drawer can render them the same way
+    for (const m of data.ko) {
+      candidates.push({ ts: m.ts, build: () => {
+        const f = findLive({ ts: m.ts, v: m.v }, fixtures);
+        if (!f || !DONE_STATUSES.has(f.status) || f.gh == null || f.ga == null) return null;
+        const synthMatch: GroupStageMatch = {
+          no: parseInt(m.mr.replace("M", ""), 10) || 0,
+          iso: m.iso, local: m.local, et: m.et,
+          g: "KO", t1: f.home || "TBD", t2: f.away || "TBD",
+          v: m.v, ts: m.ts,
+        };
+        return { match: synthMatch, fixture: f, roundLabel: m.round };
+      }});
+    }
+
+    // Sort by most recent first, take top 6
+    candidates.sort((a, b) => b.ts - a.ts);
+    for (const c of candidates) {
+      const r = c.build();
+      if (r) results.push(r);
       if (results.length >= 6) break;
     }
     return results;
-  }, [data.gs, fixtures, findLive]);
+  }, [data.gs, data.ko, fixtures, findLive]);
 
   /* -- top scorer & assister -------------------------------------- */
   const leaders = useMemo(() => computeLeaders(), [computeLeaders]);
@@ -1678,23 +1706,37 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
             <button type="button" className="home-section__more" onClick={() => onNavigate("schedule")}>See all →</button>
           </div>
           <div className="home-results__scroll">
-            {recentResults.map(({ match, fixture }, i) => (
+            {recentResults.map(({ match, fixture, roundLabel }, i) => {
+              // Determine winner: in penalty shootouts the pen score decides,
+              // otherwise the regular score decides
+              const hasPens = fixture.penHome != null && fixture.penAway != null;
+              const homeWin = hasPens
+                ? fixture.penHome! > fixture.penAway!
+                : (fixture.gh != null && fixture.ga != null && fixture.gh > fixture.ga);
+              const awayWin = hasPens
+                ? fixture.penAway! > fixture.penHome!
+                : (fixture.gh != null && fixture.ga != null && fixture.ga > fixture.gh);
+              return (
               <button key={i} type="button" className="home-result-card" onClick={() => onMatchClick(match, fixture)}>
-                <div className="home-result-card__group">Group {match.g}</div>
+                <div className="home-result-card__group">{roundLabel}</div>
                 <div className="home-result-card__teams">
                   <span className="home-result-card__side">
                     <span>{fl(match.t1)}</span>
-                    <b className={fixture.gh != null && fixture.ga != null && fixture.gh > fixture.ga ? "home-result-card--winner" : ""}>{match.t1}</b>
+                    <b className={homeWin ? "home-result-card--winner" : ""}>{match.t1}</b>
                   </span>
-                  <span className="home-result-card__score">{fixture.gh} – {fixture.ga}</span>
+                  <span className="home-result-card__score">
+                    {fixture.gh} – {fixture.ga}
+                    {hasPens && <small className="home-result-card__pens">({fixture.penHome}–{fixture.penAway})</small>}
+                  </span>
                   <span className="home-result-card__side">
                     <span>{fl(match.t2)}</span>
-                    <b className={fixture.gh != null && fixture.ga != null && fixture.ga > fixture.gh ? "home-result-card--winner" : ""}>{match.t2}</b>
+                    <b className={awayWin ? "home-result-card--winner" : ""}>{match.t2}</b>
                   </span>
                 </div>
                 <div className="home-result-card__ft">{fixture.status === "AET" ? "AET" : fixture.status === "PEN" ? "PENS" : "FT"}</div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}

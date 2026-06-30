@@ -405,7 +405,7 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
       {name === "groups" && <><circle {...common} cx="8" cy="8" r="3"/><circle {...common} cx="16" cy="8" r="3"/><circle {...common} cx="12" cy="16" r="3"/></>}
       {name === "calendar" && <><rect {...common} x="4" y="5" width="16" height="15" rx="2"/><path {...common} d="M8 3v4M16 3v4M4 10h16"/></>}
       {name === "stats" && <><path {...common} d="M6 19V12M12 19V5M18 19v-9"/><path {...common} d="M4 19h16"/></>}
-      {name === "teams" && <><circle {...common} cx="12" cy="12" r="9"/><path {...common} d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></>}
+      {name === "teams" && <><path {...common} d="M12 3 4 6v5c0 5.2 3.4 10 8 11 4.6-1 8-5.8 8-11V6z"/></>}
       {name === "more" && <><circle {...common} cx="6" cy="12" r="1.4"/><circle {...common} cx="12" cy="12" r="1.4"/><circle {...common} cx="18" cy="12" r="1.4"/></>}
       {name === "boot" && <><path {...common} d="M5 5v7.5c0 2 1.4 3.5 3.4 3.5H19c.7 0 1.2.5 1.2 1.2V19H8.5C5.5 19 3 16.5 3 13.5V5z"/><path {...common} d="M7 8h5M7 11h4M14 16l2.5-3"/></>}
       {name === "assist" && <><path {...common} d="M4 16c4.8-7.8 10.5-9 16-7"/><path {...common} d="M16 5h4v4"/><circle {...common} cx="7" cy="17" r="2.2"/></>}

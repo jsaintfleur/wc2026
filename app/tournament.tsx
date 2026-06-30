@@ -2620,20 +2620,31 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     setActiveRound(key);
     setSelectedPathKey("");
     setSelectedTeamName("");
-    window.setTimeout(() => {
+    window.requestAnimationFrame(() => {
       const scroller = roadScrollRef.current;
       const centerChild = (element: HTMLElement | null | undefined) => {
         if (!scroller || !element) return;
-        const left = element.offsetLeft - (scroller.clientWidth - element.clientWidth) / 2;
+        const scrollRect = scroller.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+        const left = scroller.scrollLeft + (elementRect.left - scrollRect.left) - ((scroller.clientWidth - elementRect.width) / 2);
         scroller.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
       };
       if (key === "final" || key === "third") {
         centerChild(roadCenterRef.current);
         return;
       }
-      const column = roadScrollRef.current?.querySelector<HTMLElement>(`.ko-road__column[data-round="${key}"][data-side="left"], .ko-road__column[data-round="${key}"]`);
+      const columns = Array.from(scroller?.querySelectorAll<HTMLElement>(`.ko-road__column[data-round="${key}"]`) || []);
+      const scrollerCenter = scroller ? scroller.getBoundingClientRect().left + scroller.clientWidth / 2 : 0;
+      const column = columns
+        .sort((a, b) => {
+          const aRect = a.getBoundingClientRect();
+          const bRect = b.getBoundingClientRect();
+          const aCenter = aRect.left + aRect.width / 2;
+          const bCenter = bRect.left + bRect.width / 2;
+          return Math.abs(aCenter - scrollerCenter) - Math.abs(bCenter - scrollerCenter);
+        })[0];
       centerChild(column);
-    }, 40);
+    });
   }
 
   function openMatch(card: KnockoutCardModel) {

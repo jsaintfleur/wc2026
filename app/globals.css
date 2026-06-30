@@ -5486,9 +5486,11 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   margin: 0 0 24px;
 }
 .stats-card {
-  background: rgba(255,255,255,0.04);
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+    rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 14px 8px;
   text-align: center;
   display: flex;
@@ -5964,22 +5966,23 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .more-tile {
   appearance: none;
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: var(--r-lg);
+  border-radius: 18px;
   background:
     linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)),
     rgba(8, 12, 21, 0.86);
   color: var(--ink);
   font: inherit;
   text-align: left;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+  box-shadow: var(--shadow);
   cursor: pointer;
-  transition: transform var(--dur-fast), border-color var(--dur-fast);
+  transition: transform .15s var(--ease-out), border-color .15s var(--ease-out), box-shadow .2s var(--ease-out);
 }
 .team-tile:hover, .more-tile:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   border-color: rgba(245,158,11,0.2);
+  box-shadow: var(--shadow-lg);
 }
-.team-tile:active { transform: scale(0.97); }
+.team-tile:active { transform: scale(0.97); transition-duration: .06s; }
 
 .team-tile {
   display: flex;

@@ -1475,14 +1475,48 @@ body::after {
 .home-dash__next {
   text-align: center;
   padding: 28px 20px 24px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 24px;
+  position: relative;
+  overflow: hidden;
+  /* Layered pitch background: mown-stripe texture + depth gradient */
   background:
-    radial-gradient(ellipse at 50% -10%, rgba(245,158,11,0.16), transparent 50%),
-    radial-gradient(ellipse at 80% 100%, rgba(34,197,94,0.06), transparent 40%),
-    rgba(8, 12, 21, 0.9);
-  box-shadow: var(--shadow-lg);
+    repeating-linear-gradient(
+      90deg,
+      rgba(255,255,255,0.018) 0px, rgba(255,255,255,0.018) 40px,
+      transparent 40px, transparent 80px
+    ),
+    radial-gradient(ellipse at 50% 0%, rgba(22,163,74,0.35), transparent 60%),
+    radial-gradient(ellipse at 50% 100%, rgba(5,46,22,0.5), transparent 60%),
+    linear-gradient(180deg, #0f4a24 0%, #0a3018 50%, #071e10 100%);
+  box-shadow:
+    var(--shadow-lg),
+    inset 0 1px 0 rgba(255,255,255,0.06);
 }
+
+/* Soccer field lines overlay — center circle + halfway line + border */
+.home-dash__next::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  /* Outer field border */
+  border: 2px solid rgba(255,255,255,0.08);
+  border-radius: 24px;
+  /* Center circle */
+  background:
+    radial-gradient(circle at 50% 50%, transparent 58px, rgba(255,255,255,0.06) 58px, rgba(255,255,255,0.06) 60px, transparent 60px),
+    /* Halfway line */
+    linear-gradient(90deg, transparent calc(50% - 1px), rgba(255,255,255,0.06) calc(50% - 1px), rgba(255,255,255,0.06) calc(50% + 1px), transparent calc(50% + 1px)),
+    /* Penalty box left */
+    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px) left 18% top 12px / 1px calc(100% - 24px) no-repeat,
+    /* Penalty box right */
+    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px) right 18% top 12px / 1px calc(100% - 24px) no-repeat;
+}
+
+/* Keep content above the field lines */
+.home-dash__next > * { position: relative; z-index: 1; }
 
 .home-next__eyebrow {
   color: var(--gold-bright);
@@ -2467,15 +2501,47 @@ body::after {
 .ko-road {
   margin: 0 0 12px;
   padding: 10px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.10);
   border-radius: 22px;
+  position: relative;
+  /* Layered pitch background: mown-stripe texture + depth */
   background:
-    radial-gradient(circle at 50% 0%, rgba(245,158,11,0.16), transparent 30%),
-    linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
-    rgba(4, 8, 15, 0.68);
-  box-shadow: 0 18px 48px rgba(0,0,0,0.28);
+    repeating-linear-gradient(
+      0deg,
+      rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 32px,
+      transparent 32px, transparent 64px
+    ),
+    radial-gradient(ellipse at 50% 0%, rgba(22,163,74,0.25), transparent 50%),
+    radial-gradient(ellipse at 50% 100%, rgba(5,46,22,0.4), transparent 50%),
+    linear-gradient(180deg, #0d3f20 0%, #0a301a 40%, #071a0e 100%);
+  box-shadow:
+    0 18px 48px rgba(0,0,0,0.32),
+    inset 0 1px 0 rgba(255,255,255,0.05);
   overflow: hidden;
 }
+
+/* Soccer field lines overlay — halfway line, center circle, touchlines */
+.ko-road::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  border: 2px solid rgba(255,255,255,0.06);
+  border-radius: 22px;
+  background:
+    /* Center circle */
+    radial-gradient(circle at 50% 50%, transparent 68px, rgba(255,255,255,0.045) 68px, rgba(255,255,255,0.045) 70px, transparent 70px),
+    /* Halfway vertical line */
+    linear-gradient(90deg, transparent calc(50% - 1px), rgba(255,255,255,0.05) calc(50% - 1px), rgba(255,255,255,0.05) calc(50% + 1px), transparent calc(50% + 1px)),
+    /* Penalty area left */
+    linear-gradient(90deg, transparent 0, transparent 7%, rgba(255,255,255,0.035) 7%, rgba(255,255,255,0.035) calc(7% + 1px), transparent calc(7% + 1px)),
+    /* Penalty area right */
+    linear-gradient(90deg, transparent 0, transparent 93%, rgba(255,255,255,0.035) 93%, rgba(255,255,255,0.035) calc(93% + 1px), transparent calc(93% + 1px));
+}
+
+/* Keep bracket content above the field overlay */
+.ko-road > * { position: relative; z-index: 1; }
 
 .ko-road__intro {
   display: flex;

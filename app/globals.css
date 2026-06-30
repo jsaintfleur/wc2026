@@ -1479,40 +1479,52 @@ body::after {
   border-radius: 24px;
   position: relative;
   overflow: hidden;
-  /* Layered pitch background: mown-stripe texture + depth gradient */
+  /* Layered pitch background: mown-stripe texture + rich green base */
   background:
     repeating-linear-gradient(
       90deg,
-      rgba(255,255,255,0.018) 0px, rgba(255,255,255,0.018) 40px,
+      rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 40px,
       transparent 40px, transparent 80px
     ),
-    radial-gradient(ellipse at 50% 0%, rgba(22,163,74,0.35), transparent 60%),
-    radial-gradient(ellipse at 50% 100%, rgba(5,46,22,0.5), transparent 60%),
-    linear-gradient(180deg, #0f4a24 0%, #0a3018 50%, #071e10 100%);
+    radial-gradient(ellipse at 50% 20%, rgba(34,197,94,0.22), transparent 70%),
+    linear-gradient(180deg, #145a2e 0%, #0e4422 40%, #0a3018 100%);
   box-shadow:
     var(--shadow-lg),
-    inset 0 1px 0 rgba(255,255,255,0.06);
+    inset 0 1px 0 rgba(255,255,255,0.08);
 }
 
-/* Soccer field lines overlay — center circle + halfway line + border */
+/* Soccer field lines overlay — center circle, halfway line, penalty arcs, touchline */
 .home-dash__next::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: 8px;
   pointer-events: none;
   z-index: 0;
-  /* Outer field border */
-  border: 2px solid rgba(255,255,255,0.08);
-  border-radius: 24px;
-  /* Center circle */
+  /* Touchline border */
+  border: 1.5px solid rgba(255,255,255,0.13);
+  border-radius: 4px;
+  /* Center circle + halfway line */
   background:
-    radial-gradient(circle at 50% 50%, transparent 58px, rgba(255,255,255,0.06) 58px, rgba(255,255,255,0.06) 60px, transparent 60px),
-    /* Halfway line */
-    linear-gradient(90deg, transparent calc(50% - 1px), rgba(255,255,255,0.06) calc(50% - 1px), rgba(255,255,255,0.06) calc(50% + 1px), transparent calc(50% + 1px)),
-    /* Penalty box left */
-    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px) left 18% top 12px / 1px calc(100% - 24px) no-repeat,
-    /* Penalty box right */
-    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px) right 18% top 12px / 1px calc(100% - 24px) no-repeat;
+    radial-gradient(circle at 50% 50%, transparent 54px, rgba(255,255,255,0.13) 54px, rgba(255,255,255,0.13) 56px, transparent 56px),
+    linear-gradient(90deg, transparent calc(50% - 0.75px), rgba(255,255,255,0.13) calc(50% - 0.75px), rgba(255,255,255,0.13) calc(50% + 0.75px), transparent calc(50% + 0.75px));
+}
+
+/* Penalty boxes drawn as separate pseudo-element */
+.home-dash__next::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  pointer-events: none;
+  z-index: 0;
+  /* Left penalty box */
+  background:
+    linear-gradient(0deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) 8px 20% / calc(18% - 8px) 1.5px no-repeat,
+    linear-gradient(0deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) 8px 80% / calc(18% - 8px) 1.5px no-repeat,
+    linear-gradient(90deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) 18% 20% / 1.5px 60% no-repeat,
+    /* Right penalty box */
+    linear-gradient(0deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) calc(82% + 0px) 20% / calc(18% - 8px) 1.5px no-repeat,
+    linear-gradient(0deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) calc(82% + 0px) 80% / calc(18% - 8px) 1.5px no-repeat,
+    linear-gradient(90deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) 82% 20% / 1.5px 60% no-repeat;
 }
 
 /* Keep content above the field lines */
@@ -2504,40 +2516,48 @@ body::after {
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: 22px;
   position: relative;
-  /* Layered pitch background: mown-stripe texture + depth */
+  /* Layered pitch background: mown-stripe texture + rich green */
   background:
     repeating-linear-gradient(
       0deg,
-      rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 32px,
+      rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 32px,
       transparent 32px, transparent 64px
     ),
-    radial-gradient(ellipse at 50% 0%, rgba(22,163,74,0.25), transparent 50%),
-    radial-gradient(ellipse at 50% 100%, rgba(5,46,22,0.4), transparent 50%),
-    linear-gradient(180deg, #0d3f20 0%, #0a301a 40%, #071a0e 100%);
+    radial-gradient(ellipse at 50% 50%, rgba(34,197,94,0.15), transparent 60%),
+    linear-gradient(180deg, #145a2e 0%, #0e4422 40%, #0a3018 100%);
   box-shadow:
     0 18px 48px rgba(0,0,0,0.32),
-    inset 0 1px 0 rgba(255,255,255,0.05);
+    inset 0 1px 0 rgba(255,255,255,0.06);
   overflow: hidden;
 }
 
-/* Soccer field lines overlay — halfway line, center circle, touchlines */
+/* Soccer field lines overlay — touchline, halfway line, center circle, penalty boxes */
 .ko-road::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: 6px;
   pointer-events: none;
   z-index: 0;
-  border: 2px solid rgba(255,255,255,0.06);
-  border-radius: 22px;
+  /* Touchline border */
+  border: 1.5px solid rgba(255,255,255,0.10);
+  border-radius: 4px;
   background:
     /* Center circle */
-    radial-gradient(circle at 50% 50%, transparent 68px, rgba(255,255,255,0.045) 68px, rgba(255,255,255,0.045) 70px, transparent 70px),
+    radial-gradient(circle at 50% 50%, transparent 72px, rgba(255,255,255,0.10) 72px, rgba(255,255,255,0.10) 74px, transparent 74px),
     /* Halfway vertical line */
-    linear-gradient(90deg, transparent calc(50% - 1px), rgba(255,255,255,0.05) calc(50% - 1px), rgba(255,255,255,0.05) calc(50% + 1px), transparent calc(50% + 1px)),
-    /* Penalty area left */
-    linear-gradient(90deg, transparent 0, transparent 7%, rgba(255,255,255,0.035) 7%, rgba(255,255,255,0.035) calc(7% + 1px), transparent calc(7% + 1px)),
-    /* Penalty area right */
-    linear-gradient(90deg, transparent 0, transparent 93%, rgba(255,255,255,0.035) 93%, rgba(255,255,255,0.035) calc(93% + 1px), transparent calc(93% + 1px));
+    linear-gradient(90deg, transparent calc(50% - 0.75px), rgba(255,255,255,0.10) calc(50% - 0.75px), rgba(255,255,255,0.10) calc(50% + 0.75px), transparent calc(50% + 0.75px)),
+    /* Left penalty box vertical */
+    linear-gradient(90deg, rgba(255,255,255,0.08) 1.5px, transparent 1.5px) 11% 15% / 1.5px 70% no-repeat,
+    /* Left penalty box top */
+    linear-gradient(0deg, rgba(255,255,255,0.08) 1.5px, transparent 1.5px) 0 15% / 11% 1.5px no-repeat,
+    /* Left penalty box bottom */
+    linear-gradient(0deg, rgba(255,255,255,0.08) 1.5px, transparent 1.5px) 0 85% / 11% 1.5px no-repeat,
+    /* Right penalty box vertical */
+    linear-gradient(90deg, rgba(255,255,255,0.08) 1.5px, transparent 1.5px) 89% 15% / 1.5px 70% no-repeat,
+    /* Right penalty box top */
+    linear-gradient(0deg, rgba(255,255,255,0.08) 1.5px, transparent 1.5px) 89% 15% / 11% 1.5px no-repeat,
+    /* Right penalty box bottom */
+    linear-gradient(0deg, rgba(255,255,255,0.08) 1.5px, transparent 1.5px) 89% 85% / 11% 1.5px no-repeat;
 }
 
 /* Keep bracket content above the field overlay */

@@ -130,11 +130,23 @@ function ensurePlayerById(
   const key = `id:${id}|${asciiFold(normalizedTeam)}`;
 
   if (!players[key]) {
-    players[key] = {
-      name: normalizedName, team: normalizedTeam,
-      goals: 0, penalties: 0, assists: 0, yellows: 0, reds: 0, matches: 0,
-    };
-  } else if (normalizedName.length > players[key].name.length) {
+    // Check if a name-based entry already exists for this player (created
+    // earlier by event processing). If so, absorb its accumulated stats
+    // into the new ID-based entry and delete the old one so goals/cards
+    // aren't split across two records.
+    const nameKey = `${asciiFold(normalizedName)}|${asciiFold(normalizedTeam)}`;
+    const existing = players[nameKey];
+    if (existing) {
+      players[key] = existing;
+      delete players[nameKey];
+    } else {
+      players[key] = {
+        name: normalizedName, team: normalizedTeam,
+        goals: 0, penalties: 0, assists: 0, yellows: 0, reds: 0, matches: 0,
+      };
+    }
+  }
+  if (normalizedName.length > players[key].name.length) {
     players[key].name = normalizedName;
   }
 
@@ -334,11 +346,24 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
     // assists from events when we have the better source.
     const usePlayersForAssists = hasPlayers;
 
-    // Process the players array FIRST so that ID-based entries and
-    // nameRedirect mappings exist before events are processed. Without
-    // this ordering, events create name-based entries that never merge
-    // with the ID-based entries created later, splitting a player's
-    // goal count across two records.
+    if (hasEvents) {
+      matchesWithEvents++;
+      for (const ev of fm.events!) {
+        if (ev.type === "Card") {
+          processCard(ev);
+          continue;
+        }
+        if (ev.type === "subst") {
+          totalSubs++;
+          continue;
+        }
+        if (ev.type === "Goal") processGoal(ev, usePlayersForAssists);
+      }
+    }
+
+    // Process the players array AFTER events. ensurePlayerById absorbs
+    // any name-based entry that events already created, so stats merge
+    // into the ID-keyed record without splitting.
     if (hasPlayers) {
       let matchHasAssist = false;
       for (const p of fm.players!) {
@@ -362,21 +387,6 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
     } else {
       const eventHasAssist = hasEvents && fm.events!.some(e => e.type === "Goal" && !isOwnGoal(e) && isValidPlayerName(e.assist, countryTeamNames));
       if (eventHasAssist) matchesWithAssistData++;
-    }
-
-    if (hasEvents) {
-      matchesWithEvents++;
-      for (const ev of fm.events!) {
-        if (ev.type === "Card") {
-          processCard(ev);
-          continue;
-        }
-        if (ev.type === "subst") {
-          totalSubs++;
-          continue;
-        }
-        if (ev.type === "Goal") processGoal(ev, usePlayersForAssists);
-      }
     }
   }
 

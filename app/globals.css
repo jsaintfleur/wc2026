@@ -2514,8 +2514,10 @@ body::after {
   min-width: min(1210px, 100%);
   overflow-x: auto;
   overscroll-behavior-x: contain;
+  scroll-padding-inline: 18px;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
+  touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;
   padding: 2px 2px 10px;
 }
@@ -7018,6 +7020,13 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .ko-road-card {
   align-self: center;
   min-height: 88px;
+}
+
+.ko-road-card:focus-visible,
+.ko-road-team:focus-visible,
+.ko-stage__tab:focus-visible {
+  outline: 2px solid rgba(245, 158, 11, 0.78);
+  outline-offset: 3px;
 }
 
 .ko-road__third {

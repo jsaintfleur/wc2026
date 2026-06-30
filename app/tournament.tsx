@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
 import { buildTournamentStats, type PlayerLeader, type TournamentStats } from "@/lib/stats";
@@ -374,12 +374,13 @@ function esc(s: string | number): string {
   return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] || c));
 }
 
-type AppIconName = "bracket" | "groups" | "calendar" | "stats" | "teams" | "more" | "boot" | "assist" | "venue" | "ball" | "info" | "bell" | "share" | "settings";
+type AppIconName = "home" | "bracket" | "groups" | "calendar" | "stats" | "teams" | "more" | "boot" | "assist" | "venue" | "ball" | "info" | "bell" | "share" | "settings";
 
 function AppIcon({ name, className = "" }: { name: AppIconName; className?: string }) {
   const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   return (
     <svg className={className} width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      {name === "home" && <><path {...common} d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"/></>}
       {name === "bracket" && <><path {...common} d="M5 5h5v5H5zM5 14h5v5H5zM14 9h5v6h-5z"/><path {...common} d="M10 7.5h2.5c1 0 1.5.5 1.5 1.5v3c0 1 .5 1.5 1.5 1.5H19"/></>}
       {name === "groups" && <><circle {...common} cx="8" cy="8" r="3"/><circle {...common} cx="16" cy="8" r="3"/><circle {...common} cx="12" cy="16" r="3"/></>}
       {name === "calendar" && <><rect {...common} x="4" y="5" width="16" height="15" rx="2"/><path {...common} d="M8 3v4M16 3v4M4 10h16"/></>}
@@ -1148,15 +1149,15 @@ export default function Tournament({ data }: { data: TournamentData }) {
   ];
 
   const navIcon: Record<ViewType, ReactNode> = {
-    home: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><polyline points="9 21 9 14 15 14 15 21"/></svg>,
-    schedule: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
-    groups: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
-    bracket: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4v4h4"/><path d="M6 20v-4h4"/><path d="M10 8h4a2 2 0 012 2v4a2 2 0 01-2 2h-4"/><line x1="16" y1="12" x2="20" y2="12"/></svg>,
-    teams: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 014 10 15 15 0 01-4 10 15 15 0 01-4-10 15 15 0 014-10z"/><line x1="2" y1="12" x2="22" y2="12"/></svg>,
-    more: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>,
-    stats: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
-    venues: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 6-9 13-9 13S3 16 3 10a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
-    about: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
+    home: <AppIcon name="home" />,
+    schedule: <AppIcon name="calendar" />,
+    groups: <AppIcon name="groups" />,
+    bracket: <AppIcon name="bracket" />,
+    teams: <AppIcon name="teams" />,
+    more: <AppIcon name="more" />,
+    stats: <AppIcon name="stats" />,
+    venues: <AppIcon name="venue" />,
+    about: <AppIcon name="info" />,
   };
 
   return (
@@ -2393,6 +2394,8 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const [selectedTeamName, setSelectedTeamName] = useState<string>("");
   const roadScrollRef = useRef<HTMLDivElement | null>(null);
   const roadCenterRef = useRef<HTMLDivElement | null>(null);
+  const roadScrollFrameRef = useRef<number | null>(null);
+  const restoredRoadScrollRef = useRef(false);
 
   const byRound = useMemo(() => {
     const grouped = new Map<string, KnockoutMatch[]>();
@@ -2645,6 +2648,44 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   function selectRoad(card: KnockoutCardModel, team?: KnockoutParticipant) {
     setSelectedPathKey(card.key);
     setSelectedTeamName(team && !team.placeholder && team.name !== "TBD" ? team.name : "");
+    window.requestAnimationFrame(() => centerRoadElement(roadScrollRef.current?.querySelector<HTMLElement>(`[data-card-key="${card.key}"]`)));
+  }
+
+  function centerRoadElement(element: HTMLElement | null | undefined) {
+    const scroller = roadScrollRef.current;
+    if (!scroller || !element) return;
+    const scrollRect = scroller.getBoundingClientRect();
+    const elementRect = element.getBoundingClientRect();
+    const left = scroller.scrollLeft + (elementRect.left - scrollRect.left) - ((scroller.clientWidth - elementRect.width) / 2);
+    scroller.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+  }
+
+  function nearestVisibleRound(): KnockoutRoundKey | null {
+    const scroller = roadScrollRef.current;
+    if (!scroller) return null;
+    const scrollerCenter = scroller.getBoundingClientRect().left + scroller.clientWidth / 2;
+    const columns = Array.from(scroller.querySelectorAll<HTMLElement>(".ko-road__column[data-round]"));
+    const nearest = columns
+      .map(column => {
+        const rect = column.getBoundingClientRect();
+        return {
+          key: column.dataset.round as KnockoutRoundKey,
+          distance: Math.abs((rect.left + rect.width / 2) - scrollerCenter),
+        };
+      })
+      .sort((a, b) => a.distance - b.distance)[0];
+    return nearest?.key || null;
+  }
+
+  function handleRoadScroll() {
+    const scroller = roadScrollRef.current;
+    if (!scroller) return;
+    window.sessionStorage.setItem("compet-ko-road-left", String(scroller.scrollLeft));
+    if (roadScrollFrameRef.current != null) window.cancelAnimationFrame(roadScrollFrameRef.current);
+    roadScrollFrameRef.current = window.requestAnimationFrame(() => {
+      const nearest = nearestVisibleRound();
+      if (nearest && nearest !== activeRound) setActiveRound(nearest);
+    });
   }
 
   function focusRound(key: KnockoutRoundKey) {
@@ -2652,18 +2693,11 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     setSelectedPathKey("");
     setSelectedTeamName("");
     window.requestAnimationFrame(() => {
-      const scroller = roadScrollRef.current;
-      const centerChild = (element: HTMLElement | null | undefined) => {
-        if (!scroller || !element) return;
-        const scrollRect = scroller.getBoundingClientRect();
-        const elementRect = element.getBoundingClientRect();
-        const left = scroller.scrollLeft + (elementRect.left - scrollRect.left) - ((scroller.clientWidth - elementRect.width) / 2);
-        scroller.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
-      };
       if (key === "final" || key === "third") {
-        centerChild(roadCenterRef.current);
+        centerRoadElement(roadCenterRef.current);
         return;
       }
+      const scroller = roadScrollRef.current;
       const columns = Array.from(scroller?.querySelectorAll<HTMLElement>(`.ko-road__column[data-round="${key}"]`) || []);
       const scrollerCenter = scroller ? scroller.getBoundingClientRect().left + scroller.clientWidth / 2 : 0;
       const column = columns
@@ -2674,9 +2708,32 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
           const bCenter = bRect.left + bRect.width / 2;
           return Math.abs(aCenter - scrollerCenter) - Math.abs(bCenter - scrollerCenter);
         })[0];
-      centerChild(column);
+      centerRoadElement(column);
     });
   }
+
+  useEffect(() => {
+    const scroller = roadScrollRef.current;
+    if (!scroller || restoredRoadScrollRef.current) return;
+    restoredRoadScrollRef.current = true;
+    const saved = Number(window.sessionStorage.getItem("compet-ko-road-left"));
+    if (Number.isFinite(saved) && saved > 0) {
+      scroller.scrollLeft = saved;
+      window.requestAnimationFrame(() => {
+        const nearest = nearestVisibleRound();
+        if (nearest) setActiveRound(nearest);
+      });
+      return;
+    }
+    window.requestAnimationFrame(() => focusRound(currentRound?.key || "r32"));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRound?.key, rounds.length]);
+
+  useEffect(() => {
+    return () => {
+      if (roadScrollFrameRef.current != null) window.cancelAnimationFrame(roadScrollFrameRef.current);
+    };
+  }, []);
 
   function openMatch(card: KnockoutCardModel) {
     const [teamA, teamB] = card.teams;
@@ -2704,12 +2761,17 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   function renderRoadTeam(card: KnockoutCardModel, team: KnockoutParticipant, teamIndex: number) {
     const score = teamIndex === 0 ? card.fixture?.gh : card.fixture?.ga;
     const selected = selectedTeamName && canon(selectedTeamName) === canon(team.name);
+    const teamLabel = team.placeholder || team.name === "TBD" ? `${team.seed || "TBD"} path placeholder` : `Trace ${team.name}'s path`;
     return (
       <button
         key={`${card.key}-road-team-${teamIndex}`}
         type="button"
+        aria-label={teamLabel}
         className={`ko-road-team${team.winner ? " ko-road-team--winner" : ""}${team.placeholder || team.name === "TBD" ? " ko-road-team--tbd" : ""}${selected ? " ko-road-team--selected" : ""}`}
-        onClick={() => selectRoad(card, team)}
+        onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+          event.stopPropagation();
+          selectRoad(card, team);
+        }}
       >
         <span>{team.placeholder || team.name === "TBD" ? "TBD" : (data.flags[team.name] || "⚽")}</span>
         <b>{team.name}</b>
@@ -2726,11 +2788,19 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     return (
       <article
         key={`road-${card.key}`}
+        data-card-key={card.key}
         className={`ko-road-card ko-road-card--${tone}${card.isLive ? " ko-road-card--live" : ""}${card.isDone ? " ko-road-card--done" : ""}${isSelected ? " ko-road-card--path" : ""}${shouldDim && !isSelected ? " ko-road-card--dim" : ""}`}
         style={style}
         onClick={() => openMatch(card)}
+        onKeyDown={(event: ReactKeyboardEvent<HTMLElement>) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openMatch(card);
+          }
+        }}
         role="button"
         tabIndex={0}
+        aria-label={`Open match ${card.matchNo}: ${card.teams.map(team => team.name).join(" vs ")}`}
       >
         <div className="ko-road-card__top">
           <span>M{card.matchNo}</span>
@@ -2805,7 +2875,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
           <span>Road to the Final</span>
           <b>{selectedTeamName ? `${selectedTeamName}'s path` : "Tap a team to trace their road to the trophy"}</b>
         </div>
-        <div className="ko-road__scroll" ref={roadScrollRef}>
+        <div className="ko-road__scroll" ref={roadScrollRef} onScroll={handleRoadScroll}>
           <div className="ko-road__side ko-road__side--left" aria-label="Left side of bracket">
             {leftRoad.map(column => (
               <div key={`left-${column.key}`} data-round={column.key} data-side="left" className={`ko-road__column ko-road__column--${column.key}${activeRound === column.key ? " ko-road__column--active" : ""}`}>

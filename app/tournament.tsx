@@ -498,7 +498,10 @@ export default function Tournament({ data }: { data: TournamentData }) {
       return;
     }
     try {
-      const r = await fetch("/api/live", { cache: "no-store" });
+      const r = await fetch(`/api/live?ts=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       if (!r.ok) throw new Error("fetch failed");
       const j = await r.json();
       if (j.configured === false) {
@@ -525,9 +528,15 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const schedule = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (isMock()) return;
-    const ms = liveStatus === "active" ? 30000 : 180000;
+    const ms = liveStatus === "active" || view === "stats" ? 30000 : 60000;
     timerRef.current = setInterval(() => { pollLive(); }, ms);
-  }, [liveStatus, pollLive]);
+  }, [liveStatus, pollLive, view]);
+
+  useEffect(() => {
+    if (view !== "stats") return;
+    const refresh = window.setTimeout(() => { void pollLive(); }, 0);
+    return () => window.clearTimeout(refresh);
+  }, [pollLive, view]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -1300,7 +1309,14 @@ export default function Tournament({ data }: { data: TournamentData }) {
             onMatchClick={(match, fixture) => setMatchDetail({ match, fixture })}
           />
         ) : view === "stats" ? (
-          <StatsView fl={fl} computeLeaders={computeLeaders} />
+          <StatsView
+            fl={fl}
+            computeLeaders={computeLeaders}
+            liveTs={liveTs}
+            liveStatus={liveStatus}
+            liveEnrichmentIssue={liveEnrichmentIssue}
+            onRefresh={pollLive}
+          />
         ) : view === "teams" ? (
           <TeamsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} favs={favs} toggleFav={toggleFav} />
         ) : view === "more" ? (
@@ -4263,9 +4279,13 @@ function categoryValueTotal(category: LeaderboardCategory): number {
 }
 
 /** Stats view — tournament dashboard with visualizations */
-function StatsView({ fl, computeLeaders }: {
+function StatsView({ fl, computeLeaders, liveTs, liveStatus, liveEnrichmentIssue, onRefresh }: {
   fl: (t: string) => string;
   computeLeaders: () => TournamentStats;
+  liveTs: number;
+  liveStatus: LiveStatus;
+  liveEnrichmentIssue: string;
+  onRefresh: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<StatTabKey>("goals");
   const stats = useMemo(() => { try { return computeLeaders(); } catch { return null; } }, [computeLeaders]);
@@ -4318,6 +4338,8 @@ function StatsView({ fl, computeLeaders }: {
   ];
 
   const hasAnyData = categories.some(c => c.leaders.length > 0) || matchesPlayed > 0;
+  const syncedAt = liveTs ? new Date(liveTs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }) : "pending";
+  const syncLabel = liveEnrichmentIssue || (liveStatus === "active" ? "Live sync active" : liveStatus === "paused" ? "Retrying live sync" : "Fresh stats sync");
 
   return (
     <main className="section stats-view stats-view--premium">
@@ -4326,6 +4348,10 @@ function StatsView({ fl, computeLeaders }: {
           <span>Compet 2026</span>
           <h2>Stat Leaders</h2>
           <p>Goals, assists and discipline update from the same live match-event pipeline.</p>
+          <div className="stats-sync">
+            <span>{syncLabel} · {syncedAt}</span>
+            <button type="button" onClick={onRefresh}>Refresh</button>
+          </div>
         </div>
         <WorldCupTrophy id="st" className="stats-hero-panel__trophy" />
       </section>

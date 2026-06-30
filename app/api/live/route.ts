@@ -6,8 +6,6 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 const STARTS = DATA.starts;
-const LIVE_TTL = parseInt(process.env.LIVE_TTL || "420", 10);
-const IDLE_TTL = parseInt(process.env.IDLE_TTL || "1800", 10);
 const LEAGUE = process.env.WC_LEAGUE || "1";
 const SEASON = process.env.WC_SEASON || "2026";
 const PRE = 90 * 60000;
@@ -226,7 +224,7 @@ function roundLabel(game: WC26Game): string {
 
 async function fetchWC26(): Promise<{ ok: boolean; fixtures: unknown[] }> {
   const [gamesRes, stadiums] = await Promise.all([
-    fetch(WC26_URL, { signal: AbortSignal.timeout(8000) }),
+    fetch(WC26_URL, { cache: "no-store", signal: AbortSignal.timeout(8000) }),
     fetchStadiumMap(),
   ]);
   if (!gamesRes.ok) return { ok: false, fixtures: [] };
@@ -321,12 +319,12 @@ type VendorFixture = {
 
 async function fetchFixtures(key: string): Promise<FixtureResponse> {
   let url = `https://v3.football.api-sports.io/fixtures?league=${LEAGUE}&season=${SEASON}`;
-  let r = await fetch(url, { headers: { "x-apisports-key": key } });
+  let r = await fetch(url, { cache: "no-store", headers: { "x-apisports-key": key } });
   let body = await r.json().catch(() => ({}));
   if (r.ok && (!body.response || body.response.length === 0)) {
     const today = new Date().toISOString().slice(0, 10);
     url = `https://v3.football.api-sports.io/fixtures?date=${today}&league=${LEAGUE}`;
-    r = await fetch(url, { headers: { "x-apisports-key": key } });
+    r = await fetch(url, { cache: "no-store", headers: { "x-apisports-key": key } });
     body = await r.json().catch(() => ({}));
   }
   const quota = {
@@ -516,8 +514,8 @@ export async function GET(request: NextRequest) {
       wc26: { ok: wc26.ok, fixtureCount: wc26.fixtures.length },
       apiFootball: apif ? { ok: apif.ok, fixtureCount: apif.fixtures?.length ?? 0, richFixtureCount, quota: apif.quota } : "not configured",
       enrichment: {
-        required: active,
-        healthy: active ? !!(apiFootballKey && apif?.ok && (apif.fixtures?.length ?? 0) > 0) : true,
+        required: true,
+        healthy: !!(apiFootballKey && apif?.ok && (apif.fixtures?.length ?? 0) > 0),
         activeMatches,
         source: apif?.ok && (apif.fixtures?.length ?? 0) > 0 ? "api-football" : "missing",
         richFixtureCount,
@@ -534,14 +532,14 @@ export async function GET(request: NextRequest) {
 
   let apif: FixtureResponse | null = null;
   let apifFixtures: unknown[] = [];
-  if (apiFootballKey && active) {
+  if (apiFootballKey) {
     apif = await fetchFixtures(apiFootballKey).catch(() => ({ ok: false, fixtures: [] } as FixtureResponse));
     if (apif.ok && apif.fixtures && apif.fixtures.length > 0) apifFixtures = apif.fixtures;
   }
   const richFixtureCount = apifFixtures.filter(hasRichDetails).length;
   const enrichment = {
-    required: active,
-    healthy: active ? !!(apiFootballKey && apif?.ok && apifFixtures.length > 0) : true,
+    required: true,
+    healthy: !!(apiFootballKey && apif?.ok && apifFixtures.length > 0),
     activeMatches,
     source: apifFixtures.length > 0 ? "api-football" : wc26.ok ? "basic-fallback" : "none",
     richFixtureCount,
@@ -599,7 +597,7 @@ export async function GET(request: NextRequest) {
   if (!active && !hasLiveData) {
     return NextResponse.json(
       { configured: !!apiFootballKey, active: false, ts: LAST ? LAST.ts : now, fixtures, enrichment },
-      { headers: { "Cache-Control": `public, s-maxage=${IDLE_TTL}, stale-while-revalidate=${IDLE_TTL * 2}` } }
+      { headers: { "Cache-Control": "no-store, max-age=0" } }
     );
   }
 
@@ -614,6 +612,6 @@ export async function GET(request: NextRequest) {
       source: apifFixtures.length > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
       enrichment,
     },
-    { headers: { "Cache-Control": `public, s-maxage=${active ? LIVE_TTL : IDLE_TTL}, stale-while-revalidate=${active ? LIVE_TTL * 2 : IDLE_TTL * 2}` } }
+    { headers: { "Cache-Control": "no-store, max-age=0" } }
   );
 }

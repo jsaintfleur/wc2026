@@ -13,7 +13,7 @@ const SPECIAL_CHARS: Record<string, string> = {
 // key suitable for deduplication. Unlike nrm() in merge.ts (which was
 // designed for team name lookup), this handles non-decomposable letters
 // like ø, đ, and ł that are common in player names.
-function asciiFold(s: string): string {
+export function asciiFold(s: string): string {
   let out = "";
   for (const ch of s) {
     out += SPECIAL_CHARS[ch] || ch;

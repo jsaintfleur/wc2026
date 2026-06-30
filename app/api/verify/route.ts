@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canon, canonPlayer, PLAYER_NORM } from "@/lib/merge";
+import { asciiFold } from "@/lib/stats";
 
 // ESPN structured JSON APIs — free, no auth, real-time
 const ESPN_STATS_URL =
@@ -321,10 +322,13 @@ export async function GET(request: NextRequest) {
     if (espnScorers.length > 0) {
       for (const espn of espnScorers) {
         const ours = ourData.scorers.find((s) => {
+          // Compare names with diacritics stripped for cross-source matching
+          const a = asciiFold(s.name.toLowerCase());
+          const b = asciiFold(espn.name.toLowerCase());
           const nameMatch =
-            s.name.toLowerCase() === espn.name.toLowerCase() ||
-            s.name.toLowerCase().includes(espn.name.split(" ").pop()?.toLowerCase() || "") ||
-            espn.name.toLowerCase().includes(s.name.split(" ").pop()?.toLowerCase() || "");
+            a === b ||
+            a.includes(b.split(" ").pop() || "") ||
+            b.includes(a.split(" ").pop() || "");
           const teamMatch = canon(s.team) === canon(espn.team);
           return nameMatch && teamMatch;
         });

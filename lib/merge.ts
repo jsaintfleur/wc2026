@@ -9,7 +9,7 @@ export const TEAM_NORM: Record<string, string> = {
   usa: "United States", unitedstates: "United States",
   cotedivoire: "Ivory Coast", ivorycoast: "Ivory Coast",
   congodr: "DR Congo", drcongo: "DR Congo", democraticrepublicofcongo: "DR Congo",
-  democraticrepublicofthecongo: "DR Congo",
+  democraticrepublicofthecongo: "DR Congo", congodemocraticrep: "DR Congo",
   caboverde: "Cape Verde", capeverdeislands: "Cape Verde", capeverde: "Cape Verde",
   bosniaandherzegovina: "Bosnia & Herzegovina", bosniaherzegovina: "Bosnia & Herzegovina",
   curacao: "Curaçao",

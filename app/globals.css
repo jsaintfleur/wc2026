@@ -58,8 +58,8 @@ body {
   font-family: var(--body);
   background-color: var(--chalk);
   background:
-    linear-gradient(180deg, rgba(8,12,21,0.68), rgba(8,12,21,0.96)),
-    repeating-linear-gradient(90deg, #081b13 0 84px, #0a2218 84px 168px);
+    radial-gradient(circle at 50% -20%, rgba(245,158,11,0.08), transparent 42%),
+    linear-gradient(180deg, #090d16 0%, #070a11 58%, #05070c 100%);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   line-height: 1.45;
@@ -368,10 +368,18 @@ body::after {
 .search-overlay__row:hover { background: rgba(255,255,255,0.06); }
 
 .search-overlay__row-icon {
-  font-size: 22px;
+  display: grid;
+  place-items: center;
   width: 28px;
+  height: 28px;
+  color: var(--gold-bright);
   text-align: center;
   flex-shrink: 0;
+}
+
+.search-overlay__row-icon svg {
+  width: 19px;
+  height: 19px;
 }
 
 .search-overlay__row-text {
@@ -4051,9 +4059,22 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   background: var(--glass);
 }
 .md-drawer__empty-icon {
-  font-size: 32px;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  color: var(--gold-bright);
+  background: rgba(255,255,255,0.04);
   margin-bottom: 12px;
   opacity: 0.7;
+}
+
+.md-drawer__empty-icon svg {
+  width: 22px;
+  height: 22px;
 }
 .md-drawer__empty-title {
   font-family: var(--font-heading);
@@ -5617,16 +5638,24 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   color: var(--muted);
 }
 .stats-empty::before {
-  content: "📊";
+  content: "";
   display: block;
-  font-size: 36px;
+  width: 36px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(245,158,11,0.75), rgba(255,255,255,0.16));
+  margin: 0 auto 14px;
+  opacity: .8;
+}
+.stats-empty--inline::before {
+  content: "";
+  width: 28px;
+  height: 3px;
   margin-bottom: 14px;
-  opacity: .5;
 }
 .stats-empty p { margin: 0 0 8px; font-size: 14px; line-height: 1.5; }
 .stats-empty__sub { font-size: 12px; opacity: 0.6; }
 .stats-empty--inline { padding: 24px 16px; }
-.stats-empty--inline::before { content: "📋"; font-size: 28px; margin-bottom: 10px; }
 .stats-coverage { font-size: 11px; color: var(--muted); text-align: center; margin-top: 8px; opacity: 0.7; }
 .stats-skeleton {
   max-width: 320px;
@@ -7573,3 +7602,235 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 
 /* Font display swap — avoid invisible text during font loading */
 @font-face { font-display: swap; }
+
+/* =========================================================
+ * Premium restraint layer
+ * ========================================================= */
+:root {
+  --surface-1: rgba(255,255,255,0.035);
+  --surface-2: rgba(255,255,255,0.055);
+  --hairline: rgba(255,255,255,0.075);
+  --lux-shadow: 0 10px 30px rgba(0,0,0,0.24);
+  --lux-shadow-soft: 0 8px 20px rgba(0,0,0,0.18);
+}
+
+.wrap {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.018), transparent 260px),
+    #080c15;
+}
+
+.bar {
+  background: rgba(7,10,17,0.88);
+  border-bottom-color: rgba(255,255,255,0.065);
+  box-shadow: none;
+}
+
+.bar__search-btn,
+.bar__hosts button,
+.home-quick__btn,
+.home-progress__stat,
+.home-leader-card,
+.home-result-card,
+.home-snapshot__card,
+.more-quick-card,
+.more-venue-card,
+.more-city-row,
+.more-history-card,
+.more-record-row,
+.more-settings-list,
+.stats-leader-card,
+.ko-road-card,
+.team-tile {
+  border-color: var(--hairline);
+  background: var(--surface-1);
+  box-shadow: none;
+}
+
+.home-dash {
+  padding: 14px 14px 36px;
+  gap: 22px;
+}
+
+.home-dash__next,
+.home-dash__progress,
+.stats-hero-panel,
+.stats-leaders,
+.more-view__hero,
+.more-progress-card,
+.ko-control,
+.ko-road {
+  border-color: var(--hairline);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.058), rgba(255,255,255,0.024)),
+    rgba(8,12,21,0.86);
+  box-shadow: var(--lux-shadow-soft);
+}
+
+.home-dash__next,
+.stats-hero-panel,
+.more-view__hero {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.025)),
+    rgba(8,12,21,0.9);
+}
+
+.home-next__eyebrow,
+.home-progress__stage,
+.home-leader-card__award,
+.more-section__heading,
+.stats-leaders__eyebrow,
+.stats-hero-panel__copy span,
+.ko-stage__eyebrow {
+  letter-spacing: .9px;
+}
+
+.home-next__digit,
+.home-progress__stat b,
+.home-leader-card__stat,
+.stats-leader-card__value strong,
+.more-view__hero-panel strong,
+.more-progress-card__stage {
+  font-variant-numeric: tabular-nums;
+}
+
+.home-dash__quick {
+  gap: 10px;
+}
+
+.home-quick__btn {
+  min-height: 72px;
+  padding: 13px 6px;
+  border-radius: 16px;
+}
+
+.home-quick__icon,
+.home-snapshot__icon,
+.more-quick-card__icon,
+.more-settings-row__icon {
+  color: var(--gold-bright);
+}
+
+.home-quick__icon svg,
+.home-snapshot__icon svg,
+.more-quick-card__icon svg,
+.more-settings-row__icon svg,
+.home-leader-card__award svg {
+  display: block;
+  width: 21px;
+  height: 21px;
+}
+
+.home-leader-card__award {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.home-leader-card__award svg {
+  width: 16px;
+  height: 16px;
+}
+
+.home-snapshot__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.045);
+}
+
+.home-snapshot__card--ko,
+.home-snapshot__card--stats,
+.more-view__hero,
+.more-progress-card,
+.stats-leader-card--podium,
+.ko-road-card--path {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.062), rgba(255,255,255,0.026)),
+    rgba(8,12,21,0.88);
+}
+
+.more-view__hero::after,
+.stats-hero-panel::after,
+.ko-road-card::after,
+.ko-road-card::before,
+.ko-road__stack .ko-road-card:nth-child(odd)::before {
+  opacity: .34;
+}
+
+.more-view__hosts span,
+.more-venue-card__flag,
+.more-city-row__flag {
+  background: rgba(255,255,255,0.04);
+  border-color: var(--hairline);
+}
+
+.more-venue-card__stats {
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .35px;
+}
+
+.more-settings-row__icon {
+  display: grid;
+  place-items: center;
+}
+
+.more-settings-row__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.app-nav {
+  background: rgba(7,10,17,0.92);
+  border-top-color: rgba(255,255,255,0.075);
+  box-shadow: 0 -10px 28px rgba(0,0,0,0.28);
+}
+
+.app-nav .tab {
+  transition: color .18s ease, transform .18s ease;
+}
+
+.app-nav .tab[aria-selected="true"],
+.app-nav .tab.active {
+  color: var(--gold-bright);
+}
+
+.home-quick__btn:hover,
+.home-progress__stat:hover,
+.home-leader-card:hover,
+.home-result-card:hover,
+.home-snapshot__card:hover,
+.more-quick-card:hover,
+.ko-road-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(245,158,11,0.22);
+  background: var(--surface-2);
+  box-shadow: var(--lux-shadow-soft);
+}
+
+.home-quick__btn:active,
+.home-progress__stat:active,
+.home-leader-card:active,
+.home-result-card:active,
+.home-snapshot__card:active,
+.more-quick-card:active,
+.ko-road-card:active {
+  transform: scale(.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-dash > *,
+  .more-quick-card,
+  .more-venue-card,
+  .more-city-row,
+  .more-history-card,
+  .more-record-row {
+    animation: none !important;
+  }
+}

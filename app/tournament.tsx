@@ -374,6 +374,30 @@ function esc(s: string | number): string {
   return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] || c));
 }
 
+type AppIconName = "bracket" | "groups" | "calendar" | "stats" | "teams" | "more" | "boot" | "assist" | "venue" | "ball" | "info" | "bell" | "share" | "settings";
+
+function AppIcon({ name, className = "" }: { name: AppIconName; className?: string }) {
+  const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  return (
+    <svg className={className} width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      {name === "bracket" && <><path {...common} d="M5 5h5v5H5zM5 14h5v5H5zM14 9h5v6h-5z"/><path {...common} d="M10 7.5h2.5c1 0 1.5.5 1.5 1.5v3c0 1 .5 1.5 1.5 1.5H19"/></>}
+      {name === "groups" && <><circle {...common} cx="8" cy="8" r="3"/><circle {...common} cx="16" cy="8" r="3"/><circle {...common} cx="12" cy="16" r="3"/></>}
+      {name === "calendar" && <><rect {...common} x="4" y="5" width="16" height="15" rx="2"/><path {...common} d="M8 3v4M16 3v4M4 10h16"/></>}
+      {name === "stats" && <><path {...common} d="M6 19V12M12 19V5M18 19v-9"/><path {...common} d="M4 19h16"/></>}
+      {name === "teams" && <><circle {...common} cx="12" cy="12" r="9"/><path {...common} d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></>}
+      {name === "more" && <><circle {...common} cx="6" cy="12" r="1.4"/><circle {...common} cx="12" cy="12" r="1.4"/><circle {...common} cx="18" cy="12" r="1.4"/></>}
+      {name === "boot" && <><path {...common} d="M5 5v7.5c0 2 1.4 3.5 3.4 3.5H19c.7 0 1.2.5 1.2 1.2V19H8.5C5.5 19 3 16.5 3 13.5V5z"/><path {...common} d="M7 8h5M7 11h4M14 16l2.5-3"/></>}
+      {name === "assist" && <><path {...common} d="M4 16c4.8-7.8 10.5-9 16-7"/><path {...common} d="M16 5h4v4"/><circle {...common} cx="7" cy="17" r="2.2"/></>}
+      {name === "venue" && <><path {...common} d="M4 15c1.8-3.5 4.5-5.2 8-5.2s6.2 1.7 8 5.2"/><path {...common} d="M5 16h14M7 19h10"/><path {...common} d="M8 10V7h8v3"/></>}
+      {name === "ball" && <><circle {...common} cx="12" cy="12" r="8"/><path {...common} d="m12 8 3 2-1 3h-4l-1-3zM12 4v4M5.5 10l3.5.5M18.5 10l-3.5.5M8.5 18l1.5-5M15.5 18 14 13"/></>}
+      {name === "info" && <><circle {...common} cx="12" cy="12" r="8"/><path {...common} d="M12 11v5M12 8h.01"/></>}
+      {name === "bell" && <><path {...common} d="M6 16h12l-1.5-2.2V10a4.5 4.5 0 0 0-9 0v3.8z"/><path {...common} d="M10 19a2 2 0 0 0 4 0"/></>}
+      {name === "share" && <><path {...common} d="M12 15V4"/><path {...common} d="m8 8 4-4 4 4"/><path {...common} d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></>}
+      {name === "settings" && <><circle {...common} cx="12" cy="12" r="3"/><path {...common} d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.8-1L14.4 3h-4.8L9.2 6a7 7 0 0 0-1.8 1L5 6.1l-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.8 1l.4 3h4.8l.4-3a7 7 0 0 0 1.8-1l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1z"/></>}
+    </svg>
+  );
+}
+
 function isMock(): boolean {
   if (typeof window === "undefined") return false;
   return window.location.search.indexOf("mock") > -1;
@@ -1443,13 +1467,13 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
   }, [nextMatch, now]);
 
   /* -- quick access items ----------------------------------------- */
-  const quickItems: { icon: string; label: string; key: ViewType }[] = [
-    { icon: "⚔️", label: "Knockout", key: "bracket" },
-    { icon: "📊", label: "Groups", key: "groups" },
-    { icon: "📅", label: "Matches", key: "schedule" },
-    { icon: "🏆", label: "Stats", key: "stats" },
-    { icon: "🌍", label: "Teams", key: "teams" },
-    { icon: "•••", label: "More", key: "more" },
+  const quickItems: { icon: AppIconName; label: string; key: ViewType }[] = [
+    { icon: "bracket", label: "Knockout", key: "bracket" },
+    { icon: "groups", label: "Groups", key: "groups" },
+    { icon: "calendar", label: "Matches", key: "schedule" },
+    { icon: "stats", label: "Stats", key: "stats" },
+    { icon: "teams", label: "Teams", key: "teams" },
+    { icon: "more", label: "More", key: "more" },
   ];
 
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -1540,7 +1564,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
       <section className="home-dash__quick" aria-label="Quick access">
         {quickItems.map(item => (
           <button key={item.key} type="button" className="home-quick__btn" onClick={() => onNavigate(item.key)}>
-            <span className="home-quick__icon">{item.icon}</span>
+            <span className="home-quick__icon"><AppIcon name={item.icon} /></span>
             <span className="home-quick__label">{item.label}</span>
           </button>
         ))}
@@ -1553,7 +1577,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
           <div className="home-leaders__grid">
             {topScorer && (
               <button type="button" className="home-leader-card home-leader-card--gold" onClick={() => onPlayerClick(topScorer.name, topScorer.team)}>
-                <div className="home-leader-card__award">🥇 Golden Boot</div>
+                <div className="home-leader-card__award"><AppIcon name="boot" /> Golden Boot</div>
                 <div className="home-leader-card__player">
                   <span className="home-leader-card__flag">{fl(topScorer.team)}</span>
                   <div>
@@ -1566,7 +1590,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
             )}
             {topAssister && (
               <button type="button" className="home-leader-card home-leader-card--silver" onClick={() => onPlayerClick(topAssister.name, topAssister.team)}>
-                <div className="home-leader-card__award">🎯 Top Assists</div>
+                <div className="home-leader-card__award"><AppIcon name="assist" /> Top Assists</div>
                 <div className="home-leader-card__player">
                   <span className="home-leader-card__flag">{fl(topAssister.team)}</span>
                   <div>
@@ -1617,14 +1641,14 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
         </div>
         <div className="home-snapshot__grid">
           <button type="button" className="home-snapshot__card home-snapshot__card--ko" onClick={() => onNavigate("bracket")}>
-            <span className="home-snapshot__icon">⚔️</span>
+            <span className="home-snapshot__icon"><AppIcon name="bracket" /></span>
             <div>
               <b>Knockout Bracket</b>
               <span>{koDone > 0 ? `${koDone} of ${data.ko.length} decided` : stageLabel === "Round of 32" ? "Round of 32 begins" : "Starts after group stage"}</span>
             </div>
           </button>
           <button type="button" className="home-snapshot__card home-snapshot__card--stats" onClick={() => onNavigate("stats")}>
-            <span className="home-snapshot__icon">📊</span>
+            <span className="home-snapshot__icon"><AppIcon name="stats" /></span>
             <div>
               <b>Statistics</b>
               <span>{leaders.totalGoals} goals in {leaders.matchesPlayed} matches</span>
@@ -1759,7 +1783,7 @@ function SearchOverlay({ data, fixtures, findLive, onClose, onTeamClick, onMatch
               <h4>Players</h4>
               {results.players.map((p, i) => (
                 <button key={i} type="button" className="search-overlay__row" onClick={() => onTeamClick(p.team)}>
-                  <span className="search-overlay__row-icon">⚽</span>
+                  <span className="search-overlay__row-icon"><AppIcon name="teams" /></span>
                   <span className="search-overlay__row-text"><b>{p.name}</b><span>{p.team} · {p.pos}</span></span>
                 </button>
               ))}
@@ -1771,7 +1795,7 @@ function SearchOverlay({ data, fixtures, findLive, onClose, onTeamClick, onMatch
               <h4>Matches</h4>
               {results.matches.map((m, i) => (
                 <button key={i} type="button" className="search-overlay__row" onClick={() => onMatchClick(m.match, m.fixture)}>
-                  <span className="search-overlay__row-icon">📅</span>
+                  <span className="search-overlay__row-icon"><AppIcon name="calendar" /></span>
                   <span className="search-overlay__row-text">
                     <b>{m.match.t1} vs {m.match.t2}</b>
                     <span>Group {m.match.g}{m.fixture && m.fixture.gh != null ? ` · ${m.fixture.gh}–${m.fixture.ga}` : ""}</span>
@@ -1786,7 +1810,7 @@ function SearchOverlay({ data, fixtures, findLive, onClose, onTeamClick, onMatch
               <h4>Stadiums</h4>
               {results.venues.map(v => (
                 <button key={v.code} type="button" className="search-overlay__row" onClick={() => onNavigate("more")}>
-                  <span className="search-overlay__row-icon">🏟️</span>
+                  <span className="search-overlay__row-icon"><AppIcon name="venue" /></span>
                   <span className="search-overlay__row-text"><b>{v.name}</b><span>{v.city}</span></span>
                 </button>
               ))}
@@ -1798,7 +1822,7 @@ function SearchOverlay({ data, fixtures, findLive, onClose, onTeamClick, onMatch
               <h4>Groups</h4>
               {results.groups.map(g => (
                 <button key={g} type="button" className="search-overlay__row" onClick={() => onNavigate("groups")}>
-                  <span className="search-overlay__row-icon">📊</span>
+                  <span className="search-overlay__row-icon"><AppIcon name="groups" /></span>
                   <span className="search-overlay__row-text"><b>Group {g}</b><span>{data.groups[g]?.join(", ")}</span></span>
                 </button>
               ))}
@@ -2131,12 +2155,12 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
   /* =============================================================
    * 6. Quick access navigation items
    * ============================================================= */
-  const quickAccess: { view: ViewType; icon: string; title: string; desc: string }[] = [
-    { view: "bracket", icon: "🏆", title: "Knockout Bracket", desc: "Full elimination bracket from R32 to the Final" },
-    { view: "stats", icon: "📊", title: "Statistics", desc: "Top scorers, assists, cards and team leaderboards" },
-    { view: "groups", icon: "⚽", title: "Groups", desc: "All 12 groups with live standings and results" },
-    { view: "schedule", icon: "📅", title: "Full Schedule", desc: "Complete match schedule with live scores" },
-    { view: "teams", icon: "🌍", title: "Teams", desc: "All 48 national teams and squad profiles" },
+  const quickAccess: { view: ViewType; icon: AppIconName; title: string; desc: string }[] = [
+    { view: "bracket", icon: "bracket", title: "Knockout Bracket", desc: "Full elimination bracket from R32 to the Final" },
+    { view: "stats", icon: "stats", title: "Statistics", desc: "Top scorers, assists, cards and team leaderboards" },
+    { view: "groups", icon: "groups", title: "Groups", desc: "All 12 groups with live standings and results" },
+    { view: "schedule", icon: "calendar", title: "Full Schedule", desc: "Complete match schedule with live scores" },
+    { view: "teams", icon: "teams", title: "Teams", desc: "All 48 national teams and squad profiles" },
   ];
 
   /* =============================================================
@@ -2215,7 +2239,7 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
               style={{ animationDelay: `${i * 60}ms` }}
               onClick={() => onNavigate(item.view)}
             >
-              <span className="more-quick-card__icon">{item.icon}</span>
+              <span className="more-quick-card__icon"><AppIcon name={item.icon} /></span>
               <b className="more-quick-card__title">{item.title}</b>
               <small className="more-quick-card__desc">{item.desc}</small>
             </button>
@@ -2239,8 +2263,8 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
               </div>
               <span className="more-venue-card__city">{v.city}, {v.country}</span>
               <div className="more-venue-card__stats">
-                <span>🏟 {fmtNum(v.cap)}</span>
-                <span>⚽ {v.matches} match{v.matches !== 1 ? "es" : ""}</span>
+                <span>{fmtNum(v.cap)} seats</span>
+                <span>{v.matches} match{v.matches !== 1 ? "es" : ""}</span>
               </div>
             </div>
           ))}
@@ -2331,22 +2355,22 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
         <h3 className="more-section__heading">Settings</h3>
         <div className="more-settings-list">
           <button type="button" className="more-settings-row" onClick={() => onNavigate("about")}>
-            <span className="more-settings-row__icon">ℹ️</span>
+            <span className="more-settings-row__icon"><AppIcon name="info" /></span>
             <span>About Compet 2026</span>
             <span className="more-settings-row__chevron">›</span>
           </button>
           <button type="button" className="more-settings-row" onClick={() => {}}>
-            <span className="more-settings-row__icon">🔔</span>
+            <span className="more-settings-row__icon"><AppIcon name="bell" /></span>
             <span>Notifications</span>
             <span className="more-settings-row__chevron">›</span>
           </button>
           <button type="button" className="more-settings-row" onClick={handleShare}>
-            <span className="more-settings-row__icon">📤</span>
+            <span className="more-settings-row__icon"><AppIcon name="share" /></span>
             <span>Share the App</span>
             <span className="more-settings-row__chevron">›</span>
           </button>
           <div className="more-settings-row more-settings-row--version">
-            <span className="more-settings-row__icon">⚙️</span>
+            <span className="more-settings-row__icon"><AppIcon name="settings" /></span>
             <span>Version</span>
             <span className="more-settings-row__version">v1.0.0</span>
           </div>
@@ -3607,7 +3631,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   function renderStatsTab() {
     if (!fixture?.stats) return (
       <div className="md-drawer__empty-section">
-        <div className="md-drawer__empty-icon">📊</div>
+        <div className="md-drawer__empty-icon"><AppIcon name="stats" /></div>
         <div className="md-drawer__empty-title">Match Statistics</div>
         <div className="md-drawer__empty-desc">Possession, shots, passes, fouls, and more will appear here {isDone ? "once data is synced" : "once the match kicks off"}.</div>
       </div>

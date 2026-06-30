@@ -334,21 +334,11 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
     // assists from events when we have the better source.
     const usePlayersForAssists = hasPlayers;
 
-    if (hasEvents) {
-      matchesWithEvents++;
-      for (const ev of fm.events!) {
-        if (ev.type === "Card") {
-          processCard(ev);
-          continue;
-        }
-        if (ev.type === "subst") {
-          totalSubs++;
-          continue;
-        }
-        if (ev.type === "Goal") processGoal(ev, usePlayersForAssists);
-      }
-    }
-
+    // Process the players array FIRST so that ID-based entries and
+    // nameRedirect mappings exist before events are processed. Without
+    // this ordering, events create name-based entries that never merge
+    // with the ID-based entries created later, splitting a player's
+    // goal count across two records.
     if (hasPlayers) {
       let matchHasAssist = false;
       for (const p of fm.players!) {
@@ -370,9 +360,23 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
       }
       if (matchHasAssist) matchesWithAssistData++;
     } else {
-      // No players array — check if events had any assists as fallback
       const eventHasAssist = hasEvents && fm.events!.some(e => e.type === "Goal" && !isOwnGoal(e) && isValidPlayerName(e.assist, countryTeamNames));
       if (eventHasAssist) matchesWithAssistData++;
+    }
+
+    if (hasEvents) {
+      matchesWithEvents++;
+      for (const ev of fm.events!) {
+        if (ev.type === "Card") {
+          processCard(ev);
+          continue;
+        }
+        if (ev.type === "subst") {
+          totalSubs++;
+          continue;
+        }
+        if (ev.type === "Goal") processGoal(ev, usePlayersForAssists);
+      }
     }
   }
 

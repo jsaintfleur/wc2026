@@ -61,7 +61,10 @@ interface VerifyResult {
   newNameSuggestions: { raw: string; suggested: string; team: string; confidence: string }[];
 }
 
-// Fetch top scorers from ESPN's structured JSON API
+// Fetch top scorers and assist leaders from ESPN's structured JSON API.
+// Response shape: { stats: [ { name: "goalsLeaders", leaders: [...] },
+//                            { name: "assistsLeaders", leaders: [...] } ] }
+// Each leader: { value, athlete: { displayName, team: { displayName }, statistics: [...] } }
 async function fetchEspnScorers(): Promise<EspnScorer[]> {
   try {
     const res = await fetch(ESPN_STATS_URL, {
@@ -72,36 +75,59 @@ async function fetchEspnScorers(): Promise<EspnScorer[]> {
     const data = await res.json();
 
     const scorers: EspnScorer[] = [];
-    // ESPN returns categories → leaders → entries
-    const categories = data?.categories || data?.leaders || [];
-    for (const cat of categories) {
-      // "scoring" category has goals data
-      if (cat.name !== "scoring" && cat.displayName !== "Scoring") continue;
+    const assistMap = new Map<string, number>();
 
-      const leaders = cat.leaders || [];
-      for (const leader of leaders) {
-        // "goals" sub-category
-        if (leader.name !== "goals" && leader.displayName !== "Goals") continue;
+    // stats[0] = goalsLeaders, stats[1] = assistsLeaders
+    const statCategories = data?.stats || [];
 
-        for (const entry of leader.leaders || []) {
-          const athlete = entry.athlete || {};
-          const team = entry.team || {};
-          const stats = entry.statistics || [];
-          // Stats order: [APP, G, A] based on the categories header
-          const played = parseInt(stats[0], 10) || 0;
-          const goals = parseInt(stats[1], 10) || 0;
-          const assists = parseInt(stats[2], 10) || 0;
+    // First pass: collect assist counts so we can attach them to scorers
+    const assistCat = statCategories.find(
+      (c: { name: string }) => c.name === "assistsLeaders",
+    );
+    if (assistCat) {
+      for (const entry of assistCat.leaders || []) {
+        const athlete = entry.athlete || {};
+        const name = athlete.displayName || "";
+        const team = athlete.team?.displayName || "";
+        const assists = Math.round(entry.value || 0);
+        if (name) assistMap.set(`${name}|${team}`, assists);
+      }
+    }
 
-          scorers.push({
-            name: athlete.displayName || athlete.shortName || "",
-            team: team.displayName || team.name || "",
-            goals,
-            assists,
-            played,
-          });
+    // Second pass: build scorer list from goals leaders
+    const goalsCat = statCategories.find(
+      (c: { name: string }) => c.name === "goalsLeaders",
+    );
+    if (goalsCat) {
+      for (const entry of goalsCat.leaders || []) {
+        const athlete = entry.athlete || {};
+        const team = athlete.team || {};
+        const name = athlete.displayName || athlete.shortName || "";
+        const teamName = team.displayName || team.name || "";
+        const goals = Math.round(entry.value || 0);
+
+        // Get assists from the assist map or from the athlete's statistics
+        const assistKey = `${name}|${teamName}`;
+        let assists = assistMap.get(assistKey) || 0;
+        if (!assists) {
+          const aStat = (athlete.statistics || []).find(
+            (s: { name: string }) => s.name === "totalAssists",
+          );
+          assists = aStat ? Math.round(aStat.value || 0) : 0;
+        }
+
+        // Get appearances from statistics array
+        const appStat = (athlete.statistics || []).find(
+          (s: { name: string }) => s.name === "appearances",
+        );
+        const played = appStat ? Math.round(appStat.value || 0) : 0;
+
+        if (name && goals > 0) {
+          scorers.push({ name, team: teamName, goals, assists, played });
         }
       }
     }
+
     return scorers;
   } catch (err) {
     console.error("[verify] ESPN stats fetch failed:", err);

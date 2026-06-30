@@ -44,22 +44,40 @@ function hasRichDetails(fixture: unknown): boolean {
 function sameFixture(a: unknown, b: unknown): boolean {
   const left = a as { ts?: number; home?: string; away?: string };
   const right = b as { ts?: number; home?: string; away?: string };
-  const dt = Math.abs((left.ts || 0) - (right.ts || 0));
-  if (dt > 75 * 60000) return false;
   const lh = canon(left.home || "");
   const la = canon(left.away || "");
   const rh = canon(right.home || "");
   const ra = canon(right.away || "");
-  return (lh === rh && la === ra) || (lh === ra && la === rh);
+  const teamsMatch = (lh === rh && la === ra) || (lh === ra && la === rh);
+  if (!teamsMatch) return false;
+  // When either timestamp is missing (0 or falsy), rely on team names alone.
+  // Each team pair plays at most once per tournament stage, so this is safe.
+  const leftTs = left.ts || 0;
+  const rightTs = right.ts || 0;
+  if (!leftTs || !rightTs) return true;
+  return Math.abs(leftTs - rightTs) <= 75 * 60000;
 }
 
 function withVerifiedResults(fixtures: unknown[] = []): unknown[] {
   // Verified results are manually confirmed and have richer data (full names, assists).
-  // They replace any matching fixture from other sources.
+  // They replace any matching fixture's core fields but preserve enrichment data
+  // (fixtureId, players, stats, lineups, referee) that the verified result lacks.
   const merged: unknown[] = [];
   for (const f of fixtures) {
     const verifiedMatch = VERIFIED_RESULTS.find(v => sameFixture(f, v));
-    merged.push(verifiedMatch || f);
+    if (verifiedMatch) {
+      const original = f as Record<string, unknown>;
+      const verified = { ...verifiedMatch } as Record<string, unknown>;
+      // Carry over enrichment data from the original if the verified result lacks it
+      if (!verified.fixtureId && original.fixtureId) verified.fixtureId = original.fixtureId;
+      if (!verified.players && original.players) verified.players = original.players;
+      if (!verified.stats && original.stats) verified.stats = original.stats;
+      if (!verified.lineups && original.lineups) verified.lineups = original.lineups;
+      if (!verified.referee && original.referee) verified.referee = original.referee;
+      merged.push(verified);
+    } else {
+      merged.push(f);
+    }
   }
   // Add any verified results not covered by the fixture list
   for (const v of VERIFIED_RESULTS) {
@@ -194,9 +212,11 @@ for (const m of DATA.gs) {
   const v = DATA.venues[m.v];
   SCHEDULE_BY_PAIR.set(key, { ts: m.ts, venue: v?.common || "", round: `Group Stage - ${m.g}` });
 }
-for (const m of DATA.ko) {
-  SCHEDULE_BY_PAIR.set(m.mr, { ts: m.ts, venue: DATA.venues[m.v]?.common || "", round: m.round });
-}
+// KO schedule entries indexed by timestamp for fallback lookup.
+// Team pairs aren't known at build time, so we match by date window.
+const KO_SCHEDULE_BY_TS: Array<{ ts: number; venue: string; round: string }> = DATA.ko.map(m => ({
+  ts: m.ts, venue: DATA.venues[m.v]?.common || "", round: m.round,
+}));
 
 async function fetchStadiumMap(): Promise<Record<string, string>> {
   if (STADIUM_CACHE) return STADIUM_CACHE;
@@ -248,12 +268,22 @@ async function fetchWC26(): Promise<{ ok: boolean; fixtures: unknown[] }> {
       return aMin - bMin;
     });
 
-    // Look up correct timestamp and venue from our schedule using team pair
+    // Look up correct timestamp and venue from our schedule using team pair.
+    // Group stage matches are keyed by team pair; KO matches aren't (teams
+    // aren't known at build time), so fall back to wc26's own date field
+    // and try to find the closest KO schedule slot.
     const pairKey = [canon(g.home_team_name_en), canon(g.away_team_name_en)].sort().join("|");
-    const scheduled = SCHEDULE_BY_PAIR.get(pairKey);
+    let scheduled = SCHEDULE_BY_PAIR.get(pairKey);
+    if (!scheduled && g.type !== "group" && g.local_date) {
+      const wc26Ts = Date.parse(g.local_date);
+      if (wc26Ts > 0) {
+        const koMatch = KO_SCHEDULE_BY_TS.find(k => Math.abs(k.ts - wc26Ts) < 4 * 3600000);
+        if (koMatch) scheduled = koMatch;
+      }
+    }
 
     return {
-      ts: scheduled?.ts || 0,
+      ts: scheduled?.ts || (g.local_date ? Date.parse(g.local_date) || 0 : 0),
       status,
       elapsed,
       venue: scheduled?.venue || stadiums[g.stadium_id] || "",
@@ -269,7 +299,27 @@ async function fetchWC26(): Promise<{ ok: boolean; fixtures: unknown[] }> {
     };
   });
 
-  return { ok: true, fixtures };
+  // Deduplicate: wc26 can return the same match multiple times (e.g. R32
+  // fixtures appear under different matchday IDs). Keep the entry with the
+  // most event data and a valid timestamp.
+  const deduped: typeof fixtures = [];
+  const seen = new Map<string, number>();
+  for (let i = 0; i < fixtures.length; i++) {
+    const f = fixtures[i];
+    const key = [canon(f.home), canon(f.away)].sort().join("|");
+    if (seen.has(key)) {
+      const prevIdx = seen.get(key)!;
+      const prev = deduped[prevIdx];
+      const prevScore = (prev.ts > 0 ? 100 : 0) + (prev.events?.length || 0);
+      const currScore = (f.ts > 0 ? 100 : 0) + (f.events?.length || 0);
+      if (currScore > prevScore) deduped[prevIdx] = f;
+    } else {
+      seen.set(key, deduped.length);
+      deduped.push(f);
+    }
+  }
+
+  return { ok: true, fixtures: deduped };
 }
 
 // ── API-Football (legacy vendor) ───────────────────────────────────

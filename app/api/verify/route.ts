@@ -65,13 +65,13 @@ interface VerifyResult {
 // Response shape: { stats: [ { name: "goalsLeaders", leaders: [...] },
 //                            { name: "assistsLeaders", leaders: [...] } ] }
 // Each leader: { value, athlete: { displayName, team: { displayName }, statistics: [...] } }
-async function fetchEspnScorers(): Promise<EspnScorer[]> {
+async function fetchEspnScorers(): Promise<{ scorers: EspnScorer[]; error?: string }> {
   try {
     const res = await fetch(ESPN_STATS_URL, {
-      headers: { Accept: "application/json" },
-      next: { revalidate: 0 },
+      headers: { Accept: "application/json", "User-Agent": "CompetTracker/1.0" },
+      cache: "no-store",
     });
-    if (!res.ok) return [];
+    if (!res.ok) return { scorers: [], error: `ESPN API returned ${res.status}` };
     const data = await res.json();
 
     const scorers: EspnScorer[] = [];
@@ -128,10 +128,10 @@ async function fetchEspnScorers(): Promise<EspnScorer[]> {
       }
     }
 
-    return scorers;
+    return { scorers };
   } catch (err) {
     console.error("[verify] ESPN stats fetch failed:", err);
-    return [];
+    return { scorers: [], error: String(err) };
   }
 }
 
@@ -231,6 +231,7 @@ async function fetchOurData(baseUrl: string) {
       if (ev.type !== "Goal") continue;
       if (/shootout/i.test(ev.detail || "")) continue;
       if (ev.detail === "Own Goal") continue;
+      if (ev.detail === "Missed Penalty") continue;
       if (!ev.player) continue;
 
       const normalized = canonPlayer(ev.player);
@@ -304,10 +305,12 @@ export async function GET(request: NextRequest) {
     const baseUrl = request.nextUrl.origin;
 
     // Fetch ESPN top scorers + our data in parallel
-    const [espnScorers, ourData] = await Promise.all([
+    const [espnResult, ourData] = await Promise.all([
       fetchEspnScorers(),
       fetchOurData(baseUrl),
     ]);
+    const espnScorers = espnResult.scorers;
+    const espnError = espnResult.error;
 
     // Also fetch recent ESPN match results for score-level verification
     // Cover the full tournament window (Jun 11 – today)
@@ -394,10 +397,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const result: VerifyResult = {
+    const result = {
       ok: true,
       ts: Date.now(),
       source: "ESPN JSON API (site.web.api.espn.com)",
+      espnFetchError: espnError || null,
       matchesFinished: ourData.finished,
       matchesWithEvents: ourData.withEvents,
       totalGoals: ourData.totalGoals,

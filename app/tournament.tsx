@@ -3056,7 +3056,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   }
 
   return (
-    <section className="ko-stage" aria-label="Knockout Stage">
+    <section className="knockout-page ko-stage" aria-label="Knockout Stage">
       <div className="ko-control">
         <div className="ko-control__top">
           <div className="ko-control__title">
@@ -3116,7 +3116,8 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
           <span>Road to the Final</span>
           <b>{selectedTeamName ? `${selectedTeamName}'s path` : "Tap a team to trace their road to the trophy"}</b>
         </div>
-        <div className="ko-road__scroll" ref={roadScrollRef} onScroll={handleRoadScroll}>
+        <div className="bracket-scroll-shell ko-road__scroll" ref={roadScrollRef} onScroll={handleRoadScroll}>
+          <div className="bracket-canvas">
           <div className="ko-road__side ko-road__side--left" aria-label="Left side of bracket">
             {leftRoad.map(column => (
               <div key={`left-${column.key}`} data-round={column.key} data-side="left" className={`ko-road__column ko-road__column--${column.key}${activeRound === column.key ? " ko-road__column--active" : ""}`}>
@@ -3153,7 +3154,8 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
               </div>
             ))}
           </div>
-        </div>
+          </div>{/* bracket-canvas */}
+        </div>{/* bracket-scroll-shell */}
         <div className="ko-road__hint" aria-hidden="true">
           <span>←</span>
           <b>Swipe horizontally to explore both sides</b>

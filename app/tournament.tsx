@@ -447,8 +447,13 @@ export default function Tournament({ data }: { data: TournamentData }) {
         teamOK = (a === m.t1 && b === m.t2) || (a === m.t2 && b === m.t1);
       }
       const knockoutLike = /round|r32|r16|quarter|semi|final|knockout/i.test(f.round || "");
+      // For knockout matches without scheduled teams, accept a near-exact
+      // timestamp (< 5 min) as identity when venue fails — vendor APIs
+      // sometimes return alternate venue names (e.g. "Estadio Banorte"
+      // instead of "Estadio Azteca") and knockout kickoff times are unique.
+      const timestampIdentity = !hasScheduleTeams && knockoutLike && f.ts && dt < 5 * 60_000;
       const timeOK = f.ts ? dt <= windowMs : (!hasScheduleTeams && knockoutLike && !!venOK);
-      const identityOK = hasScheduleTeams ? (teamOK || !!venOK) : !!venOK;
+      const identityOK = hasScheduleTeams ? (teamOK || !!venOK) : (!!venOK || !!timestampIdentity);
       if (!timeOK || !identityOK) continue;
       const distance = f.ts ? dt : windowMs + 1;
       if (distance < bd) { bd = distance; best = f; }

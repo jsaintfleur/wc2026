@@ -1194,7 +1194,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     if (view === "bracket") return ""; // bracket rendered as React bracket
     return renderAbout();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, group, team, query, fixtures, liveStatus, liveTs, liveEnrichmentIssue, animate, nowMs]);
+  }, [view, group, team, stage, query, fixtures, liveStatus, liveTs, liveEnrichmentIssue, animate, nowMs]);
 
   function handleTab(v: ViewType) {
     setAnimate(true);

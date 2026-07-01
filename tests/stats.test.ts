@@ -160,6 +160,55 @@ test("uses player assist totals when events exist without assist data", () => {
   assert.equal(stats.matchesWithAssistData, 1);
 });
 
+test("prefers player assist totals over event assists when both sources exist", () => {
+  const fixtures: LiveFixture[] = [{
+    ts: 7,
+    status: "FT",
+    elapsed: 90,
+    venue: "Test Stadium",
+    round: "Group Stage",
+    home: "United States",
+    away: "Mexico",
+    gh: 2,
+    ga: 0,
+    events: [
+      { minute: 18, extra: null, type: "Goal", detail: "Normal Goal", player: "Ricardo Pepi", assist: "Timothy Weah", team: "United States" },
+      { minute: 55, extra: null, type: "Goal", detail: "Normal Goal", player: "Folarin Balogun", assist: "Timothy Weah", team: "United States" },
+    ],
+    players: [
+      {
+        name: "Timothy Weah",
+        number: 21,
+        team: "United States",
+        minutes: 90,
+        rating: "8.1",
+        goals: 0,
+        assists: 2,
+        shots: 1,
+        shotsOn: 0,
+        passes: 30,
+        passAccuracy: "88%",
+        tackles: 1,
+        duels: 5,
+        duelsWon: 3,
+        dribbles: 1,
+        dribblesSuccess: 1,
+        foulsDrawn: 0,
+        foulsCommitted: 0,
+        yellowCards: 0,
+        redCards: 0,
+        saves: 0,
+      },
+    ],
+  }];
+
+  const stats = buildTournamentStats(baseData, fixtures);
+
+  assert.equal(stats.topAssisters[0].name, "Timothy Weah");
+  assert.equal(stats.topAssisters[0].assists, 2);
+  assert.equal(stats.matchesWithAssistData, 1);
+});
+
 test("drops malformed country names from player leaderboards", () => {
   const fixtures: LiveFixture[] = [{
     ts: 6,

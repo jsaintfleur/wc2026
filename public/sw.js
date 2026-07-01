@@ -5,7 +5,7 @@
  * without connectivity (schedule/tables still render from last fetch).
  * ---------------------------------------------------------------- */
 
-const CACHE_NAME = "compet-v5";
+const CACHE_NAME = "compet-v6";
 
 /* Static assets to pre-cache on install — the app shell. */
 const PRECACHE = [
@@ -86,17 +86,15 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  /* Everything else — stale-while-revalidate */
+  /* App shell/pages — network-first so installed PWAs pick up leaderboard
+     and live-data fixes immediately, with cached fallback for offline use. */
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      const network = fetch(e.request)
-        .then((res) => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(e.request)
+      .then((res) => {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
+        return res;
+      })
+      .catch(() => caches.match(e.request))
   );
 });

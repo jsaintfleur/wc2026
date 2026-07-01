@@ -1475,7 +1475,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
-  computeLeaders: () => { topScorers: { name: string; team: string; goals: number; penalties: number; assists: number; matches: number }[]; topAssisters: { name: string; team: string; assists: number }[]; totalGoals: number; matchesPlayed: number; avgGoals: number; cleanSheets: number; [key: string]: unknown };
+  computeLeaders: () => TournamentStats;
   onNavigate: (v: ViewType) => void;
   onPlayerClick: (playerName: string, teamName: string) => void;
   onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
@@ -1623,8 +1623,8 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
 
   /* -- top scorer & assister -------------------------------------- */
   const leaders = useMemo(() => computeLeaders(), [computeLeaders]);
-  const topScorer = leaders.topScorers[0] || null;
-  const topAssister = leaders.topAssisters[0] || null;
+  const topScorer = leaders.topScorers.find(isRenderableLeader) || null;
+  const topAssister = leaders.topAssisters.find(isRenderableLeader) || null;
 
   /* -- countdown math --------------------------------------------- */
   const countdown = useMemo(() => {

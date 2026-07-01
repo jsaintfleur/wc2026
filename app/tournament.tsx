@@ -783,6 +783,27 @@ export default function Tournament({ data }: { data: TournamentData }) {
           ];
         }
 
+        // Compute bracket path links: which two matches feed this slot,
+        // and which match in the next round this slot feeds into.
+        const sourceMatchNos: [number, number] | null = config.key !== "r32" && KO_SOURCE_PAIRS[config.key]
+          ? (() => {
+              const [a, b] = sourcePair(config.key, index);
+              const prevRoundKey: KnockoutRoundKey = config.key === "r16" ? "r32" : config.key === "qf" ? "r16" : config.key === "sf" ? "qf" : config.key === "final" ? "sf" : config.key === "third" ? "sf" : "r32";
+              const prevRound = KO_ROUNDS.find(r => r.key === prevRoundKey);
+              return prevRound ? [prevRound.matchNumbers[a], prevRound.matchNumbers[b]] as [number, number] : null;
+            })()
+          : null;
+
+        const nextMatchNo: number | null = (() => {
+          if (config.key === "final" || config.key === "third") return null;
+          const nextRoundKey: KnockoutRoundKey = config.key === "r32" ? "r16" : config.key === "r16" ? "qf" : config.key === "qf" ? "sf" : "final";
+          const nextPairs = KO_SOURCE_PAIRS[nextRoundKey];
+          if (!nextPairs) return null;
+          const nextIndex = nextPairs.findIndex(pair => pair.includes(index));
+          const nextRound = KO_ROUNDS.find(r => r.key === nextRoundKey);
+          return nextIndex >= 0 && nextRound ? nextRound.matchNumbers[nextIndex] : null;
+        })();
+
         return {
           key: `${config.key}-schedule-${matchNo}-${index}`,
           round: config.key,
@@ -796,6 +817,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
           isLive,
           winnerName,
           loserName,
+          sourceMatchNos,
+          nextMatchNo,
         };
       });
       winners[config.key] = roundCards.map(card => card.winnerName);
@@ -1416,6 +1439,8 @@ type KnockoutCardModel = {
   isLive: boolean;
   winnerName: string | null;
   loserName: string | null;
+  sourceMatchNos: [number, number] | null;
+  nextMatchNo: number | null;
 };
 
 function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNavigate, onPlayerClick, onMatchClick }: {
@@ -2690,6 +2715,25 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
           teamB = { name: second || "TBD", seed: second ? undefined : sourceLabel[1] };
         }
 
+        const sourceMatchNos: [number, number] | null = config.key !== "r32" && KO_SOURCE_PAIRS[config.key]
+          ? (() => {
+              const [a, b] = sourcePair(config.key, index);
+              const prevRoundKey: KnockoutRoundKey = config.key === "r16" ? "r32" : config.key === "qf" ? "r16" : config.key === "sf" ? "qf" : config.key === "final" ? "sf" : config.key === "third" ? "sf" : "r32";
+              const prevRound = KO_ROUNDS.find(r => r.key === prevRoundKey);
+              return prevRound ? [prevRound.matchNumbers[a], prevRound.matchNumbers[b]] as [number, number] : null;
+            })()
+          : null;
+
+        const nextMatchNo: number | null = (() => {
+          if (config.key === "final" || config.key === "third") return null;
+          const nextRoundKey: KnockoutRoundKey = config.key === "r32" ? "r16" : config.key === "r16" ? "qf" : config.key === "qf" ? "sf" : "final";
+          const nextPairs = KO_SOURCE_PAIRS[nextRoundKey];
+          if (!nextPairs) return null;
+          const nextIndex = nextPairs.findIndex(pair => pair.includes(index));
+          const nextRound = KO_ROUNDS.find(r => r.key === nextRoundKey);
+          return nextIndex >= 0 && nextRound ? nextRound.matchNumbers[nextIndex] : null;
+        })();
+
         return {
           key: `${config.key}-${matchNo}-${index}`,
           round: config.key,
@@ -2703,6 +2747,8 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
           isLive,
           winnerName,
           loserName,
+          sourceMatchNos,
+          nextMatchNo,
         };
       });
       winners[config.key] = cards.map(card => card.winnerName);

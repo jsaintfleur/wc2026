@@ -3,6 +3,7 @@
   "configurations": [
     {
       "name": "wc2026",
+      "cwd": "/Users/luko90s/wc2026",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "-p", "3001"],
       "port": 3001

@@ -2589,10 +2589,11 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const roadCenterRef = useRef<HTMLDivElement | null>(null);
   const roadScrollFrameRef = useRef<number | null>(null);
   const restoredRoadScrollRef = useRef(false);
-  const pinchRef = useRef<{ distance: number; zoom: number; centerX: number; centerY: number } | null>(null);
+  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
   const zoomFrameRef = useRef<number | null>(null);
   const [roadZoom, setRoadZoom] = useState(1);
   const [roadCanvasSize, setRoadCanvasSize] = useState({ width: 1260, height: 760 });
+  const [roadViewportSize, setRoadViewportSize] = useState({ width: 390, height: 720 });
   const minRoadZoom = 0.35;
   const maxRoadZoom = 2.35;
   const clampRoadZoom = useCallback((value: number) => Math.min(maxRoadZoom, Math.max(minRoadZoom, value)), []);
@@ -2955,8 +2956,10 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     const contentY = (scroller.scrollTop + localY) / currentZoom;
     setRoadZoom(targetZoom);
     window.requestAnimationFrame(() => {
-      scroller.scrollLeft = Math.max(0, contentX * targetZoom - localX);
-      scroller.scrollTop = Math.max(0, contentY * targetZoom - localY);
+      const maxLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      scroller.scrollLeft = Math.min(maxLeft, Math.max(0, contentX * targetZoom - localX));
+      scroller.scrollTop = Math.min(maxTop, Math.max(0, contentY * targetZoom - localY));
     });
   }
 
@@ -2969,15 +2972,20 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   function resetRoadView() {
     const scroller = roadScrollRef.current;
     const nextZoom = fitRoadZoom();
+    if (zoomFrameRef.current != null) {
+      window.cancelAnimationFrame(zoomFrameRef.current);
+      zoomFrameRef.current = null;
+    }
     setSelectedPathKey("");
     setSelectedTeamName("");
+    setActiveRound("r32");
     setRoadZoom(nextZoom);
     window.sessionStorage.setItem("compet-ko-road-zoom", String(nextZoom));
-    window.requestAnimationFrame(() => {
-      if (!scroller) return;
-      scroller.scrollTo({ left: 0, top: 0, behavior: "smooth" });
-      setActiveRound("r32");
-    });
+    window.sessionStorage.setItem("compet-ko-road-left", "0");
+    window.sessionStorage.setItem("compet-ko-road-top", "0");
+    if (!scroller) return;
+    scroller.scrollTo({ left: 0, top: 0, behavior: "auto" });
+    window.requestAnimationFrame(() => scroller.scrollTo({ left: 0, top: 0, behavior: "auto" }));
   }
 
   function scheduleZoom(nextZoom: number, originX?: number, originY?: number) {
@@ -3013,12 +3021,10 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
 
   function handleRoadTouchStart(event: React.TouchEvent<HTMLDivElement>) {
     if (event.touches.length !== 2) return;
-    const center = touchCenter(event.touches);
+    event.preventDefault();
     pinchRef.current = {
       distance: touchDistance(event.touches),
       zoom: roadZoom,
-      centerX: center.x,
-      centerY: center.y,
     };
   }
 
@@ -3090,17 +3096,42 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
 
   useEffect(() => {
     const canvas = roadCanvasRef.current;
-    if (!canvas) return;
+    const scroller = roadScrollRef.current;
+    if (!canvas || !scroller) return;
     const update = () => {
       setRoadCanvasSize({
         width: canvas.offsetWidth || 1260,
         height: canvas.offsetHeight || 760,
       });
+      setRoadViewportSize({
+        width: scroller.clientWidth || 390,
+        height: scroller.clientHeight || 720,
+      });
     };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(canvas);
+    observer.observe(scroller);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const scroller = roadScrollRef.current;
+    if (!scroller) return;
+    const preventBrowserZoom = (event: Event) => event.preventDefault();
+    const preventMultiTouchPageZoom = (event: TouchEvent) => {
+      if (event.touches.length > 1) event.preventDefault();
+    };
+    scroller.addEventListener("gesturestart", preventBrowserZoom, { passive: false });
+    scroller.addEventListener("gesturechange", preventBrowserZoom, { passive: false });
+    scroller.addEventListener("gestureend", preventBrowserZoom, { passive: false });
+    scroller.addEventListener("touchmove", preventMultiTouchPageZoom, { passive: false });
+    return () => {
+      scroller.removeEventListener("gesturestart", preventBrowserZoom);
+      scroller.removeEventListener("gesturechange", preventBrowserZoom);
+      scroller.removeEventListener("gestureend", preventBrowserZoom);
+      scroller.removeEventListener("touchmove", preventMultiTouchPageZoom);
+    };
   }, []);
 
   useEffect(() => {
@@ -3332,8 +3363,8 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
           <div
             className="bracket-zoom-stage"
             style={{
-              width: `${roadCanvasSize.width * roadZoom}px`,
-              height: `${roadCanvasSize.height * roadZoom}px`,
+              width: `${roadCanvasSize.width * roadZoom + Math.max(160, roadViewportSize.width * 0.85)}px`,
+              height: `${roadCanvasSize.height * roadZoom + Math.max(120, roadViewportSize.height * 0.45)}px`,
             }}
           >
           <div

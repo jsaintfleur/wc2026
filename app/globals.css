@@ -2760,6 +2760,7 @@ body::after {
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  height: clamp(520px, 68vh, 760px);
   overflow-x: auto;
   overflow-y: auto;
   overscroll-behavior-x: contain;
@@ -2769,7 +2770,8 @@ body::after {
   scrollbar-width: none;
   touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;
-  padding: 2px 2px 10px;
+  padding: 4px 4px 12px;
+  isolation: isolate;
 }
 
 .bracket-scroll-shell::-webkit-scrollbar,
@@ -2782,6 +2784,7 @@ body::after {
   min-width: 100%;
   min-height: 100%;
   contain: layout style;
+  box-sizing: content-box;
 }
 
 /* Bracket canvas — the intrinsic-width grid that holds left/center/right
@@ -2789,12 +2792,13 @@ body::after {
 .bracket-canvas {
   display: grid;
   grid-template-columns: 138px 124px 124px 118px 178px 118px 124px 124px 138px;
-  gap: 6px;
+  gap: 10px;
   width: max-content;
   min-width: max-content;
   transform-origin: 0 0;
   will-change: transform;
   backface-visibility: hidden;
+  isolation: isolate;
 }
 
 /* Knockout page container — ensures the full bracket section can occupy
@@ -3025,6 +3029,7 @@ body::after {
 .ko-road-card--live {
   border-color: rgba(244,63,94,0.45);
   box-shadow: 0 0 22px var(--live-glow), 0 10px 24px rgba(0,0,0,0.24);
+  z-index: 5;
 }
 
 .ko-road-card--path {
@@ -3038,7 +3043,7 @@ body::after {
     0 16px 36px rgba(0,0,0,0.34),
     0 0 0 1px rgba(245,158,11,0.12) inset;
   transform: translateY(-1px);
-  z-index: 2;
+  z-index: 6;
 }
 
 .ko-road-card--path::after {
@@ -7378,21 +7383,21 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 .ko-road__column {
-  min-height: 760px;
+  min-height: 1080px;
   transform-origin: top center;
   transition: transform .25s ease, opacity .2s;
+  isolation: isolate;
 }
 
-/* Active column zooms slightly on mobile to draw focus */
 @media (max-width: 767px) {
   .ko-road__column--active {
-    transform: scale(1.03) translateY(-1px);
+    transform: translateY(-1px);
   }
 }
 
 .ko-road__stack {
   display: grid;
-  grid-template-rows: repeat(16, 42px);
+  grid-template-rows: repeat(16, 62px);
   gap: 0;
   align-content: start;
 }
@@ -7403,16 +7408,18 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 
 .ko-road__center {
   display: grid;
-  grid-template-rows: repeat(16, 42px);
+  grid-template-rows: repeat(16, 62px);
   gap: 0;
-  min-height: 760px;
+  min-height: 1080px;
   align-content: start;
   scroll-snap-align: center;
+  isolation: isolate;
 }
 
 .ko-road-card {
   align-self: center;
-  min-height: 88px;
+  min-height: 92px;
+  z-index: 1;
 }
 
 .ko-road-card:focus-visible,
@@ -7440,7 +7447,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 .ko-road-card--center {
-  min-height: 104px;
+  min-height: 110px;
 }
 
 .stats-scorer__bar--combined {
@@ -7964,6 +7971,11 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 @media (max-width: 430px) {
+  .ko-road__scroll {
+    height: min(64vh, 620px);
+    min-height: 500px;
+  }
+
   .bracket-canvas {
     grid-template-columns: repeat(4, 122px) 174px repeat(4, 122px);
     min-width: 1168px;
@@ -7971,12 +7983,12 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 
   .ko-road__stack,
   .ko-road__center {
-    grid-template-rows: repeat(16, 40px);
+    grid-template-rows: repeat(16, 60px);
   }
 
   .ko-road__column,
   .ko-road__center {
-    min-height: 730px;
+    min-height: 1040px;
   }
 
   .team-tile__name {

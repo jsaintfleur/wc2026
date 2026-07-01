@@ -7429,15 +7429,29 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   text-align: right;
 }
 
+.bracket-canvas,
 .ko-road__scroll {
   grid-template-columns: repeat(4, 132px) 184px repeat(4, 132px);
   min-width: 1260px;
   align-items: start;
+}
+
+.bracket-scroll-shell {
   scroll-snap-type: x mandatory;
 }
 
 .ko-road__column {
   min-height: 760px;
+  scroll-snap-align: center;
+  transform-origin: top center;
+  transition: transform .25s ease, opacity .2s;
+}
+
+/* Active column zooms slightly on mobile to draw focus */
+@media (max-width: 767px) {
+  .ko-road__column--active {
+    transform: scale(1.03) translateY(-1px);
+  }
 }
 
 .ko-road__stack {
@@ -7457,6 +7471,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   gap: 0;
   min-height: 760px;
   align-content: start;
+  scroll-snap-align: center;
 }
 
 .ko-road-card {

@@ -2725,6 +2725,33 @@ body::after {
   font-style: italic;
 }
 
+.ko-road__reset {
+  flex: 0 0 auto;
+  appearance: none;
+  border: 1px solid rgba(245,158,11,0.28);
+  border-radius: 999px;
+  padding: 7px 11px;
+  color: var(--gold-bright);
+  background: rgba(8,12,21,0.5);
+  font-family: var(--disp);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform .16s var(--ease-out), border-color .16s, background .16s;
+}
+
+.ko-road__reset:hover {
+  transform: translateY(-1px);
+  border-color: rgba(245,158,11,0.5);
+  background: rgba(245,158,11,0.12);
+}
+
+.ko-road__reset:active {
+  transform: scale(0.96);
+}
+
 /* Bracket scroll shell — horizontal overflow container for the bracket.
    Sits inside .ko-road and handles scroll/pan/overscroll behaviour. */
 .bracket-scroll-shell,
@@ -2734,8 +2761,9 @@ body::after {
   max-width: 100%;
   min-width: 0;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
   overscroll-behavior-x: contain;
+  overscroll-behavior-y: contain;
   scroll-padding-inline: 18px;
   scroll-snap-type: none;
   scrollbar-width: none;
@@ -2749,6 +2777,13 @@ body::after {
   display: none;
 }
 
+.bracket-zoom-stage {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+  contain: layout style;
+}
+
 /* Bracket canvas — the intrinsic-width grid that holds left/center/right
    columns. Wider than the shell on mobile so the shell scrolls it. */
 .bracket-canvas {
@@ -2757,6 +2792,9 @@ body::after {
   gap: 6px;
   width: max-content;
   min-width: max-content;
+  transform-origin: 0 0;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 /* Knockout page container — ensures the full bracket section can occupy

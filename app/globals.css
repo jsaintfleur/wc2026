@@ -7478,8 +7478,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   text-align: right;
 }
 
-.bracket-canvas,
-.ko-road__scroll {
+.bracket-canvas {
   grid-template-columns: repeat(4, 132px) 184px repeat(4, 132px);
   min-width: 1260px;
   align-items: start;

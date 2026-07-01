@@ -6841,14 +6841,6 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
  * MoreView — comprehensive dashboard styles
  * ========================================================= */
 
-/* Subtitle below the hero heading */
-.more-view__subtitle {
-  margin: 2px 0 0;
-  color: var(--ink-soft);
-  font-size: 13px;
-  font-weight: 400;
-  letter-spacing: 0.3px;
-}
 
 .more-view__hero {
   position: relative;
@@ -6873,7 +6865,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 .more-view__hero-copy,
-.more-view__hero-panel,
+.more-pulse,
 .more-view__hosts {
   position: relative;
   z-index: 1;
@@ -6885,54 +6877,60 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   letter-spacing: 0;
 }
 
-.more-view__hero-panel {
+.more-pulse {
   display: grid;
-  gap: 7px;
-  padding: 12px;
+  gap: 8px;
+  padding: 14px;
   border: 1px solid rgba(245,158,11,0.18);
   border-radius: 18px;
   background: rgba(8,12,21,0.58);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
 }
 
-.more-view__hero-panel small {
+.more-pulse__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.more-pulse__stage {
   color: var(--gold-bright);
   font-family: var(--disp);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: .8px;
+  letter-spacing: .6px;
   text-transform: uppercase;
 }
 
-.more-view__hero-panel strong {
-  color: #fff;
-  font-family: var(--disp);
-  font-size: 34px;
-  line-height: .9;
-  font-weight: 800;
+.more-pulse__next {
+  color: #22c55e;
+  font-size: 12px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.more-view__hero-panel i {
-  display: block;
-  height: 7px;
+.more-pulse__bar {
+  height: 6px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(255,255,255,0.08);
 }
 
-.more-view__hero-panel em {
-  display: block;
+.more-pulse__fill {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--gold-bright), #22c55e);
-  box-shadow: 0 0 18px rgba(245,158,11,0.24);
+  box-shadow: 0 0 14px rgba(245,158,11,0.20);
+  transition: width .4s ease;
 }
 
-.more-view__hero-panel b {
+.more-pulse__row--stats {
   color: var(--ink-soft);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
+  letter-spacing: .2px;
+  font-variant-numeric: tabular-nums;
 }
 
 .more-view__hosts {
@@ -6997,144 +6995,6 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 @keyframes moreCardIn {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
-}
-
-/* ── Tournament Progress card ───────────────────────────── */
-.more-progress-card {
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 22px;
-  padding: 18px;
-  background:
-    radial-gradient(circle at 100% 0%, rgba(124,58,237,0.13), transparent 36%),
-    linear-gradient(145deg, rgba(255,255,255,0.085), rgba(255,255,255,0.026)),
-    rgba(8, 12, 21, 0.9);
-  box-shadow: 0 18px 48px rgba(0,0,0,0.28);
-}
-
-.more-progress-card__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 10px;
-}
-
-.more-progress-card__stage {
-  font-family: var(--disp);
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: 0;
-}
-
-.more-progress-card__count {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-/* Progress bar track + fill */
-.more-progress-bar {
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.08);
-  overflow: hidden;
-}
-
-.more-progress-bar__fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--gold-bright), #22c55e);
-  box-shadow: 0 0 18px rgba(245,158,11,0.25);
-  transition: width 0.6s ease;
-}
-
-.more-progress-card__footer {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.more-progress-card__next {
-  color: var(--gold-bright);
-  font-weight: 600;
-}
-
-.more-progress-card__breakdown {
-  display: flex;
-  gap: 16px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255,255,255,0.06);
-  color: var(--ink-soft);
-  font-size: 12px;
-}
-
-/* ── Quick Access grid — large premium cards ────────────── */
-.more-quick-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.more-quick-card {
-  appearance: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 16px;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 20px;
-  background:
-    radial-gradient(circle at 100% 0%, rgba(245,158,11,0.09), transparent 34%),
-    linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.024)),
-    rgba(8, 12, 21, 0.88);
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.22);
-  cursor: pointer;
-  animation: moreCardIn 0.4s ease both;
-  transition: border-color 0.2s, transform 0.15s, box-shadow .2s;
-}
-
-.more-quick-card:hover {
-  border-color: rgba(245,158,11,0.22);
-  box-shadow: 0 18px 42px rgba(0,0,0,0.26);
-}
-
-.more-quick-card:active {
-  transform: scale(0.97);
-  border-color: rgba(245,158,11,0.25);
-}
-
-/* Let the first card span full width for emphasis */
-.more-quick-grid .more-quick-card:first-child {
-  grid-column: 1 / -1;
-}
-
-.more-quick-card__icon {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  aspect-ratio: 1;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 14px;
-  background: rgba(255,255,255,0.055);
-  font-size: 24px;
-  line-height: 1;
-}
-
-.more-quick-card__title {
-  font-family: var(--disp);
-  font-size: 16px;
-  font-weight: 800;
-}
-
-.more-quick-card__desc {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
 }
 
 /* ── Venue (stadium) grid ───────────────────────────────── */
@@ -8181,7 +8041,6 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .home-leader-card,
 .home-result-card,
 .home-snapshot__card,
-.more-quick-card,
 .more-venue-card,
 .more-city-row,
 .more-history-card,
@@ -8205,7 +8064,6 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .stats-hero-panel,
 .stats-leaders,
 .more-view__hero,
-.more-progress-card,
 .ko-control,
 .ko-road {
   border-color: var(--hairline);
@@ -8236,9 +8094,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .home-next__digit,
 .home-progress__stat b,
 .home-leader-card__stat,
-.stats-leader-card__value strong,
-.more-view__hero-panel strong,
-.more-progress-card__stage {
+.stats-leader-card__value strong {
   font-variant-numeric: tabular-nums;
 }
 
@@ -8254,14 +8110,12 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 
 .home-quick__icon,
 .home-snapshot__icon,
-.more-quick-card__icon,
 .more-settings-row__icon {
   color: var(--gold-bright);
 }
 
 .home-quick__icon svg,
 .home-snapshot__icon svg,
-.more-quick-card__icon svg,
 .more-settings-row__icon svg,
 .home-leader-card__award svg {
   display: block;
@@ -8292,7 +8146,6 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .home-snapshot__card--ko,
 .home-snapshot__card--stats,
 .more-view__hero,
-.more-progress-card,
 .stats-leader-card--podium,
 .ko-road-card--path {
   background:
@@ -8354,7 +8207,6 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .home-leader-card:hover,
 .home-result-card:hover,
 .home-snapshot__card:hover,
-.more-quick-card:hover,
 .ko-road-card:hover {
   transform: translateY(-1px);
   border-color: rgba(245,158,11,0.22);
@@ -8367,14 +8219,12 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .home-leader-card:active,
 .home-result-card:active,
 .home-snapshot__card:active,
-.more-quick-card:active,
 .ko-road-card:active {
   transform: scale(.985);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .home-dash > *,
-  .more-quick-card,
   .more-venue-card,
   .more-city-row,
   .more-history-card,

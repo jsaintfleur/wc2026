@@ -2380,18 +2380,7 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
   ];
 
   /* =============================================================
-   * 6. Quick access navigation items
-   * ============================================================= */
-  const quickAccess: { view: ViewType; icon: AppIconName; title: string; desc: string }[] = [
-    { view: "bracket", icon: "bracket", title: "Knockout Bracket", desc: "Full elimination bracket from R32 to the Final" },
-    { view: "stats", icon: "stats", title: "Statistics", desc: "Top scorers, assists, cards and team leaderboards" },
-    { view: "groups", icon: "groups", title: "Groups", desc: "All 12 groups with live standings and results" },
-    { view: "schedule", icon: "calendar", title: "Full Schedule", desc: "Complete match schedule with live scores" },
-    { view: "teams", icon: "teams", title: "Teams", desc: "All 48 national teams and squad profiles" },
-  ];
-
-  /* =============================================================
-   * 7. Share handler for app settings section
+   * 6. Share handler for app settings section
    * ============================================================= */
   const handleShare = async () => {
     if (typeof navigator !== "undefined" && navigator.share) {
@@ -2411,65 +2400,28 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
   return (
     <main className="more-view" aria-label="More">
 
-      {/* ── Section 1: Hero ─────────────────────────────────── */}
+      {/* ── Hero: Tournament Pulse ──────────────────────────── */}
       <section className="more-view__hero">
         <div className="more-view__hero-copy">
           <span>Compet 2026</span>
           <h2>Control Center</h2>
-          <p className="more-view__subtitle">Hosts, venues, records, settings and the fastest routes through the app.</p>
         </div>
-        <div className="more-view__hero-panel" aria-label={`${progressPct}% tournament complete`}>
-          <small>{stageLabel}</small>
-          <strong>{progressPct}%</strong>
-          <i><em style={{ width: `${progressPct}%` }} /></i>
-          <b>{completedTotal} of {totalMatches} matches</b>
+        <div className="more-pulse" aria-label={`${progressPct}% tournament complete`}>
+          <div className="more-pulse__row">
+            <span className="more-pulse__stage">{stageLabel}</span>
+            {countdown && <span className="more-pulse__next">Next match in {countdown}</span>}
+          </div>
+          <div className="more-pulse__bar">
+            <div className="more-pulse__fill" style={{ width: `${progressPct}%` }} />
+          </div>
+          <div className="more-pulse__row more-pulse__row--stats">
+            <span>{completedTotal}/{totalMatches} matches · {progressPct}%</span>
+            <span>GS {completedGS}/72 · KO {completedKO}/32</span>
+          </div>
         </div>
         <div className="more-view__hosts" aria-label="Host countries">
           {data.hosts.map(host => (
             <span key={host}>{countryFlag(host)} {host}</span>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Section 2: Tournament Progress ──────────────────── */}
-      <section className="more-section">
-        <h3 className="more-section__heading">Tournament Progress</h3>
-        <div className="more-progress-card">
-          <div className="more-progress-card__header">
-            <span className="more-progress-card__stage">{stageLabel}</span>
-            <span className="more-progress-card__count">{completedTotal} / {totalMatches}</span>
-          </div>
-          <div className="more-progress-bar">
-            <div className="more-progress-bar__fill" style={{ width: `${progressPct}%` }} />
-          </div>
-          <div className="more-progress-card__footer">
-            <span>{progressPct}% complete</span>
-            {countdown && <span className="more-progress-card__next">Next match in {countdown}</span>}
-          </div>
-          {/* Breakdown row: GS + KO counts */}
-          <div className="more-progress-card__breakdown">
-            <span>Group Stage: {completedGS}/72</span>
-            <span>Knockout: {completedKO}/32</span>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Section 3: Quick Access ─────────────────────────── */}
-      <section className="more-section">
-        <h3 className="more-section__heading">Quick Access</h3>
-        <div className="more-quick-grid">
-          {quickAccess.map((item, i) => (
-            <button
-              key={item.view}
-              type="button"
-              className="more-quick-card"
-              style={{ animationDelay: `${i * 60}ms` }}
-              onClick={() => onNavigate(item.view)}
-            >
-              <span className="more-quick-card__icon"><AppIcon name={item.icon} /></span>
-              <b className="more-quick-card__title">{item.title}</b>
-              <small className="more-quick-card__desc">{item.desc}</small>
-            </button>
           ))}
         </div>
       </section>

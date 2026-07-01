@@ -1314,7 +1314,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
             ].map(s => (
               <button
                 key={s.key}
-                className={`chip${s.key === "ALL" ? " chip--all" : ""}`}
+                className={`chip${s.key === "ALL" ? " chip--all" : " chip--stage"}`}
                 aria-pressed={stage === s.key}
                 onClick={() => { setAnimate(true); setStage(s.key); if (s.key !== "ALL" && s.key !== "groups") setGroup("ALL"); }}
               >

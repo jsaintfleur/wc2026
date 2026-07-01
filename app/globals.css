@@ -2661,7 +2661,7 @@ body::after {
   box-shadow:
     0 18px 48px rgba(0,0,0,0.32),
     inset 0 1px 0 rgba(255,255,255,0.06);
-  overflow: hidden;
+  overflow: clip;
 }
 
 /* Soccer field lines overlay — touchline, halfway line, center circle, penalty boxes */
@@ -7485,7 +7485,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 .bracket-scroll-shell {
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
 }
 
 .ko-road__column {

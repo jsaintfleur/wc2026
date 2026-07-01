@@ -2645,7 +2645,7 @@ body::after {
   box-shadow:
     0 18px 48px rgba(0,0,0,0.32),
     inset 0 1px 0 rgba(255,255,255,0.06);
-  overflow: clip;
+  overflow: hidden;
 }
 
 /* Soccer field lines overlay — touchline, halfway line, center circle, penalty boxes */
@@ -2720,7 +2720,7 @@ body::after {
   scroll-padding-inline: 18px;
   scroll-snap-type: none;
   scrollbar-width: none;
-  touch-action: pan-x;
+  touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;
   padding: 2px 2px 10px;
 }

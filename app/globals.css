@@ -2714,8 +2714,7 @@ body::after {
   display: grid;
   grid-template-columns: 138px 124px 124px 118px 178px 118px 124px 124px 138px;
   gap: 6px;
-  width: 100%;
-  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-padding-inline: 18px;

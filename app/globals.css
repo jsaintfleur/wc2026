@@ -4984,20 +4984,27 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 /* ── Schedule page sections ────────────────────────────────────── */
-.sched-sec { margin-bottom: 20px; }
+.sched-sec {
+  margin-bottom: 20px;
+  border-radius: 18px;
+  overflow: hidden;
+}
 
 .sched-hd {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 4px 8px;
+  padding: 14px 12px 10px;
   font-family: var(--disp);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   letter-spacing: .6px;
   text-transform: uppercase;
   color: var(--ink);
-  border-bottom: 2px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.025);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .sched-hd b {
@@ -5021,16 +5028,29 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   text-transform: none;
 }
 
+/* Match cards inside schedule sections get internal padding */
+.sched-sec > .tix,
+.sched-sec > .tix--ko {
+  margin-inline: 10px;
+}
+
 /* Live Now section */
-.sched-sec--live { margin-bottom: 24px; }
+.sched-sec--live {
+  margin-bottom: 24px;
+  border: 1px solid rgba(244,63,94,0.15);
+  background: rgba(244,63,94,0.03);
+}
 
 .sched-hd--live {
   color: var(--live);
-  border-bottom-color: var(--live);
+  border-bottom-color: rgba(244,63,94,0.2);
+  background:
+    linear-gradient(135deg, rgba(244,63,94,0.08), transparent 60%),
+    rgba(255,255,255,0.02);
 }
 
 .sched-hd--live b {
-  background: rgba(244,63,94,0.12);
+  background: rgba(244,63,94,0.15);
   color: var(--live);
 }
 
@@ -5045,17 +5065,30 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 /* Today section */
+.sched-sec--today {
+  border: 1px solid rgba(245,158,11,0.1);
+  background: rgba(245,158,11,0.02);
+}
+
 .sched-hd--today {
   color: var(--gold-bright);
-  border-bottom-color: var(--gold);
+  border-bottom-color: rgba(245,158,11,0.15);
+  background:
+    linear-gradient(135deg, rgba(245,158,11,0.06), transparent 60%),
+    rgba(255,255,255,0.02);
 }
 
 .sched-hd--today b {
-  background: rgba(245,158,11,0.1);
+  background: rgba(245,158,11,0.12);
   color: var(--gold-bright);
 }
 
 /* Future section */
+.sched-sec--future {
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.015);
+}
+
 .sched-sec--future .sched-hd {
   color: var(--ink-soft);
   border-bottom-color: rgba(255,255,255,0.06);
@@ -5063,15 +5096,18 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 /* Day sub-sections within Future and Past */
-.sched-day { margin-bottom: 6px; }
+.sched-day {
+  margin-bottom: 6px;
+  padding: 0 10px;
+}
 
 .sched-day__hd {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 4px 5px;
+  padding: 10px 2px 5px;
   font-family: var(--disp);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: .5px;
   text-transform: uppercase;

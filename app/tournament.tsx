@@ -991,112 +991,114 @@ export default function Tournament({ data }: { data: TournamentData }) {
       const live = !!f && LIVE_STATUSES.has(f.status) && !stale;
       return !live && m.iso < today && m.ts < now;
     };
-
-    /* Group matches by ISO date, preserving chronological order */
-    const byDate = new Map<string, GroupStageMatch[]>();
-    const completedMatches = list.filter(m => isMatchDone(m) || isPastUnresolved(m)).sort((a, b) => b.ts - a.ts);
-    const activeList = list.filter(m => !isMatchDone(m) && !isPastUnresolved(m));
-    for (const m of activeList) {
-      if (!byDate.has(m.iso)) byDate.set(m.iso, []);
-      byDate.get(m.iso)!.push(m);
-    }
-    const sortedDates = [...byDate.keys()].sort();
-    const koByDate = new Map<string, KnockoutCardModel[]>();
-    const activeKoCards = knockoutCards.filter(card => !card.isDone);
-    for (const card of activeKoCards) {
-      if (!koByDate.has(card.match.iso)) koByDate.set(card.match.iso, []);
-      koByDate.get(card.match.iso)!.push(card);
-    }
-    const sortedKoDates = [...koByDate.keys()].sort();
-
-    /* Find live matches for the pinned banner */
-    const liveMatches: GroupStageMatch[] = [];
-    for (const m of list) {
+    const isLiveMatch = (m: GroupStageMatch): boolean => {
       const f = findLive(m, fixtures);
       const stale = (f && isStaleStatus(m.ts, f.status, now)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, now));
-      if (!stale && f && LIVE_STATUSES.has(f.status)) liveMatches.push(m);
+      return !stale && !!f && LIVE_STATUSES.has(f.status);
+    };
+
+    /* Categorize all group-stage matches into buckets */
+    const liveMatches = list.filter(isLiveMatch);
+    const todayMatches = list.filter(m => m.iso === today && !isLiveMatch(m) && !isMatchDone(m) && !isPastUnresolved(m));
+    const completedMatches = list.filter(m => isMatchDone(m) || isPastUnresolved(m)).sort((a, b) => b.ts - a.ts);
+    const futureMatches = list.filter(m => m.iso > today && !isMatchDone(m) && !isPastUnresolved(m) && !isLiveMatch(m));
+
+    /* Categorize knockout cards */
+    const liveKoCards = knockoutCards.filter(c => c.isLive);
+    const todayKoCards = knockoutCards.filter(c => c.match.iso === today && !c.isLive && !c.isDone);
+    const doneKoCards = knockoutCards.filter(c => c.isDone).sort((a, b) => b.match.ts - a.match.ts);
+    const futureKoCards = knockoutCards.filter(c => c.match.iso > today && !c.isDone && !c.isLive);
+
+    /* Group by ISO date for chronological sections */
+    function groupByDate<T>(items: T[], isoFn: (item: T) => string): Map<string, T[]> {
+      const map = new Map<string, T[]>();
+      for (const item of items) {
+        const iso = isoFn(item);
+        if (!map.has(iso)) map.set(iso, []);
+        map.get(iso)!.push(item);
+      }
+      return map;
     }
+
+    const futureGsByDate = groupByDate(futureMatches, m => m.iso);
+    const futureKoByDate = groupByDate(futureKoCards, c => c.match.iso);
+    const completedGsByDate = groupByDate(completedMatches, m => m.iso);
+    const completedKoByDate = groupByDate(doneKoCards, c => c.match.iso);
+
+    /* Merge all future dates (GS + KO) into sorted order */
+    const allFutureDates = [...new Set([...futureGsByDate.keys(), ...futureKoByDate.keys()])].sort();
+    const allPastDates = [...new Set([...completedGsByDate.keys(), ...completedKoByDate.keys()])].sort().reverse();
 
     let html = "";
 
-    if (completedMatches.length) {
-      const latest = completedMatches[0];
-      const latestDate = parseISO(latest.iso);
-      html += `<details class="finished-drawer">
-        <summary>
-          <span>Finished Games</span>
-          <b>${completedMatches.length}</b>
-          <small>Latest: ${DOW[latestDate.getDay()]} ${latestDate.getDate()} ${MON[latestDate.getMonth()]}</small>
-        </summary>
-        <div class="finished-drawer__body">`;
-      for (const m of completedMatches) html += tixCard(m, anim, true);
-      html += `</div></details>`;
-    }
-
-    /* Live banner pinned at top when matches are in progress */
-    if (liveMatches.length) {
-      html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div><div class="mc-sec" id="mc-live"><div class="mc-hd mc-hd--live"><span class="mc-dot"></span>Live Now</div>`;
+    /* ── Section 1: Live Now ── */
+    if (liveMatches.length || liveKoCards.length) {
+      html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div>`;
+      html += `<div class="sched-sec sched-sec--live"><div class="sched-hd sched-hd--live"><span class="sched-pulse"></span><span>Live Now</span><b>${liveMatches.length + liveKoCards.length}</b></div>`;
       for (const m of liveMatches) html += tixCard(m, anim);
+      for (const card of liveKoCards) html += koTixCard(card, anim, false);
       html += `</div>`;
     }
 
-    /* Chronological timeline — every date gets a section, auto-scroll anchor on the first upcoming date */
-    let anchorPlaced = false;
-    for (const iso of sortedDates) {
-      const matches = byDate.get(iso)!;
-      const dt = parseISO(iso);
-      const dateLabel = `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`;
-
-      /* Determine if this day is fully in the past, current, or future */
-      const isToday = iso === today;
-      const isPast = iso < today;
-
-      /* Place the scroll anchor before the first non-past section */
-      if (!liveMatches.length && !anchorPlaced && !isPast) {
+    /* ── Section 2: Today's Matches ── */
+    if (todayMatches.length || todayKoCards.length) {
+      const todayDt = parseISO(today);
+      const todayLabel = `${DOW[todayDt.getDay()]} ${todayDt.getDate()} ${MON[todayDt.getMonth()]}`;
+      if (!liveMatches.length && !liveKoCards.length) {
         html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div>`;
-        anchorPlaced = true;
       }
+      html += `<div class="sched-sec sched-sec--today"><div class="sched-hd sched-hd--today"><span>Today's Matches</span><small>${todayLabel}</small><b>${todayMatches.length + todayKoCards.length}</b></div>`;
+      for (const m of todayMatches) html += tixCard(m, anim);
+      for (const card of todayKoCards) html += koTixCard(card, anim, false);
+      html += `</div>`;
+    }
 
-      const sectionCls = isPast ? "mc-sec mc-sec--past" : "mc-sec";
-      const headExtra = isToday ? " — Gameday" : "";
-      html += `<div class="${sectionCls}"><div class="mc-hd">${dateLabel}${headExtra}</div>`;
-
-      for (const m of matches) {
-        const f = findLive(m, fixtures);
-        const stale = (f && isStaleStatus(m.ts, f.status, now)) || (!f && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, now));
-        const hasKickedOff = m.ts <= now + 5 * 60000;
-        const isDone = !stale && hasKickedOff && isMatchDone(m);
-        html += tixCard(m, anim, isDone);
+    /* ── Section 3: Future Schedule ── day by day */
+    let anchorPlaced = !!(liveMatches.length || liveKoCards.length || todayMatches.length || todayKoCards.length);
+    if (allFutureDates.length) {
+      html += `<div class="sched-sec sched-sec--future"><div class="sched-hd"><span>Upcoming</span></div>`;
+      for (const iso of allFutureDates) {
+        const dt = parseISO(iso);
+        const dateLabel = `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`;
+        const gsDay = futureGsByDate.get(iso) || [];
+        const koDay = futureKoByDate.get(iso) || [];
+        if (!anchorPlaced) {
+          html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div>`;
+          anchorPlaced = true;
+        }
+        const koTag = koDay.length ? `<small class="sched-ko-tag">Knockout</small>` : "";
+        html += `<div class="sched-day"><div class="sched-day__hd">${dateLabel}${koTag}<b>${gsDay.length + koDay.length}</b></div>`;
+        for (const m of gsDay) html += tixCard(m, anim);
+        for (const card of koDay) html += koTixCard(card, anim, false);
+        html += `</div>`;
       }
       html += `</div>`;
     }
 
-    if (!activeList.length && completedMatches.length) {
-      const latest = completedMatches.slice(0, 4);
-      if (!activeKoCards.length) {
+    /* ── Section 4: Previous Days ── collapsible, most recent first */
+    if (allPastDates.length) {
+      const totalPast = completedMatches.length + doneKoCards.length;
+      const latestPast = allPastDates[0];
+      const latestDt = parseISO(latestPast);
+      const latestLabel = `${DOW[latestDt.getDay()]} ${latestDt.getDate()} ${MON[latestDt.getMonth()]}`;
+      if (!anchorPlaced) {
         html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div>`;
-        anchorPlaced = true;
       }
-      html += `<div class="mc-sec mc-sec--latest"><div class="mc-hd">Latest Results</div>`;
-      for (const m of latest) html += tixCard(m, anim, true);
-      html += `</div>`;
-    }
-
-    for (const iso of sortedKoDates) {
-      const cards = koByDate.get(iso)!;
-      const dt = parseISO(iso);
-      const dateLabel = `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`;
-      const isToday = iso === today;
-      const isPast = iso < today;
-      if (!liveMatches.length && !anchorPlaced && !isPast) {
-        html += `<div id="next-match-anchor" style="scroll-margin-top:240px"></div>`;
-        anchorPlaced = true;
+      html += `<details class="sched-sec sched-sec--past"><summary class="sched-hd sched-hd--past"><span>Previous Results</span><b>${totalPast}</b><small>Latest: ${latestLabel}</small><span class="sched-chevron"></span></summary>`;
+      html += `<div class="sched-past-body">`;
+      for (const iso of allPastDates) {
+        const dt = parseISO(iso);
+        const dateLabel = `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`;
+        const gsDay = completedGsByDate.get(iso) || [];
+        const koDay = completedKoByDate.get(iso) || [];
+        if (!gsDay.length && !koDay.length) continue;
+        const koTag = koDay.length ? `<small class="sched-ko-tag">Knockout</small>` : "";
+        html += `<div class="sched-day sched-day--past"><div class="sched-day__hd">${dateLabel}${koTag}<b>${gsDay.length + koDay.length}</b></div>`;
+        for (const m of gsDay) html += tixCard(m, anim, true);
+        for (const card of koDay) html += koTixCard(card, anim, true);
+        html += `</div>`;
       }
-      const sectionCls = isPast ? "mc-sec mc-sec--past mc-sec--ko" : "mc-sec mc-sec--ko";
-      const headExtra = isToday ? " — Knockout Gameday" : "";
-      html += `<div class="${sectionCls}"><div class="mc-hd">${dateLabel}${headExtra}<small>Knockout Stage</small></div>`;
-      for (const card of cards) html += koTixCard(card, anim, card.isDone);
-      html += `</div>`;
+      html += `</div></details>`;
     }
 
     return html || `<div class="empty">No matches match your filters.</div>`;
@@ -1175,7 +1177,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
   const tabs: { key: ViewType; label: string }[] = [
     { key: "home", label: "Home" },
-    { key: "schedule", label: "Matches" },
+    { key: "schedule", label: "Schedule" },
     { key: "groups", label: "Groups" },
     { key: "bracket", label: "Knockout" },
     { key: "teams", label: "Teams" },
@@ -1222,10 +1224,10 @@ export default function Tournament({ data }: { data: TournamentData }) {
           <div className="hero__pitch-lines" aria-hidden="true" />
           <div className="hero__context">
             <h1 className="hero__context-title">
-              {view === "schedule" ? "Matches" : view === "groups" ? "Groups" : view === "teams" ? "Teams" : view === "stats" ? "Statistics" : view === "more" ? "More" : view === "venues" ? "Venues" : view === "about" ? "About" : "COMPET 2026"}
+              {view === "schedule" ? "Schedule" : view === "groups" ? "Groups" : view === "teams" ? "Teams" : view === "stats" ? "Statistics" : view === "more" ? "More" : view === "venues" ? "Venues" : view === "about" ? "About" : "COMPET 2026"}
             </h1>
             <p className="hero__context-sub">
-              {view === "schedule" ? `${data.gs.length} group stage · ${data.ko.length} knockout` : view === "groups" ? `${Object.keys(data.groups).length} groups · 48 teams` : view === "teams" ? "48 nations competing" : view === "stats" ? "Goals, assists & cards" : view === "more" ? "Venues, about & more" : ""}
+              {view === "schedule" ? `${data.gs.length + data.ko.length} matches · Group stage & knockout` : view === "groups" ? `${Object.keys(data.groups).length} groups · 48 teams` : view === "teams" ? "48 nations competing" : view === "stats" ? "Goals, assists & cards" : view === "more" ? "Venues, about & more" : ""}
             </p>
           </div>
         </section>

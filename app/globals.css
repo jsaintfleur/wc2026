@@ -783,6 +783,12 @@ body::after {
   box-shadow: 0 8px 20px rgba(0,0,0,0.24);
 }
 
+.chip--stage[aria-pressed="true"] {
+  background: var(--gold);
+  color: #111;
+  font-weight: 800;
+}
+
 .chip:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;

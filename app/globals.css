@@ -2661,7 +2661,6 @@ body::after {
   box-shadow:
     0 18px 48px rgba(0,0,0,0.32),
     inset 0 1px 0 rgba(255,255,255,0.06);
-  overflow: clip;
 }
 
 /* Soccer field lines overlay — touchline, halfway line, center circle, penalty boxes */

@@ -2847,8 +2847,9 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     return "Winner becomes champion";
   }
 
+  // Trace forward from a card to the final (downstream = potential future path)
   function downstreamPath(card: KnockoutCardModel): KnockoutCardModel[] {
-    const path = [card];
+    const path: KnockoutCardModel[] = [];
     let cursor = card;
     const order: KnockoutRoundKey[] = ["r16", "qf", "sf", "final"];
     while (cursor.round !== "final" && cursor.round !== "third") {
@@ -2866,7 +2867,43 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     return path;
   }
 
-  const selectedPath = selectedCard ? downstreamPath(selectedCard) : [];
+  // Trace backward from a card to R32 (upstream = how the team got here)
+  function upstreamPath(card: KnockoutCardModel, teamName: string): KnockoutCardModel[] {
+    const path: KnockoutCardModel[] = [];
+    const roundOrder: KnockoutRoundKey[] = ["r32", "r16", "qf", "sf", "final"];
+    let curRound = card.round;
+    let curIndex = card.roundIndex;
+    while (curRound !== "r32") {
+      const pairs = KO_SOURCE_PAIRS[curRound];
+      if (!pairs || !pairs[curIndex]) break;
+      const [srcA, srcB] = pairs[curIndex];
+      const prevRoundKey = roundOrder[roundOrder.indexOf(curRound) - 1];
+      if (!prevRoundKey) break;
+      const prevCards = rounds.find(round => round.key === prevRoundKey)?.cards;
+      if (!prevCards) break;
+      // Pick the source card whose winner matches the team we're tracing
+      const cardA = prevCards[srcA];
+      const cardB = prevCards[srcB];
+      const normalizedTeam = canon(teamName);
+      const sourceCard = (cardA?.winnerName && canon(cardA.winnerName) === normalizedTeam) ? cardA
+        : (cardB?.winnerName && canon(cardB.winnerName) === normalizedTeam) ? cardB
+        : null;
+      if (!sourceCard) break;
+      path.unshift(sourceCard);
+      curRound = sourceCard.round;
+      curIndex = sourceCard.roundIndex;
+    }
+    return path;
+  }
+
+  // Build full road: upstream (how they got here) + selected card + downstream (path ahead)
+  const selectedPath = selectedCard
+    ? [
+        ...(selectedTeamName ? upstreamPath(selectedCard, selectedTeamName) : []),
+        selectedCard,
+        ...downstreamPath(selectedCard),
+      ]
+    : [];
   const selectedPathKeys = new Set(selectedPath.map(card => card.key));
   const shouldDim = !!selectedPathKey;
   const roundMap = new Map(rounds.map(round => [round.key, round.cards]));
@@ -3022,15 +3059,47 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     );
   }
 
+  // Build potential opponent chips for a path card that hasn't been decided yet.
+  // Shows which teams from the "other branch" could be the opponent.
+  function potentialOpponents(card: KnockoutCardModel): string[] {
+    if (!selectedTeamName || card.isDone || card.isLive) return [];
+    if (!isSelected(card)) return [];
+    const normalizedTeam = canon(selectedTeamName);
+    // Find which team slot the selected team occupies (or will occupy)
+    const teamSide = card.teams.findIndex(t => !t.placeholder && t.name !== "TBD" && canon(t.name) === normalizedTeam);
+    const otherSide = teamSide >= 0 ? 1 - teamSide : -1;
+    if (otherSide < 0 || otherSide > 1) return [];
+    const otherTeam = card.teams[otherSide];
+    // If the other side already has a resolved team, show that
+    if (otherTeam && !otherTeam.placeholder && otherTeam.name !== "TBD") return [otherTeam.name];
+    // Otherwise look at the source match to find who might advance
+    if (!card.sourceMatchNos) return [];
+    const sourceRoundKey: KnockoutRoundKey = card.round === "r16" ? "r32" : card.round === "qf" ? "r16" : card.round === "sf" ? "qf" : card.round === "final" ? "sf" : "r32";
+    const sourceCards = rounds.find(r => r.key === sourceRoundKey)?.cards || [];
+    const pairs = KO_SOURCE_PAIRS[card.round];
+    if (!pairs?.[card.roundIndex]) return [];
+    const otherSourceIndex = pairs[card.roundIndex][otherSide];
+    const sourceCard = sourceCards[otherSourceIndex];
+    if (!sourceCard) return [];
+    return sourceCard.teams
+      .filter(t => !t.placeholder && t.name !== "TBD")
+      .map(t => t.name);
+  }
+
+  function isSelected(card: KnockoutCardModel): boolean {
+    return selectedPathKeys.has(card.key);
+  }
+
   function renderRoadCard(card: KnockoutCardModel, tone: "left" | "right" | "center" = "left", style?: CSSProperties) {
-    const isSelected = selectedPathKeys.has(card.key);
+    const cardIsSelected = selectedPathKeys.has(card.key);
     const status = card.isLive ? (card.fixture?.elapsed ? `${card.fixture.elapsed}'` : "LIVE") : card.isDone ? "FT" : "";
     const v = venueName(card.match.v);
+    const opponents = potentialOpponents(card);
     return (
       <article
         key={`road-${card.key}`}
         data-card-key={card.key}
-        className={`ko-road-card ko-road-card--${tone}${card.isLive ? " ko-road-card--live" : ""}${card.isDone ? " ko-road-card--done" : ""}${isSelected ? " ko-road-card--path" : ""}${shouldDim && !isSelected ? " ko-road-card--dim" : ""}`}
+        className={`ko-road-card ko-road-card--${tone}${card.isLive ? " ko-road-card--live" : ""}${card.isDone ? " ko-road-card--done" : ""}${cardIsSelected ? " ko-road-card--path" : ""}${shouldDim && !cardIsSelected ? " ko-road-card--dim" : ""}`}
         style={style}
         onClick={() => openMatch(card)}
         onKeyDown={(event: ReactKeyboardEvent<HTMLElement>) => {
@@ -3051,6 +3120,14 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
           {card.teams.map((team, index) => renderRoadTeam(card, team, index))}
         </div>
         {v.common && <div className="ko-road-card__venue">{v.city || v.common}</div>}
+        {opponents.length > 0 && (
+          <div className="ko-road-card__opponents">
+            <span>vs</span>
+            {opponents.map(name => (
+              <span key={name} className="ko-road-card__opp-chip">{data.flags[name] || "⚽"} {name}</span>
+            ))}
+          </div>
+        )}
       </article>
     );
   }

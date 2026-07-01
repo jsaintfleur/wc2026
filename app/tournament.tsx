@@ -470,6 +470,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }, []);
   const [group, setGroup] = useState("ALL");
   const [team, setTeam] = useState("ALL");
+  const [stage, setStage] = useState("ALL");
   const [query, setQuery] = useState("");
   const [fixtures, setFixtures] = useState<LiveFixture[]>([]);
   const [liveStatus, setLiveStatus] = useState<LiveStatus>("init");
@@ -690,6 +691,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const today = todayISO();
 
   function matchHit(m: GroupStageMatch): boolean {
+    if (stage !== "ALL" && stage !== "groups") return false;
     if (group !== "ALL" && m.g !== group) return false;
     if (team !== "ALL" && m.t1 !== team && m.t2 !== team) return false;
     if (query) {
@@ -844,6 +846,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
   }
 
   function koMatchHit(card: KnockoutCardModel): boolean {
+    if (stage === "groups") return false;
+    if (stage !== "ALL" && stage !== "knockout" && stage !== card.round) return false;
     if (group !== "ALL") return false;
     const actualTeams = card.teams.filter(t => !t.placeholder && t.name !== "TBD").map(t => t.name);
     if (team !== "ALL" && !actualTeams.includes(team)) return false;
@@ -1297,26 +1301,49 @@ export default function Tournament({ data }: { data: TournamentData }) {
               ))}
             </select>
           </div>
-          <div className="chips" role="group" aria-label="Filter by group">
-            <button
-              className="chip chip--all"
-              aria-pressed={group === "ALL"}
-              onClick={() => { setAnimate(true); setGroup("ALL"); }}
-            >
-              All
-            </button>
-            {Object.keys(data.groups).map(g => (
+          <div className="chips" role="group" aria-label="Filter by stage">
+            {[
+              { key: "ALL", label: "All" },
+              { key: "groups", label: "Groups" },
+              { key: "knockout", label: "Knockout" },
+              { key: "r32", label: "R32" },
+              { key: "r16", label: "R16" },
+              { key: "qf", label: "QF" },
+              { key: "sf", label: "SF" },
+              { key: "final", label: "Final" },
+            ].map(s => (
               <button
-                key={g}
-                className="chip"
-                aria-pressed={group === g}
-                style={group === g ? { background: data.gcolor[g] } : undefined}
-                onClick={() => { setAnimate(true); setGroup(g); }}
+                key={s.key}
+                className={`chip${s.key === "ALL" ? " chip--all" : ""}`}
+                aria-pressed={stage === s.key}
+                onClick={() => { setAnimate(true); setStage(s.key); if (s.key !== "ALL" && s.key !== "groups") setGroup("ALL"); }}
               >
-                {g}
+                {s.label}
               </button>
             ))}
           </div>
+          {(stage === "ALL" || stage === "groups") && (
+            <div className="chips" role="group" aria-label="Filter by group">
+              <button
+                className="chip chip--all"
+                aria-pressed={group === "ALL"}
+                onClick={() => { setAnimate(true); setGroup("ALL"); }}
+              >
+                All groups
+              </button>
+              {Object.keys(data.groups).map(g => (
+                <button
+                  key={g}
+                  className="chip"
+                  aria-pressed={group === g}
+                  style={group === g ? { background: data.gcolor[g] } : undefined}
+                  onClick={() => { setAnimate(true); setGroup(g); setStage(stage === "ALL" ? "ALL" : "groups"); }}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -2729,8 +2729,12 @@ body::after {
    Sits inside .ko-road and handles scroll/pan/overscroll behaviour. */
 .bracket-scroll-shell,
 .ko-road__scroll {
+  display: block;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-x: contain;
   scroll-padding-inline: 18px;
   scroll-snap-type: none;
@@ -2752,24 +2756,13 @@ body::after {
   grid-template-columns: 138px 124px 124px 118px 178px 118px 124px 124px 138px;
   gap: 6px;
   width: max-content;
+  min-width: max-content;
 }
 
 /* Knockout page container — ensures the full bracket section can occupy
    the viewport without being clipped by outer wrappers. */
 .knockout-page {
-  contain: layout style;
-}
-
-.ko-road__side {
-  display: contents;
-}
-
-.ko-road__side--right {
-  direction: ltr;
-}
-
-.ko-road__side--right > * {
-  direction: ltr;
+  contain: style;
 }
 
 .ko-road__column {
@@ -7343,13 +7336,8 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   align-items: start;
 }
 
-.bracket-scroll-shell {
-  scroll-snap-type: x proximity;
-}
-
 .ko-road__column {
   min-height: 760px;
-  scroll-snap-align: center;
   transform-origin: top center;
   transition: transform .25s ease, opacity .2s;
 }
@@ -7935,7 +7923,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 @media (max-width: 430px) {
-  .ko-road__scroll {
+  .bracket-canvas {
     grid-template-columns: repeat(4, 122px) 174px repeat(4, 122px);
     min-width: 1168px;
   }

@@ -1495,7 +1495,6 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
 
   const totalMatches = data.gs.length + data.ko.length;
   const totalDone = groupDone + koDone;
-  const progressPct = totalMatches > 0 ? Math.round((totalDone / totalMatches) * 100) : 0;
 
   const stageLabel = koDone >= 31 ? "Final" : koDone >= 30 ? "Third Place" : koDone >= 28 ? "Semifinals" : koDone >= 24 ? "Quarterfinals" : koDone >= 16 ? "Round of 16" : koDone >= 0 && groupDone >= 72 ? "Round of 32" : "Group Stage";
 
@@ -2902,12 +2901,6 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const finalCard = (roundMap.get("final") || [])[0];
   const thirdCard = (roundMap.get("third") || [])[0];
 
-  // Determine which bracket side the selected path favors
-  const leftKeys = new Set(leftRoad.flatMap(col => col.cards.map(c => c.key)));
-  const pathSide: "left" | "right" | "none" = !selectedPathKey ? "none"
-    : selectedPath.some(c => leftKeys.has(c.key)) ? "left"
-    : selectedPath.length > 0 ? "right" : "none";
-
   function selectRoad(card: KnockoutCardModel, team?: KnockoutParticipant) {
     setSelectedPathKey(card.key);
     setSelectedTeamName(team && !team.placeholder && team.name !== "TBD" ? team.name : "");
@@ -3180,16 +3173,14 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
         </div>
         <div className="bracket-scroll-shell ko-road__scroll" ref={roadScrollRef} onScroll={handleRoadScroll}>
           <div className="bracket-canvas">
-          <div className="ko-road__side ko-road__side--left" aria-label="Left side of bracket">
             {leftRoad.map(column => (
-              <div key={`left-${column.key}`} data-round={column.key} data-side="left" className={`ko-road__column ko-road__column--${column.key}${activeRound === column.key ? " ko-road__column--active" : ""}`}>
+              <div key={`left-${column.key}`} data-round={column.key} data-side="left" aria-label={`Left side ${column.label}`} className={`ko-road__column ko-road__column--${column.key}${activeRound === column.key ? " ko-road__column--active" : ""}`}>
                 <div className="ko-road__round"><span>{column.label}</span><small>{column.detail}</small></div>
                 <div className="ko-road__stack">
                   {column.cards.map((card, index) => renderRoadCard(card, "left", { gridRow: bracketGridRow(column.key, index) }))}
                 </div>
               </div>
             ))}
-          </div>
 
           <div className="ko-road__center" ref={roadCenterRef} aria-label="World Cup final path">
             <div className="ko-road__trophy" style={{ gridRow: "3 / span 4" }}>
@@ -3206,16 +3197,14 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
             )}
           </div>
 
-          <div className="ko-road__side ko-road__side--right" aria-label="Right side of bracket">
             {rightRoad.map(column => (
-              <div key={`right-${column.key}`} data-round={column.key} data-side="right" className={`ko-road__column ko-road__column--${column.key}${activeRound === column.key ? " ko-road__column--active" : ""}`}>
+              <div key={`right-${column.key}`} data-round={column.key} data-side="right" aria-label={`Right side ${column.label}`} className={`ko-road__column ko-road__column--${column.key}${activeRound === column.key ? " ko-road__column--active" : ""}`}>
                 <div className="ko-road__round"><span>{column.label}</span><small>{column.detail}</small></div>
                 <div className="ko-road__stack">
                   {column.cards.map((card, index) => renderRoadCard(card, "right", { gridRow: bracketGridRow(column.key, index) }))}
                 </div>
               </div>
             ))}
-          </div>
           </div>{/* bracket-canvas */}
         </div>{/* bracket-scroll-shell */}
         <div className="ko-road__hint" aria-hidden="true">

@@ -7255,6 +7255,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 .more-record-row__label {
+  flex: 0 0 auto;
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
@@ -7262,10 +7263,12 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 .more-record-row__value {
+  min-width: 0;
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 700;
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 /* ── App Settings list ──────────────────────────────────── */

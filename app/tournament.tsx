@@ -2358,8 +2358,20 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
   }, [nowMs]);
 
   /* =============================================================
-   * 5. History — hardcoded past World Cup data
+   * 5. History and records
    * ============================================================= */
+  const tournamentStats = useMemo(() => buildTournamentStats(data, fixtures), [data, fixtures]);
+  const formatLeaderTie = (leaders: PlayerLeader[], value: (leader: PlayerLeader) => number, label: string) => {
+    const topValue = leaders[0] ? value(leaders[0]) : 0;
+    if (!topValue) return "Pending live data";
+    const names = leaders
+      .filter(leader => value(leader) === topValue)
+      .slice(0, 3)
+      .map(leader => `${leader.name} (${leader.team})`);
+    const suffix = names.length > 1 ? `${topValue} ${label} each` : `${topValue} ${label}`;
+    return `${names.join(", ")} — ${suffix}`;
+  };
+
   const pastWinners = [
     { year: 2022, host: "Qatar", winner: "Argentina", flag: "🇦🇷", runner: "France" },
     { year: 2018, host: "Russia", winner: "France", flag: "🇫🇷", runner: "Croatia" },
@@ -2370,12 +2382,15 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
   ];
 
   const records = [
-    { label: "Most Titles", value: "Brazil (5)" },
-    { label: "Most Goals (Career)", value: "Miroslav Klose (16)" },
-    { label: "Most Goals (Single)", value: "Just Fontaine (13, 1958)" },
-    { label: "Most Appearances", value: "Lothar Matthäus (25)" },
-    { label: "Fastest Goal", value: "Hakan Şükür (11 sec, 2002)" },
-    { label: "Highest Scoring Final", value: "Argentina 3–3 France (2022)" },
+    { label: "2026 Top Scorer", value: formatLeaderTie(tournamentStats.topScorers, leader => leader.goals, "goals") },
+    { label: "2026 Top Assists", value: formatLeaderTie(tournamentStats.topAssisters, leader => leader.assists, "assists") },
+    { label: "2026 Most Cards", value: formatLeaderTie(tournamentStats.mostCarded, leader => leader.yellows + leader.reds * 3, "card pts") },
+    { label: "Most World Cup Titles", value: "Brazil — 5" },
+    { label: "Most Goals, Career", value: "Lionel Messi — 19" },
+    { label: "Most Goals, Single Tournament", value: "Just Fontaine — 13 (1958)" },
+    { label: "Most Appearances", value: "Lionel Messi — 29" },
+    { label: "Fastest Goal", value: "Hakan Şükür — 11 sec (2002)" },
+    { label: "Highest-Scoring Final", value: "Brazil 5–2 Sweden (1958)" },
   ];
 
   /* =============================================================

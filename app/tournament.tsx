@@ -2950,6 +2950,12 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const finalCard = (roundMap.get("final") || [])[0];
   const thirdCard = (roundMap.get("third") || [])[0];
 
+  // Determine which bracket side the selected path favors
+  const leftKeys = new Set(leftRoad.flatMap(col => col.cards.map(c => c.key)));
+  const pathSide: "left" | "right" | "none" = !selectedPathKey ? "none"
+    : selectedPath.some(c => leftKeys.has(c.key)) ? "left"
+    : selectedPath.length > 0 ? "right" : "none";
+
   function selectRoad(card: KnockoutCardModel, team?: KnockoutParticipant) {
     setSelectedPathKey(card.key);
     setSelectedTeamName(team && !team.placeholder && team.name !== "TBD" ? team.name : "");

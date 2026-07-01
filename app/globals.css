@@ -3010,6 +3010,12 @@ body::after {
   border-width: 2px;
 }
 
+/* Glow the vertical bracket connector for path cards too */
+.ko-road-card--path::before {
+  border-color: rgba(245,158,11,0.7) !important;
+  box-shadow: 0 0 14px rgba(245,158,11,0.35);
+}
+
 .ko-road-card--dim {
   opacity: .36;
 }

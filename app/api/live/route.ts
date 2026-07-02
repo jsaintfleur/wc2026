@@ -5,6 +5,9 @@ import { VERIFIED_RESULTS } from "@/lib/verified-results";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const STARTS = DATA.starts;
 const LEAGUE = process.env.WC_LEAGUE || "1";
 const SEASON = process.env.WC_SEASON || "2026";
@@ -21,6 +24,11 @@ const DETAIL_CACHE = new Map<number, { data: VendorFixture; ts: number }>();
 const DETAIL_TTL = 30 * 60 * 1000;
 const DETAIL_BATCH_SIZE = 10;
 const DETAIL_QUOTA_FLOOR = 500;
+const LIVE_RESPONSE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+  "CDN-Cache-Control": "no-store",
+  "Vercel-CDN-Cache-Control": "no-store",
+};
 
 function hasRichDetails(fixture: unknown): boolean {
   const f = fixture as {
@@ -663,7 +671,7 @@ export async function GET(request: NextRequest) {
       mergedCount: merged.length,
       source: apif?.ok && (apif.fixtures?.length ?? 0) > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
       sample: merged.slice(0, 3),
-    }, { headers: { "Cache-Control": "no-store" } });
+    }, { headers: LIVE_RESPONSE_HEADERS });
   }
 
   // Fetch from worldcup26.ir (primary) and optionally API-Football (enrichment)
@@ -751,7 +759,7 @@ export async function GET(request: NextRequest) {
   if (!active && !hasLiveData) {
     return NextResponse.json(
       { configured: !!apiFootballKey, active: false, ts: LAST ? LAST.ts : now, fixtures, enrichment },
-      { headers: { "Cache-Control": "no-store, max-age=0" } }
+      { headers: LIVE_RESPONSE_HEADERS }
     );
   }
 
@@ -766,6 +774,6 @@ export async function GET(request: NextRequest) {
       source: apifFixtures.length > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
       enrichment,
     },
-    { headers: { "Cache-Control": "no-store, max-age=0" } }
+    { headers: LIVE_RESPONSE_HEADERS }
   );
 }

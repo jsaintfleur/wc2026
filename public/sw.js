@@ -1,15 +1,13 @@
 /* ------------------------------------------------------------------
  * Compet 2026 — Service Worker
- * Strategy: network-first for API/live data, cache-first for static
- * assets. Offline fallback serves cached shell so the app opens even
- * without connectivity (schedule/tables still render from last fetch).
+ * Strategy: network-only for API/live data, cache-first for static
+ * assets. Match data must never be served from Cache Storage.
  * ---------------------------------------------------------------- */
 
-const CACHE_NAME = "compet-v6";
+const CACHE_NAME = "compet-v7";
 
 /* Static assets to pre-cache on install — the app shell. */
 const PRECACHE = [
-  "/",
   "/icons/favicon-16.png",
   "/icons/favicon-32.png",
   "/icons/compet-icon-48.png",
@@ -42,12 +40,18 @@ self.addEventListener("activate", (e) => {
           .filter((k) => k !== CACHE_NAME)
           .map((k) => caches.delete(k))
       )
-    )
+    ).then(() => caches.open(CACHE_NAME))
+      .then((cache) => cache.keys())
+      .then((requests) => Promise.all(
+        requests
+          .filter((request) => new URL(request.url).pathname.startsWith("/api/"))
+          .map((request) => caches.open(CACHE_NAME).then((cache) => cache.delete(request)))
+      ))
   );
   self.clients.claim();
 });
 
-/* ---- Fetch: network-first for API, stale-while-revalidate for pages,
+/* ---- Fetch: network-only for API, network-first for pages,
  *      cache-first for immutable assets ---- */
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
@@ -56,16 +60,10 @@ self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   if (url.origin !== self.location.origin) return;
 
-  /* API routes — always network-first, cache the latest response */
+  /* API routes — always network-only. Do not cache match data. */
   if (url.pathname.startsWith("/api/")) {
     e.respondWith(
-      fetch(e.request)
-        .then((res) => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
-          return res;
-        })
-        .catch(() => caches.match(e.request))
+      fetch(e.request, { cache: "no-store" })
     );
     return;
   }

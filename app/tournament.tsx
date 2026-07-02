@@ -44,6 +44,13 @@ function isStaleStatus(ts: number, status: string, now = Date.now()): boolean {
 
 type ViewType = "home" | "schedule" | "groups" | "bracket" | "teams" | "more" | "stats" | "venues" | "about";
 type LiveStatus = "init" | "off" | "idle" | "active" | "paused" | "nofix";
+type PersistedLiveData = {
+  version: 1;
+  savedAt: number;
+  ts: number;
+  source: "network" | "mock";
+  fixtures: LiveFixture[];
+};
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -51,6 +58,80 @@ type BeforeInstallPromptEvent = Event & {
 type KnockoutRoundKey = "r32" | "r16" | "qf" | "sf" | "third" | "final";
 type StandingRow = { t: string; p: number; w: number; d: number; l: number; gf: number; ga: number; pts: number };
 type GroupStanding = { rows: StandingRow[]; played: number; complete: boolean };
+
+const LIVE_DATA_CACHE_KEY = "compet-live-data-v1";
+const LIVE_DATA_CACHE_VERSION = 1;
+const LIVE_DATA_CACHE_TTL = 2 * 60 * 1000;
+let startupLiveDataCache: PersistedLiveData | null | undefined;
+
+function logLiveDataSource(message: string, details?: Record<string, unknown>) {
+  if (typeof window === "undefined") return;
+  console.info(`[compet live-data] ${message}`, details || {});
+}
+
+function readPersistedLiveData(reason: string): PersistedLiveData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(LIVE_DATA_CACHE_KEY);
+    if (!raw) {
+      logLiveDataSource(`${reason}: no localStorage live cache`);
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<PersistedLiveData>;
+    const savedAt = typeof parsed.savedAt === "number" ? parsed.savedAt : 0;
+    const ageMs = Date.now() - savedAt;
+    if (parsed.version !== LIVE_DATA_CACHE_VERSION || !Array.isArray(parsed.fixtures) || ageMs > LIVE_DATA_CACHE_TTL) {
+      window.localStorage.removeItem(LIVE_DATA_CACHE_KEY);
+      logLiveDataSource(`${reason}: invalidated localStorage live cache`, {
+        version: parsed.version,
+        fixtureCount: Array.isArray(parsed.fixtures) ? parsed.fixtures.length : 0,
+        ageMs,
+        ttlMs: LIVE_DATA_CACHE_TTL,
+      });
+      return null;
+    }
+    logLiveDataSource(`${reason}: using localStorage as temporary fallback`, {
+      fixtureCount: parsed.fixtures.length,
+      ageMs,
+      ts: parsed.ts,
+    });
+    return parsed as PersistedLiveData;
+  } catch (error) {
+    try { window.localStorage.removeItem(LIVE_DATA_CACHE_KEY); } catch { /* ignore */ }
+    logLiveDataSource(`${reason}: failed to parse localStorage live cache`, { error: String(error) });
+    return null;
+  }
+}
+
+function getStartupLiveDataCache(): PersistedLiveData | null {
+  if (startupLiveDataCache !== undefined) return startupLiveDataCache;
+  startupLiveDataCache = readPersistedLiveData("startup");
+  if (!startupLiveDataCache) logLiveDataSource("startup: falling back to bundled schedule until network responds");
+  return startupLiveDataCache;
+}
+
+function persistLiveData(fixtures: LiveFixture[], ts: number, source: PersistedLiveData["source"]) {
+  if (typeof window === "undefined") return;
+  const payload: PersistedLiveData = {
+    version: LIVE_DATA_CACHE_VERSION,
+    savedAt: Date.now(),
+    ts,
+    source,
+    fixtures,
+  };
+  try {
+    window.localStorage.setItem(LIVE_DATA_CACHE_KEY, JSON.stringify(payload));
+    startupLiveDataCache = payload;
+    logLiveDataSource("network success: replaced persisted live cache", {
+      fixtureCount: fixtures.length,
+      ts,
+      source,
+      ttlMs: LIVE_DATA_CACHE_TTL,
+    });
+  } catch (error) {
+    logLiveDataSource("network success: could not persist live cache", { error: String(error) });
+  }
+}
 
 const KO_ROUNDS: {
   key: KnockoutRoundKey;
@@ -472,9 +553,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [team, setTeam] = useState("ALL");
   const [stage, setStage] = useState("ALL");
   const [query, setQuery] = useState("");
-  const [fixtures, setFixtures] = useState<LiveFixture[]>([]);
+  const [fixtures, setFixtures] = useState<LiveFixture[]>(() => getStartupLiveDataCache()?.fixtures || []);
   const [liveStatus, setLiveStatus] = useState<LiveStatus>("init");
-  const [liveTs, setLiveTs] = useState(0);
+  const [liveTs, setLiveTs] = useState(() => getStartupLiveDataCache()?.ts || 0);
   const [, setLiveStale] = useState(false);
   const [liveEnrichmentIssue, setLiveEnrichmentIssue] = useState("");
   const [animate, setAnimate] = useState(true);
@@ -499,27 +580,39 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
   const pollLive = useCallback(async () => {
     if (isMock()) {
-      setFixtures(MOCK_FIXTURES as LiveFixture[]);
+      const mockFixtures = MOCK_FIXTURES as LiveFixture[];
+      setFixtures(mockFixtures);
       setLiveStatus("active");
-      setLiveTs(Date.now());
+      const ts = Date.now();
+      setLiveTs(ts);
       setLiveEnrichmentIssue("");
+      persistLiveData(mockFixtures, ts, "mock");
       return;
     }
     try {
+      logLiveDataSource("fetch: requesting fresh /api/live from network");
       const r = await fetch(`/api/live?ts=${Date.now()}`, {
         cache: "no-store",
-        headers: { "Cache-Control": "no-cache" },
+        headers: {
+          "Cache-Control": "no-cache, no-store, max-age=0",
+          "Pragma": "no-cache",
+        },
       });
       if (!r.ok) throw new Error("fetch failed");
       const j = await r.json();
+      const nextFixtures = Array.isArray(j.fixtures) ? j.fixtures : [];
+      const nextTs = j.ts || Date.now();
       if (j.configured === false) {
         setLiveStatus("off");
-        setFixtures(Array.isArray(j.fixtures) ? j.fixtures : []);
+        setFixtures(nextFixtures);
+        setLiveTs(nextTs);
+        persistLiveData(nextFixtures, nextTs, "network");
         setLiveEnrichmentIssue(j.active ? "Live enrichment is not configured" : "");
         return;
       }
-      setFixtures(Array.isArray(j.fixtures) ? j.fixtures : []);
-      setLiveTs(j.ts || Date.now());
+      setFixtures(nextFixtures);
+      setLiveTs(nextTs);
+      persistLiveData(nextFixtures, nextTs, "network");
       setLiveStale(!!j.stale);
       const enrichmentUnhealthy = !!(j.enrichment?.required && !j.enrichment?.healthy);
       setLiveEnrichmentIssue(enrichmentUnhealthy ? "Live enrichment needs attention" : "");
@@ -527,11 +620,26 @@ export default function Tournament({ data }: { data: TournamentData }) {
       else if (j.active && (!j.fixtures || j.fixtures.length === 0)) setLiveStatus("nofix");
       else if (j.active) setLiveStatus("active");
       else setLiveStatus("idle");
-    } catch {
+      logLiveDataSource("fetch: fresh network data applied to shared store", {
+        fixtureCount: nextFixtures.length,
+        ts: nextTs,
+        apiSource: j.source,
+        status: j.active ? "active" : "idle",
+      });
+    } catch (error) {
+      const fallback = readPersistedLiveData("network failure");
+      if (fallback && fixtures.length === 0) {
+        setFixtures(fallback.fixtures);
+        setLiveTs(fallback.ts);
+      }
       setLiveEnrichmentIssue("Live enrichment fetch failed");
       setLiveStatus(prev => prev === "init" ? "off" : "paused");
+      logLiveDataSource("fetch: network failed; persisted data remains fallback only", {
+        error: String(error),
+        fallbackCount: fallback?.fixtures.length || 0,
+      });
     }
-  }, []);
+  }, [fixtures.length]);
 
   const schedule = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -551,15 +659,24 @@ export default function Tournament({ data }: { data: TournamentData }) {
       setNowMs(Date.now());
       pollLive().then(schedule);
     });
+    const refreshFromNetwork = () => {
+      setNowMs(Date.now());
+      pollLive().then(schedule);
+    };
     const onVis = () => {
       if (document.hidden) {
         if (timerRef.current) clearInterval(timerRef.current);
       } else {
-        setNowMs(Date.now());
-        pollLive().then(schedule);
+        refreshFromNetwork();
       }
     };
+    const onFocus = () => {
+      if (!document.hidden) refreshFromNetwork();
+    };
+    const onOnline = () => refreshFromNetwork();
     document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onOnline);
     const refreshTimer = setInterval(() => {
       if (!document.hidden) setNowMs(Date.now());
     }, 60000);
@@ -584,6 +701,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
     }
     return () => {
       document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onOnline);
       window.removeEventListener("beforeinstallprompt", onBip);
       if (timerRef.current) clearInterval(timerRef.current);
       clearInterval(refreshTimer);

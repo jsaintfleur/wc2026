@@ -67,6 +67,8 @@ export type TournamentStats = {
   bucketLabels: string[];
   totalGoals: number;
   totalGoalsFromEvents: number;
+  totalPlayerGoals: number;
+  totalAssists: number;
   normalGoals: number;
   penGoals: number;
   ownGoals: number;
@@ -361,6 +363,8 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
     isValidPlayerName(p.name, countryTeamNames) &&
     canon(p.name) !== canon(p.team)
   );
+  const totalPlayerGoals = playerList.reduce((sum, p) => sum + p.goals, 0);
+  const totalAssists = playerList.reduce((sum, p) => sum + p.assists, 0);
   const topScorers = playerList.filter(p => p.goals > 0).sort(sortPlayersBy("goals")).slice(0, 20);
   const topAssisters = playerList.filter(p => p.assists > 0).sort(sortPlayersBy("assists")).slice(0, 20);
   const topYellowCards = playerList.filter(p => p.yellows > 0).sort(sortPlayersBy("yellows")).slice(0, 20);
@@ -387,6 +391,8 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
     bucketLabels: ["1-15", "16-30", "31-45", "46-60", "61-75", "76-90", "90+"],
     totalGoals,
     totalGoalsFromEvents,
+    totalPlayerGoals,
+    totalAssists,
     normalGoals,
     penGoals,
     ownGoals,

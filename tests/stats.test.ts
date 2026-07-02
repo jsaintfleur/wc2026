@@ -256,3 +256,28 @@ test("uses the same normalized model for goals and cards", () => {
   assert.equal(stats.topYellowCards[0].name, "Edson Álvarez");
   assert.equal(stats.topRedCards[0].name, "Edson Álvarez");
 });
+
+test("separates match-score goal totals from credited player leaderboard goals", () => {
+  const fixtures = [
+    {
+      home: "United States",
+      away: "Mexico",
+      gh: 3,
+      ga: 2,
+      status: "FT",
+      ts: Date.UTC(2026, 5, 11),
+      events: [
+        { type: "Goal", team: "United States", player: "Christian Pulisic", minute: 10, assist: "Timothy Weah" },
+      ],
+    },
+  ];
+
+  const stats = buildTournamentStats(baseData, fixtures);
+
+  assert.equal(stats.totalGoals, 5);
+  assert.equal(stats.totalGoalsFromEvents, 1);
+  assert.equal(stats.totalPlayerGoals, 1);
+  assert.equal(stats.totalAssists, 1);
+  assert.equal(stats.topScorers[0].goals, 1);
+  assert.equal(stats.topAssisters[0].name, "Timothy Weah");
+});

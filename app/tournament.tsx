@@ -1744,6 +1744,9 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
   const leaders = useMemo(() => computeLeaders(), [computeLeaders]);
   const topScorer = leaders.topScorers.find(isRenderableLeader) || null;
   const topAssister = leaders.topAssisters.find(isRenderableLeader) || null;
+  const topAssistTieCount = topAssister
+    ? leaders.topAssisters.filter(leader => isRenderableLeader(leader) && leader.assists === topAssister.assists).length
+    : 0;
 
   /* -- countdown math --------------------------------------------- */
   const countdown = useMemo(() => {
@@ -1926,7 +1929,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
                   <span className="home-leader-card__flag">{fl(topAssister.team)}</span>
                   <div>
                     <b>{topAssister.name}</b>
-                    <span>{topAssister.team}</span>
+                    <span>{topAssister.team}{topAssistTieCount > 1 ? ` · ${topAssistTieCount} tied` : ""}</span>
                   </div>
                 </div>
                 <div className="home-leader-card__stat">{topAssister.assists}<small>assists</small></div>
@@ -4732,6 +4735,8 @@ type LeaderboardCategory = {
   key: StatTabKey;
   label: string;
   statLabel: string;
+  total: number;
+  totalLabel: string;
   empty: string;
   leaders: PlayerLeader[];
   value: (leader: PlayerLeader) => number;
@@ -4776,7 +4781,7 @@ function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistD
   const category = categories.find(c => c.key === active) || categories[0];
   const leaders = category.leaders.filter(isRenderableLeader);
   const max = Math.max(...leaders.map(category.value), 1);
-  const assistCoverage = category.key === "assists" && matchesPlayed > 0;
+  const showCoverage = (category.key === "assists" || category.key === "goals") && matchesPlayed > 0;
 
   return (
     <section className="stats-leaders" aria-label="Stat leaders">
@@ -4792,16 +4797,19 @@ function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistD
         {categories.map(c => (
           <button key={c.key} type="button" role="tab" aria-selected={active === c.key} className="stats-tab" onClick={() => onActive(c.key)}>
             <span>{c.label}</span>
-            <b>{c.leaders.length ? categoryValueTotal(c) : 0}</b>
+            <b>{c.total}</b>
+            <small>{c.totalLabel}</small>
           </button>
         ))}
       </div>
 
-      {assistCoverage && (
+      {showCoverage && (
         <div className="stats-leaders__coverage">
-          {matchesWithAssistData < matchesPlayed
-            ? `Assist data available for ${matchesWithAssistData} of ${matchesPlayed} matches. ${matchesPlayed - matchesWithAssistData} matches lack detailed assist data from the source API.`
-            : `Assist data synced across all ${matchesPlayed} completed matches.`}
+          {category.key === "goals"
+            ? `${category.total} total goals are counted from match scores. Player scorer rows show the credited goal events available from the live data feed.`
+            : matchesWithAssistData < matchesPlayed
+              ? `Assist data available for ${matchesWithAssistData} of ${matchesPlayed} matches. ${matchesPlayed - matchesWithAssistData} matches lack detailed assist data from the source API.`
+              : `Assist data synced across all ${matchesPlayed} completed matches.`}
         </div>
       )}
 
@@ -4848,10 +4856,6 @@ function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistD
   );
 }
 
-function categoryValueTotal(category: LeaderboardCategory): number {
-  return category.leaders.reduce((sum, leader) => sum + category.value(leader), 0);
-}
-
 /** Stats view — tournament dashboard with visualizations */
 function StatsView({ fl, computeLeaders, liveTs, liveStatus, liveEnrichmentIssue, onRefresh }: {
   fl: (t: string) => string;
@@ -4869,7 +4873,7 @@ function StatsView({ fl, computeLeaders, liveTs, liveStatus, liveEnrichmentIssue
 
   const {
     topScorers, topAssisters, topYellowCards, topRedCards,
-    totalGoals, totalYellows, totalReds, matchesPlayed, matchesWithAssistData, avgGoals, cleanSheets,
+    totalGoals, totalAssists, totalYellows, totalReds, matchesPlayed, matchesWithAssistData, avgGoals, cleanSheets,
   } = stats;
 
   const categories: LeaderboardCategory[] = [
@@ -4877,6 +4881,8 @@ function StatsView({ fl, computeLeaders, liveTs, liveStatus, liveEnrichmentIssue
       key: "goals",
       label: "Goals",
       statLabel: "Goals",
+      total: totalGoals,
+      totalLabel: "Total",
       empty: "No goal scorers yet",
       leaders: topScorers,
       value: leader => leader.goals,
@@ -4886,6 +4892,8 @@ function StatsView({ fl, computeLeaders, liveTs, liveStatus, liveEnrichmentIssue
       key: "assists",
       label: "Assists",
       statLabel: "Assists",
+      total: totalAssists,
+      totalLabel: "Credited",
       empty: "No assists recorded yet",
       leaders: topAssisters,
       value: leader => leader.assists,
@@ -4895,6 +4903,8 @@ function StatsView({ fl, computeLeaders, liveTs, liveStatus, liveEnrichmentIssue
       key: "yellows",
       label: "Yellow Cards",
       statLabel: "Yellows",
+      total: totalYellows,
+      totalLabel: "Total",
       empty: "No yellow cards yet",
       leaders: topYellowCards,
       value: leader => leader.yellows,
@@ -4904,6 +4914,8 @@ function StatsView({ fl, computeLeaders, liveTs, liveStatus, liveEnrichmentIssue
       key: "reds",
       label: "Red Cards",
       statLabel: "Reds",
+      total: totalReds,
+      totalLabel: "Total",
       empty: "No red cards yet",
       leaders: topRedCards,
       value: leader => leader.reds,
@@ -4931,7 +4943,8 @@ function StatsView({ fl, computeLeaders, liveTs, liveStatus, liveEnrichmentIssue
       </section>
 
       <div className="stats-summary stats-summary--premium" aria-label="Tournament stat summary">
-        <div className="stats-card"><span className="stats-card__value">{totalGoals}</span><span className="stats-card__label">Goals</span></div>
+        <div className="stats-card"><span className="stats-card__value">{totalGoals}</span><span className="stats-card__label">Total Goals</span></div>
+        <div className="stats-card"><span className="stats-card__value">{totalAssists}</span><span className="stats-card__label">Credited Assists</span></div>
         <div className="stats-card"><span className="stats-card__value">{matchesPlayed}</span><span className="stats-card__label">Matches</span></div>
         <div className="stats-card"><span className="stats-card__value">{avgGoals}</span><span className="stats-card__label">Avg / Match</span></div>
         <div className="stats-card"><span className="stats-card__value">{cleanSheets}</span><span className="stats-card__label">Clean Sheets</span></div>

@@ -7659,7 +7659,8 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 .stats-tab span,
-.stats-tab b {
+.stats-tab b,
+.stats-tab small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -7677,6 +7678,14 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   font-size: 16px;
 }
 
+.stats-tab small {
+  color: rgba(226,232,240,0.48);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+
 .stats-tab[aria-selected="true"] {
   color: #fff;
   border-color: rgba(245,158,11,0.28);
@@ -7688,6 +7697,10 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 
 .stats-tab[aria-selected="true"] b {
   color: var(--gold-bright);
+}
+
+.stats-tab[aria-selected="true"] small {
+  color: rgba(255,255,255,0.72);
 }
 
 .stats-leaders__coverage {

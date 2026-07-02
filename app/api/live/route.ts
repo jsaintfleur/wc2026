@@ -22,7 +22,7 @@ let LAST: { fixtures: unknown[]; ts: number } | null = null;
 let STADIUM_CACHE: Record<string, string> | null = null;
 const DETAIL_CACHE = new Map<number, { data: VendorFixture; ts: number }>();
 const DETAIL_TTL = 30 * 60 * 1000;
-const DETAIL_BATCH_SIZE = 10;
+const DETAIL_BATCH_SIZE = 20;
 const DETAIL_QUOTA_FLOOR = 500;
 const LIVE_RESPONSE_HEADERS = {
   "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
@@ -519,11 +519,12 @@ async function fetchFixtureDetail(key: string, fixtureId: number): Promise<Vendo
 }
 
 function needsFixtureDetail(fixture: unknown): boolean {
-  const f = fixture as { fixtureId?: number | null; status?: string; players?: unknown[]; events?: MatchEvent[] };
+  const f = fixture as { fixtureId?: number | null; status?: string; players?: unknown[] };
   if (!f.fixtureId || !DONE_STATUSES.has(f.status || "")) return false;
   if (Array.isArray(f.players) && f.players.length > 0) return false;
-  const events = f.events || [];
-  return events.some(ev => ev.type === "Goal" && ev.detail !== "Own Goal" && !ev.assist);
+  // The season list endpoint often includes events but omits player arrays.
+  // Per-fixture detail is required for reliable assist totals.
+  return true;
 }
 
 async function enrichWithFixtureDetails(key: string, fixtures: unknown[], remaining?: string | null): Promise<{ requested: number; enriched: number; skipped: boolean }> {

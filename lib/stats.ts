@@ -101,11 +101,25 @@ function richerEvents(primary?: MatchEvent[], fallback?: MatchEvent[]): MatchEve
   return fallbackAssistCount > primaryAssistCount ? fallback : primary;
 }
 
+function playerAssistCount(players?: PlayerMatchStat[]): number {
+  return players?.reduce((sum, player) => sum + Math.max(0, player.assists || 0), 0) || 0;
+}
+
+function richerPlayers(primary?: PlayerMatchStat[], fallback?: PlayerMatchStat[]): PlayerMatchStat[] | undefined {
+  if (!primary?.length) return fallback;
+  if (!fallback?.length) return primary;
+  const primaryAssistCount = playerAssistCount(primary);
+  const fallbackAssistCount = playerAssistCount(fallback);
+  if (fallbackAssistCount > primaryAssistCount) return fallback;
+  if (primaryAssistCount > fallbackAssistCount) return primary;
+  return fallback.length > primary.length ? fallback : primary;
+}
+
 function mergeFinishedMatch(primary: FinishedMatch, fallback: FinishedMatch): FinishedMatch {
   return {
     ...primary,
     events: richerEvents(primary.events, fallback.events),
-    players: primary.players?.length ? primary.players : fallback.players,
+    players: richerPlayers(primary.players, fallback.players),
     assistDataMissing: primary.assistDataMissing === false || fallback.assistDataMissing === false
       ? false
       : primary.assistDataMissing ?? fallback.assistDataMissing,

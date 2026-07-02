@@ -345,3 +345,86 @@ test("keeps richer persisted player assists when live fixture payload is thinner
   assert.equal(stats.topAssisters[0].assists, 5);
   assert.equal(stats.matchesWithAssistData, 1);
 });
+
+test("keeps richer persisted player assists when live players are present but lower quality", () => {
+  const dataWithPersistedState: TournamentData = {
+    ...baseData,
+    gs: [{
+      no: 1,
+      iso: "2026-06-11",
+      local: "12:00",
+      et: "3:00 PM",
+      g: "A",
+      t1: "France",
+      t2: "Mexico",
+      v: "TST",
+      ts: Date.UTC(2026, 5, 11),
+      dbStatus: "FT",
+      dbGh: 3,
+      dbGa: 0,
+      dbPlayers: [{
+        name: "Michael Olise",
+        number: 11,
+        team: "France",
+        minutes: 90,
+        rating: "8.5",
+        goals: 0,
+        assists: 5,
+        shots: 1,
+        shotsOn: 1,
+        passes: 45,
+        passAccuracy: "90%",
+        tackles: 0,
+        duels: 3,
+        duelsWon: 2,
+        dribbles: 2,
+        dribblesSuccess: 2,
+        foulsDrawn: 1,
+        foulsCommitted: 0,
+        yellowCards: 0,
+        redCards: 0,
+        saves: 0,
+      }],
+    }],
+  };
+
+  const fixtures: LiveFixture[] = [{
+    ts: Date.UTC(2026, 5, 11),
+    status: "FT",
+    elapsed: 90,
+    venue: "Test Stadium",
+    round: "Group Stage",
+    home: "France",
+    away: "Mexico",
+    gh: 3,
+    ga: 0,
+    players: [{
+      name: "Alexander Isak",
+      number: 9,
+      team: "France",
+      minutes: 90,
+      rating: "7.5",
+      goals: 0,
+      assists: 3,
+      shots: 1,
+      shotsOn: 1,
+      passes: 30,
+      passAccuracy: "80%",
+      tackles: 0,
+      duels: 1,
+      duelsWon: 1,
+      dribbles: 0,
+      dribblesSuccess: 0,
+      foulsDrawn: 0,
+      foulsCommitted: 0,
+      yellowCards: 0,
+      redCards: 0,
+      saves: 0,
+    }],
+  }];
+
+  const stats = buildTournamentStats(dataWithPersistedState, fixtures);
+
+  assert.equal(stats.topAssisters[0].name, "Michael Olise");
+  assert.equal(stats.topAssisters[0].assists, 5);
+});

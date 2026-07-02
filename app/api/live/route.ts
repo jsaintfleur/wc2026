@@ -453,6 +453,40 @@ function mapVendorPlayers(f: VendorFixture) {
     : undefined;
 }
 
+function countPlayerAssists(players: unknown): number {
+  if (!Array.isArray(players)) return 0;
+  return players.reduce((sum, player) => {
+    const assists = typeof player?.assists === "number" ? player.assists : 0;
+    return sum + Math.max(0, assists);
+  }, 0);
+}
+
+function chooseRicherPlayers(incoming: unknown, existing: unknown): unknown {
+  if (!Array.isArray(incoming) || incoming.length === 0) return existing;
+  if (!Array.isArray(existing) || existing.length === 0) return incoming;
+  const incomingAssists = countPlayerAssists(incoming);
+  const existingAssists = countPlayerAssists(existing);
+  if (existingAssists > incomingAssists) return existing;
+  if (incomingAssists > existingAssists) return incoming;
+  return existing.length > incoming.length ? existing : incoming;
+}
+
+function countGoalAssists(events: unknown): number {
+  if (!Array.isArray(events)) return 0;
+  return events.filter((event) => (
+    event?.type === "Goal" &&
+    event?.detail !== "Own Goal" &&
+    typeof event?.assist === "string" &&
+    event.assist.trim().length > 0
+  )).length;
+}
+
+function chooseRicherEvents(incoming: unknown, existing: unknown): unknown {
+  if (!Array.isArray(incoming) || incoming.length === 0) return existing;
+  if (!Array.isArray(existing) || existing.length === 0) return incoming;
+  return countGoalAssists(existing) > countGoalAssists(incoming) ? existing : incoming;
+}
+
 function normalizeVendorFixture(f: VendorFixture) {
   const events = mapVendorEvents(f);
   const stats = mapVendorStats(f);
@@ -579,10 +613,19 @@ async function persistFinished(fixtures: unknown[]): Promise<number> {
   }) as MergeVendorFixture[];
   if (!finished.length) return 0;
 
-  let scheduleMatches: ScheduleMatch[];
+  type PersistableScheduleMatch = ScheduleMatch & {
+    state?: {
+      events: Prisma.JsonValue | null;
+      stats: Prisma.JsonValue | null;
+      lineups: Prisma.JsonValue | null;
+      players: Prisma.JsonValue | null;
+      referee: string | null;
+    } | null;
+  };
+  let scheduleMatches: PersistableScheduleMatch[];
   try {
     const rows = await prisma.match.findMany({
-      include: { homeTeam: true, awayTeam: true, venue: true },
+      include: { homeTeam: true, awayTeam: true, venue: true, state: true },
       orderBy: { matchNumber: "asc" },
     });
     scheduleMatches = rows.map(m => ({
@@ -592,6 +635,7 @@ async function persistFinished(fixtures: unknown[]): Promise<number> {
       venueCommon: m.venue.commonName,
       homeTeam: m.homeTeam?.name || null,
       awayTeam: m.awayTeam?.name || null,
+      state: m.state,
     }));
   } catch {
     return 0;
@@ -601,6 +645,12 @@ async function persistFinished(fixtures: unknown[]): Promise<number> {
   let written = 0;
 
   for (const { match, fixture } of merged) {
+    const state = (match as PersistableScheduleMatch).state;
+    const events = chooseRicherEvents(fixture.events, state?.events);
+    const players = chooseRicherPlayers(fixture.players, state?.players);
+    const stats = fixture.stats || state?.stats;
+    const lineups = fixture.lineups || state?.lineups;
+    const referee = fixture.referee || state?.referee || undefined;
     try {
       await prisma.matchState.upsert({
         where: { matchId: match.id },
@@ -609,10 +659,11 @@ async function persistFinished(fixtures: unknown[]): Promise<number> {
           elapsed: typeof fixture.elapsed === "number" ? fixture.elapsed : 90,
           homeGoals: typeof fixture.gh === "number" ? fixture.gh : null,
           awayGoals: typeof fixture.ga === "number" ? fixture.ga : null,
-          events: toJson(fixture.events),
-          stats: toJson(fixture.stats),
-          lineups: toJson(fixture.lineups),
-          players: toJson(fixture.players),
+          events: toJson(events),
+          stats: toJson(stats),
+          lineups: toJson(lineups),
+          players: toJson(players),
+          referee,
           updatedAt: new Date(),
         },
         create: {
@@ -621,10 +672,11 @@ async function persistFinished(fixtures: unknown[]): Promise<number> {
           elapsed: typeof fixture.elapsed === "number" ? fixture.elapsed : 90,
           homeGoals: typeof fixture.gh === "number" ? fixture.gh : null,
           awayGoals: typeof fixture.ga === "number" ? fixture.ga : null,
-          events: toJson(fixture.events),
-          stats: toJson(fixture.stats),
-          lineups: toJson(fixture.lineups),
-          players: toJson(fixture.players),
+          events: toJson(events),
+          stats: toJson(stats),
+          lineups: toJson(lineups),
+          players: toJson(players),
+          referee,
         },
       });
       written++;

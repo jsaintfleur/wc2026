@@ -115,17 +115,22 @@ function richerEvents(primary?: MatchEvent[], fallback?: MatchEvent[]): MatchEve
   return fallbackAssistCount > primaryAssistCount ? fallback : primary;
 }
 
-function playerAssistCount(players?: PlayerMatchStat[]): number {
-  return players?.reduce((sum, player) => sum + Math.max(0, player.assists || 0), 0) || 0;
+function playerDataScore(players?: PlayerMatchStat[]): number {
+  return players?.reduce((sum, player) => (
+    sum +
+    Math.max(0, player.assists || 0) +
+    Math.max(0, player.yellowCards || 0) +
+    Math.max(0, player.redCards || 0)
+  ), 0) || 0;
 }
 
 function richerPlayers(primary?: PlayerMatchStat[], fallback?: PlayerMatchStat[]): PlayerMatchStat[] | undefined {
   if (!primary?.length) return fallback;
   if (!fallback?.length) return primary;
-  const primaryAssistCount = playerAssistCount(primary);
-  const fallbackAssistCount = playerAssistCount(fallback);
-  if (fallbackAssistCount > primaryAssistCount) return fallback;
-  if (primaryAssistCount > fallbackAssistCount) return primary;
+  const primaryScore = playerDataScore(primary);
+  const fallbackScore = playerDataScore(fallback);
+  if (fallbackScore > primaryScore) return fallback;
+  if (primaryScore > fallbackScore) return primary;
   return fallback.length > primary.length ? fallback : primary;
 }
 
@@ -332,7 +337,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
       matchesWithEvents++;
       for (const ev of fm.events!) {
         if (ev.type === "Card") {
-          processCard(ev);
+          if (!hasPlayers) processCard(ev);
           continue;
         }
         if (ev.type === "subst") {
@@ -356,11 +361,11 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
           player.assists += p.assists;
           matchHasAssist = true;
         }
-        if (!hasEvents && p.yellowCards > 0) {
+        if (p.yellowCards > 0) {
           player.yellows += p.yellowCards;
           totalYellows += p.yellowCards;
         }
-        if (!hasEvents && p.redCards > 0) {
+        if (p.redCards > 0) {
           player.reds += p.redCards;
           totalReds += p.redCards;
         }

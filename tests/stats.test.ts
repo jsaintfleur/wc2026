@@ -472,3 +472,50 @@ test("uses external leaderboard assists when match feeds are incomplete", () => 
   assert.equal(stats.topAssisters[0].name, "Michael Olise");
   assert.equal(stats.topAssisters[0].assists, 5);
 });
+
+test("prefers player card totals when events and player stats both exist", () => {
+  const fixtures: LiveFixture[] = [{
+    ts: Date.UTC(2026, 5, 11),
+    status: "FT",
+    elapsed: 90,
+    venue: "Test Stadium",
+    round: "Group Stage",
+    home: "United States",
+    away: "Mexico",
+    gh: 1,
+    ga: 0,
+    events: [
+      { minute: 20, extra: null, type: "Card", detail: "Yellow Card", player: "Tyler Adams", assist: null, team: "United States" },
+    ],
+    players: [{
+      name: "Edson Álvarez",
+      number: 4,
+      team: "Mexico",
+      minutes: 90,
+      rating: "6.8",
+      goals: 0,
+      assists: 0,
+      shots: 0,
+      shotsOn: 0,
+      passes: 40,
+      passAccuracy: "85%",
+      tackles: 4,
+      duels: 7,
+      duelsWon: 5,
+      dribbles: 0,
+      dribblesSuccess: 0,
+      foulsDrawn: 1,
+      foulsCommitted: 2,
+      yellowCards: 2,
+      redCards: 1,
+      saves: 0,
+    }],
+  }];
+
+  const stats = buildTournamentStats(baseData, fixtures);
+
+  assert.equal(stats.totalYellows, 2);
+  assert.equal(stats.totalReds, 1);
+  assert.equal(stats.topYellowCards[0].name, "Edson Álvarez");
+  assert.equal(stats.topRedCards[0].name, "Edson Álvarez");
+});

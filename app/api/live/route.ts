@@ -461,21 +461,23 @@ function mapVendorPlayers(f: VendorFixture) {
     : undefined;
 }
 
-function countPlayerAssists(players: unknown): number {
+function countPlayerStatSignals(players: unknown): number {
   if (!Array.isArray(players)) return 0;
   return players.reduce((sum, player) => {
     const assists = typeof player?.assists === "number" ? player.assists : 0;
-    return sum + Math.max(0, assists);
+    const yellows = typeof player?.yellowCards === "number" ? player.yellowCards : 0;
+    const reds = typeof player?.redCards === "number" ? player.redCards : 0;
+    return sum + Math.max(0, assists) + Math.max(0, yellows) + Math.max(0, reds);
   }, 0);
 }
 
 function chooseRicherPlayers(incoming: unknown, existing: unknown): unknown {
   if (!Array.isArray(incoming) || incoming.length === 0) return existing;
   if (!Array.isArray(existing) || existing.length === 0) return incoming;
-  const incomingAssists = countPlayerAssists(incoming);
-  const existingAssists = countPlayerAssists(existing);
-  if (existingAssists > incomingAssists) return existing;
-  if (incomingAssists > existingAssists) return incoming;
+  const incomingScore = countPlayerStatSignals(incoming);
+  const existingScore = countPlayerStatSignals(existing);
+  if (existingScore > incomingScore) return existing;
+  if (incomingScore > existingScore) return incoming;
   return existing.length > incoming.length ? existing : incoming;
 }
 

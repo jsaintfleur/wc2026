@@ -82,6 +82,20 @@ export type TournamentStats = {
   cleanSheets: number;
 };
 
+export type ExternalLeaderStat = {
+  name: string;
+  team: string;
+  goals?: number;
+  assists?: number;
+  yellows?: number;
+  reds?: number;
+  matches?: number;
+};
+
+export type ExternalStatsInput = {
+  players?: ExternalLeaderStat[];
+};
+
 type FinishedMatch = {
   key: string;
   home: string;
@@ -198,7 +212,7 @@ function sortPlayersBy(value: keyof Pick<PlayerLeader, "goals" | "assists" | "ye
     a.team.localeCompare(b.team);
 }
 
-export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture[]): TournamentStats {
+export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture[], externalStats: ExternalStatsInput = {}): TournamentStats {
   const players: Record<string, PlayerLeader> = {};
   const countryTeamNames = teamNames(data);
 
@@ -383,6 +397,16 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
         seen.add(playerKey(p.name, p.team));
       }
     }
+  }
+
+  for (const external of externalStats.players || []) {
+    if (!isValidPlayerName(external.name, countryTeamNames) || !external.team) continue;
+    const player = ensure(external.name, external.team);
+    player.goals = Math.max(player.goals, external.goals || 0);
+    player.assists = Math.max(player.assists, external.assists || 0);
+    player.yellows = Math.max(player.yellows, external.yellows || 0);
+    player.reds = Math.max(player.reds, external.reds || 0);
+    player.matches = Math.max(player.matches, external.matches || 0);
   }
 
   const matchesPlayed = finishedMap.size;

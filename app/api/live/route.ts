@@ -17,6 +17,7 @@ const POST = 6 * 60 * 60000;
 // worldcup26.ir — free community API, no auth required
 const WC26_URL = "https://worldcup26.ir/get/games";
 const WC26_STADIUMS_URL = "https://worldcup26.ir/get/stadiums";
+const ESPN_STATS_URL = "https://site.web.api.espn.com/apis/site/v2/sports/soccer/fifa.world/statistics?season=2026&limit=50";
 
 let LAST: { fixtures: unknown[]; ts: number } | null = null;
 let STADIUM_CACHE: Record<string, string> | null = null;
@@ -375,6 +376,13 @@ type VendorFixture = {
   }>;
   players?: Array<{ team?: { name?: string }; players?: VendorPlayer[] }>;
 };
+type LeaderboardStat = {
+  name: string;
+  team: string;
+  goals?: number;
+  assists?: number;
+  matches?: number;
+};
 
 function vendorEventType(type: string | undefined): MatchEvent["type"] {
   if (type === "Goal" || type === "Card" || type === "subst" || type === "Var") return type;
@@ -552,6 +560,49 @@ async function fetchFixtureDetail(key: string, fixtureId: number): Promise<Vendo
   }
 }
 
+async function fetchEspnLeaderStats(): Promise<LeaderboardStat[]> {
+  try {
+    const res = await fetch(ESPN_STATS_URL, {
+      cache: "no-store",
+      headers: { Accept: "application/json", "User-Agent": "CompetTracker/1.0" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json().catch(() => ({}));
+    const leaders = new Map<string, LeaderboardStat>();
+    const ensure = (name: string, team: string) => {
+      const key = `${canonPlayer(name)}|${canon(team)}`;
+      const existing = leaders.get(key) || { name: canonPlayer(name), team: canon(team) };
+      leaders.set(key, existing);
+      return existing;
+    };
+
+    for (const category of data?.stats || []) {
+      const field = category?.name === "goalsLeaders"
+        ? "goals"
+        : category?.name === "assistsLeaders"
+          ? "assists"
+          : null;
+      if (!field) continue;
+      for (const entry of category.leaders || []) {
+        const athlete = entry.athlete || {};
+        const name = athlete.displayName || athlete.shortName || "";
+        const team = athlete.team?.displayName || athlete.team?.name || "";
+        const value = Math.round(entry.value || 0);
+        if (!name || !team || value <= 0) continue;
+        const leader = ensure(name, team);
+        leader[field] = Math.max(leader[field] || 0, value);
+        const appearances = (athlete.statistics || []).find((s: { name?: string }) => s.name === "appearances");
+        if (appearances?.value) leader.matches = Math.max(leader.matches || 0, Math.round(appearances.value));
+      }
+    }
+
+    return [...leaders.values()];
+  } catch {
+    return [];
+  }
+}
+
 function needsFixtureDetail(fixture: unknown): boolean {
   const f = fixture as { fixtureId?: number | null; status?: string; players?: unknown[] };
   if (!f.fixtureId || !DONE_STATUSES.has(f.status || "")) return false;
@@ -697,7 +748,10 @@ export async function GET(request: NextRequest) {
   const activeMatches = activeWindowCount(now);
 
   if (debug) {
-    const wc26 = await fetchWC26().catch(() => ({ ok: false, fixtures: [] }));
+    const [wc26, leaderboardStats] = await Promise.all([
+      fetchWC26().catch(() => ({ ok: false, fixtures: [] })),
+      fetchEspnLeaderStats(),
+    ]);
     const apif = apiFootballKey
       ? await fetchFixtures(apiFootballKey).catch(e => ({ ok: false, http: 0, errors: String(e) } as FixtureResponse))
       : null;
@@ -722,13 +776,17 @@ export async function GET(request: NextRequest) {
       },
       verifiedCount: VERIFIED_RESULTS.length,
       mergedCount: merged.length,
+      leaderboardStats,
       source: apif?.ok && (apif.fixtures?.length ?? 0) > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
       sample: merged.slice(0, 3),
     }, { headers: LIVE_RESPONSE_HEADERS });
   }
 
   // Fetch from worldcup26.ir (primary) and optionally API-Football (enrichment)
-  const wc26 = await fetchWC26().catch(() => ({ ok: false, fixtures: [] as unknown[] }));
+  const [wc26, leaderboardStats] = await Promise.all([
+    fetchWC26().catch(() => ({ ok: false, fixtures: [] as unknown[] })),
+    fetchEspnLeaderStats(),
+  ]);
 
   let apif: FixtureResponse | null = null;
   let apifFixtures: unknown[] = [];
@@ -811,7 +869,7 @@ export async function GET(request: NextRequest) {
 
   if (!active && !hasLiveData) {
     return NextResponse.json(
-      { configured: !!apiFootballKey, active: false, ts: LAST ? LAST.ts : now, fixtures, enrichment },
+      { configured: !!apiFootballKey, active: false, ts: LAST ? LAST.ts : now, fixtures, enrichment, leaderboardStats },
       { headers: LIVE_RESPONSE_HEADERS }
     );
   }
@@ -826,6 +884,7 @@ export async function GET(request: NextRequest) {
       fixtures,
       source: apifFixtures.length > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
       enrichment,
+      leaderboardStats,
     },
     { headers: LIVE_RESPONSE_HEADERS }
   );

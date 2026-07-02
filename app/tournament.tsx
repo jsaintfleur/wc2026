@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
-import { buildTournamentStats, type PlayerLeader, type TournamentStats } from "@/lib/stats";
+import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type TournamentStats } from "@/lib/stats";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import TriondaBall from "@/app/components/TriondaBall";
 import WorldCupTrophy from "@/app/components/WorldCupTrophy";
@@ -50,6 +50,7 @@ type PersistedLiveData = {
   ts: number;
   source: "network" | "mock";
   fixtures: LiveFixture[];
+  leaderboardStats?: ExternalLeaderStat[];
 };
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -110,7 +111,12 @@ function getStartupLiveDataCache(): PersistedLiveData | null {
   return startupLiveDataCache;
 }
 
-function persistLiveData(fixtures: LiveFixture[], ts: number, source: PersistedLiveData["source"]) {
+function persistLiveData(
+  fixtures: LiveFixture[],
+  ts: number,
+  source: PersistedLiveData["source"],
+  leaderboardStats: ExternalLeaderStat[] = startupLiveDataCache?.leaderboardStats || [],
+) {
   if (typeof window === "undefined") return;
   const payload: PersistedLiveData = {
     version: LIVE_DATA_CACHE_VERSION,
@@ -118,6 +124,7 @@ function persistLiveData(fixtures: LiveFixture[], ts: number, source: PersistedL
     ts,
     source,
     fixtures,
+    leaderboardStats,
   };
   try {
     window.localStorage.setItem(LIVE_DATA_CACHE_KEY, JSON.stringify(payload));
@@ -554,6 +561,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
   const [stage, setStage] = useState("ALL");
   const [query, setQuery] = useState("");
   const [fixtures, setFixtures] = useState<LiveFixture[]>(() => getStartupLiveDataCache()?.fixtures || []);
+  const [leaderboardStats, setLeaderboardStats] = useState<ExternalLeaderStat[]>(() => getStartupLiveDataCache()?.leaderboardStats || []);
   const [liveStatus, setLiveStatus] = useState<LiveStatus>("init");
   const [liveTs, setLiveTs] = useState(() => getStartupLiveDataCache()?.ts || 0);
   const [, setLiveStale] = useState(false);
@@ -601,18 +609,21 @@ export default function Tournament({ data }: { data: TournamentData }) {
       if (!r.ok) throw new Error("fetch failed");
       const j = await r.json();
       const nextFixtures = Array.isArray(j.fixtures) ? j.fixtures : [];
+      const nextLeaderboardStats = Array.isArray(j.leaderboardStats) ? j.leaderboardStats : [];
       const nextTs = j.ts || Date.now();
       if (j.configured === false) {
         setLiveStatus("off");
         setFixtures(nextFixtures);
+        setLeaderboardStats(nextLeaderboardStats);
         setLiveTs(nextTs);
-        persistLiveData(nextFixtures, nextTs, "network");
+        persistLiveData(nextFixtures, nextTs, "network", nextLeaderboardStats);
         setLiveEnrichmentIssue(j.active ? "Live enrichment is not configured" : "");
         return;
       }
       setFixtures(nextFixtures);
+      setLeaderboardStats(nextLeaderboardStats);
       setLiveTs(nextTs);
-      persistLiveData(nextFixtures, nextTs, "network");
+      persistLiveData(nextFixtures, nextTs, "network", nextLeaderboardStats);
       setLiveStale(!!j.stale);
       const enrichmentUnhealthy = !!(j.enrichment?.required && !j.enrichment?.healthy);
       setLiveEnrichmentIssue(enrichmentUnhealthy ? "Live enrichment needs attention" : "");
@@ -630,6 +641,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
       const fallback = readPersistedLiveData("network failure");
       if (fallback && fixtures.length === 0) {
         setFixtures(fallback.fixtures);
+        setLeaderboardStats(fallback.leaderboardStats || []);
         setLiveTs(fallback.ts);
       }
       setLiveEnrichmentIssue("Live enrichment fetch failed");
@@ -1286,8 +1298,8 @@ export default function Tournament({ data }: { data: TournamentData }) {
 
   /** Aggregate tournament leaderboards from the shared real-time stats model. */
   const computeLeaders = useCallback((): TournamentStats => {
-    return buildTournamentStats(data, fixtures);
-  }, [data, fixtures]);
+    return buildTournamentStats(data, fixtures, { players: leaderboardStats });
+  }, [data, fixtures, leaderboardStats]);
 
   function renderAbout(): string {
     return `<div class="about">
@@ -1498,7 +1510,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
         ) : view === "teams" ? (
           <TeamsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} favs={favs} toggleFav={toggleFav} />
         ) : view === "more" ? (
-          <MoreView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
+          <MoreView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
         ) : (
           <main
             ref={mainRef}
@@ -2332,9 +2344,10 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
  * Sections: Hero, Progress, Quick Access, Stadiums, Host Cities,
  *           Calendar Timeline, History, App Settings
  * --------------------------------------------------------------- */
-function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: {
+function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigate, onTeamClick }: {
   data: TournamentData;
   fixtures: LiveFixture[];
+  leaderboardStats: ExternalLeaderStat[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
   onNavigate: (view: ViewType) => void;
@@ -2482,7 +2495,7 @@ function MoreView({ data, fixtures, findLive, nowMs, onNavigate, onTeamClick }: 
   /* =============================================================
    * 5. History and records
    * ============================================================= */
-  const tournamentStats = useMemo(() => buildTournamentStats(data, fixtures), [data, fixtures]);
+  const tournamentStats = useMemo(() => buildTournamentStats(data, fixtures, { players: leaderboardStats }), [data, fixtures, leaderboardStats]);
   const formatLeaderTie = (leaders: PlayerLeader[], value: (leader: PlayerLeader) => number, label: string) => {
     const topValue = leaders[0] ? value(leaders[0]) : 0;
     if (!topValue) return "Pending live data";

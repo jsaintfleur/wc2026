@@ -428,3 +428,47 @@ test("keeps richer persisted player assists when live players are present but lo
   assert.equal(stats.topAssisters[0].name, "Michael Olise");
   assert.equal(stats.topAssisters[0].assists, 5);
 });
+
+test("uses external leaderboard assists when match feeds are incomplete", () => {
+  const fixtures: LiveFixture[] = [{
+    ts: Date.UTC(2026, 5, 11),
+    status: "FT",
+    elapsed: 90,
+    venue: "Test Stadium",
+    round: "Group Stage",
+    home: "France",
+    away: "Mexico",
+    gh: 1,
+    ga: 0,
+    players: [{
+      name: "Alexander Isak",
+      number: 9,
+      team: "Sweden",
+      minutes: 90,
+      rating: "7.5",
+      goals: 0,
+      assists: 3,
+      shots: 1,
+      shotsOn: 1,
+      passes: 30,
+      passAccuracy: "80%",
+      tackles: 0,
+      duels: 1,
+      duelsWon: 1,
+      dribbles: 0,
+      dribblesSuccess: 0,
+      foulsDrawn: 0,
+      foulsCommitted: 0,
+      yellowCards: 0,
+      redCards: 0,
+      saves: 0,
+    }],
+  }];
+
+  const stats = buildTournamentStats(baseData, fixtures, {
+    players: [{ name: "Michael Olise", team: "France", assists: 5, matches: 4 }],
+  });
+
+  assert.equal(stats.topAssisters[0].name, "Michael Olise");
+  assert.equal(stats.topAssisters[0].assists, 5);
+});

@@ -281,3 +281,67 @@ test("separates match-score goal totals from credited player leaderboard goals",
   assert.equal(stats.topScorers[0].goals, 1);
   assert.equal(stats.topAssisters[0].name, "Timothy Weah");
 });
+
+test("keeps richer persisted player assists when live fixture payload is thinner", () => {
+  const dataWithPersistedState: TournamentData = {
+    ...baseData,
+    gs: [{
+      no: 1,
+      iso: "2026-06-11",
+      local: "12:00",
+      et: "3:00 PM",
+      g: "A",
+      t1: "United States",
+      t2: "Mexico",
+      v: "TST",
+      ts: Date.UTC(2026, 5, 11),
+      dbStatus: "FT",
+      dbGh: 1,
+      dbGa: 0,
+      dbPlayers: [{
+        name: "Michael Olise",
+        number: 11,
+        team: "United States",
+        minutes: 90,
+        rating: "8.5",
+        goals: 0,
+        assists: 5,
+        shots: 1,
+        shotsOn: 1,
+        passes: 45,
+        passAccuracy: "90%",
+        tackles: 0,
+        duels: 3,
+        duelsWon: 2,
+        dribbles: 2,
+        dribblesSuccess: 2,
+        foulsDrawn: 1,
+        foulsCommitted: 0,
+        yellowCards: 0,
+        redCards: 0,
+        saves: 0,
+      }],
+    }],
+  };
+
+  const fixtures: LiveFixture[] = [{
+    ts: Date.UTC(2026, 5, 11),
+    status: "FT",
+    elapsed: 90,
+    venue: "Test Stadium",
+    round: "Group Stage",
+    home: "United States",
+    away: "Mexico",
+    gh: 1,
+    ga: 0,
+    events: [
+      { minute: 20, extra: null, type: "Goal", detail: "Normal Goal", player: "Christian Pulisic", assist: null, team: "United States" },
+    ],
+  }];
+
+  const stats = buildTournamentStats(dataWithPersistedState, fixtures);
+
+  assert.equal(stats.topAssisters[0].name, "Michael Olise");
+  assert.equal(stats.topAssisters[0].assists, 5);
+  assert.equal(stats.matchesWithAssistData, 1);
+});

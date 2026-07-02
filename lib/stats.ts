@@ -93,6 +93,25 @@ type FinishedMatch = {
   assistDataMissing?: boolean;
 };
 
+function richerEvents(primary?: MatchEvent[], fallback?: MatchEvent[]): MatchEvent[] | undefined {
+  if (!primary?.length) return fallback;
+  if (!fallback?.length) return primary;
+  const primaryAssistCount = primary.filter(e => e.type === "Goal" && !isOwnGoal(e) && !!e.assist?.trim()).length;
+  const fallbackAssistCount = fallback.filter(e => e.type === "Goal" && !isOwnGoal(e) && !!e.assist?.trim()).length;
+  return fallbackAssistCount > primaryAssistCount ? fallback : primary;
+}
+
+function mergeFinishedMatch(primary: FinishedMatch, fallback: FinishedMatch): FinishedMatch {
+  return {
+    ...primary,
+    events: richerEvents(primary.events, fallback.events),
+    players: primary.players?.length ? primary.players : fallback.players,
+    assistDataMissing: primary.assistDataMissing === false || fallback.assistDataMissing === false
+      ? false
+      : primary.assistDataMissing ?? fallback.assistDataMissing,
+  };
+}
+
 function teamNames(data: TournamentData): Set<string> {
   return new Set(Object.values(data.groups).flat().map(team => canon(team)));
 }
@@ -187,8 +206,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
   for (const f of fixtures) {
     if (!STATS_DONE_STATUSES.has(f.status) || f.gh == null || f.ga == null) continue;
     const key = `${canon(f.home)}:${canon(f.away)}`;
-    if (finishedMap.has(key)) continue;
-    finishedMap.set(key, {
+    const next: FinishedMatch = {
       key,
       home: f.home,
       away: f.away,
@@ -197,14 +215,15 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
       events: f.events,
       players: f.players,
       assistDataMissing: f.assistDataMissing,
-    });
+    };
+    const existing = finishedMap.get(key);
+    finishedMap.set(key, existing ? mergeFinishedMatch(existing, next) : next);
   }
 
   for (const m of data.gs) {
     if (!m.dbStatus || !STATS_DONE_STATUSES.has(m.dbStatus) || m.dbGh == null || m.dbGa == null) continue;
     const key = `${canon(m.t1)}:${canon(m.t2)}`;
-    if (finishedMap.has(key)) continue;
-    finishedMap.set(key, {
+    const next: FinishedMatch = {
       key,
       home: m.t1,
       away: m.t2,
@@ -212,7 +231,9 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
       ga: m.dbGa,
       events: m.dbEvents,
       players: m.dbPlayers,
-    });
+    };
+    const existing = finishedMap.get(key);
+    finishedMap.set(key, existing ? mergeFinishedMatch(existing, next) : next);
   }
 
   const processCard = (ev: MatchEvent) => {

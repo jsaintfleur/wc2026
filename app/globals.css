@@ -8934,7 +8934,10 @@ button.settings-row:active,
 .map-shell { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: stretch; }
 .map-canvas-card { position: relative; min-height: 640px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; background: #07111d; }
 .map-canvas-scroll { width: 100%; height: 100%; overflow: auto; overscroll-behavior: contain; }
-.host-map { width: 100%; min-width: 720px; height: 100%; min-height: 640px; transform-origin: center; transition: transform .18s ease; }
+/* --map-zoom scales the SVG's real layout size (set inline from React) so
+   the scroll shell gains scrollable extent — a CSS transform would visually
+   grow the map without letting users pan to the clipped edges. */
+.host-map { display: block; width: calc(var(--map-zoom, 1) * 100%); min-width: calc(var(--map-zoom, 1) * 720px); height: auto; min-height: 640px; transition: width .18s ease, min-width .18s ease; }
 .map-controls { position: absolute; z-index: 3; top: 14px; right: 14px; display: grid; gap: 6px; }
 .map-controls button { width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; color: #fff; background: rgba(8,13,24,0.78); font-size: 22px; cursor: pointer; }
 .map-line { fill: none; stroke: rgba(255,255,255,0.07); stroke-width: 2; stroke-dasharray: 4 10; }
@@ -8986,7 +8989,7 @@ button.settings-row:active,
   .map-hero__stats { min-width: 0; }
   .map-shell { display: block; }
   .map-canvas-card { min-height: calc(100svh - 245px); border-radius: 20px; }
-  .host-map { min-width: 820px; min-height: calc(100svh - 245px); }
+  .host-map { min-width: calc(var(--map-zoom, 1) * 820px); min-height: calc(100svh - 245px); }
   .map-panel { position: sticky; bottom: calc(74px + env(safe-area-inset-bottom)); z-index: 5; max-height: 54svh; margin: -130px 10px 0; border-radius: 22px 22px 0 0; }
   .map-panel__handle { display: block; }
   .map-panel__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }

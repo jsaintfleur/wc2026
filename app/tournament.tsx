@@ -2673,8 +2673,11 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
           <div className="map-canvas-scroll">
             {/* role="group" (not "img") — an img role would flatten the whole
                 subtree in the accessibility tree and hide the interactive
-                venue markers from screen readers. */}
-            <svg className="host-map" viewBox="0 0 1000 620" style={{ transform: `scale(${zoom})` }} role="group" aria-label="Map of World Cup 2026 host venues">
+                venue markers from screen readers.
+                Zoom drives the SVG's laid-out width via --map-zoom rather
+                than transform: scale() — transforms don't grow the scroll
+                extent, which made zoomed-in coasts unreachable. */}
+            <svg className="host-map" viewBox="0 0 1000 620" style={{ "--map-zoom": zoom } as CSSProperties} role="group" aria-label="Map of World Cup 2026 host venues">
               <defs>
                 <linearGradient id="mapLand" x1="0" x2="1" y1="0" y2="1">
                   <stop offset="0%" stopColor="#173926" />

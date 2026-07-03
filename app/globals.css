@@ -9014,7 +9014,9 @@ button.settings-row:active,
 .team-journey-stop b, .team-journey-stop small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team-journey-stop small { color: var(--muted); font-size: 11px; }
 .team-journey-stop em { color: var(--gold-bright); font-style: normal; font-size: 11px; font-weight: 800; }
-@media (max-width: 860px) {
+/* 768px matches the app-wide mobile/desktop boundary (see other views) —
+   the previous 860px gave tablets desktop chrome with a mobile map sheet. */
+@media (max-width: 768px) {
   .map-hero, .map-toolbar { flex-direction: column; align-items: stretch; }
   .map-hero__stats { min-width: 0; }
   .map-shell { display: block; }

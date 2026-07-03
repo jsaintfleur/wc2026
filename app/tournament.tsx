@@ -2607,6 +2607,10 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
 
     const knockoutMatches = data.ko.map((m, index): MapMatch => {
       const fixture = findLive({ ts: m.ts, v: m.v }, fixtures);
+      // Synthetic numbering: 73+ by chronological order. FIFA's official
+      // in-round slot numbers are not strictly chronological — replace with
+      // a real `no` field on each ko entry once official numbering is
+      // confirmed rather than trusting this derivation.
       const no = index + 73;
       return {
         key: `ko-${no}`,
@@ -2649,7 +2653,6 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
       capacity: venue.cap,
       timezone: "America/New_York",
       imageUrl: null,
-      matchesHosted: 0,
     } satisfies VenueDetails;
     const matches = mapMatches.filter(match => match.venueId === venueId);
     const liveCount = matches.filter(match => matchStatus(match, nowMs) === "live").length;
@@ -2763,7 +2766,9 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   }, [activeVenueId, zoom, prefs.rememberMap]);
 
   return (
-    <main className="map-view" aria-label="World Cup 2026 host map">
+    // <section>, not <main> — the app shell already renders the single
+    // <main id="main-content"> landmark; nesting mains breaks AT navigation.
+    <section className="map-view" aria-label="World Cup 2026 host map">
       <section className="map-hero">
         <div>
           <span className="map-hero__eyebrow">Tournament Geography</span>
@@ -2830,11 +2835,11 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
               </defs>
               <rect x="0" y="0" width="1000" height="620" rx="34" fill="#07111d" />
               <path d="M75 115 C165 60 245 62 330 92 C430 126 520 88 625 116 C742 147 855 120 932 175 L930 520 C792 560 672 520 546 546 C420 573 308 545 188 565 C120 576 72 540 50 486 Z" fill="url(#mapLand)" stroke="rgba(255,255,255,.1)" strokeWidth="2" />
-              <path d="M152 142 C218 183 254 238 260 310 C266 382 235 446 204 526" className="map-line map-line--west" />
+              <path d="M152 142 C218 183 254 238 260 310 C266 382 235 446 204 526" className="map-line" />
               <path d="M335 126 C376 215 391 320 374 448" className="map-line" />
               <path d="M515 138 C535 236 522 352 556 512" className="map-line" />
               <path d="M712 142 C750 230 764 350 748 512" className="map-line" />
-              <path d="M145 482 C300 440 466 431 610 454 C724 472 808 438 900 390" className="map-line map-line--south" />
+              <path d="M145 482 C300 440 466 431 610 454 C724 472 808 438 900 390" className="map-line" />
               {routePoints.length > 1 && (
                 <polyline
                   points={routePoints.map(point => `${point.x},${point.y}`).join(" ")}
@@ -2980,7 +2985,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
           )}
         </section>
       )}
-    </main>
+    </section>
   );
 }, (prev, next) =>
   prev.data === next.data &&

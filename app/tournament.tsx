@@ -2622,6 +2622,16 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
 
   const openMatch = (match: MapMatch) => onMatchClick(match.sourceMatch, match.fixture);
 
+  /* Keep the venue panel in sync with the active filter: if the selected
+     venue drops out of the filtered set (e.g. panel shows MetLife, user taps
+     "Mexico"), jump to the first venue that matches. A completely empty
+     filter keeps the selection and shows an explicit empty state instead. */
+  useEffect(() => {
+    if (filteredVenueIds.size === 0 || filteredVenueIds.has(activeVenueId)) return;
+    const first = venueModels.find(venue => filteredVenueIds.has(venue.venueId));
+    if (first) setActiveVenueId(first.venueId);
+  }, [filteredVenueIds, activeVenueId, venueModels]);
+
   return (
     <main className="map-view" aria-label="World Cup 2026 host map">
       <section className="map-hero">
@@ -2745,6 +2755,9 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
                 );
               })}
             </svg>
+            {filteredVenueIds.size === 0 && (
+              <p className="map-empty" role="status">No venues match this filter. Try a different filter or team.</p>
+            )}
           </div>
         </div>
 
@@ -2776,6 +2789,9 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
             </button>
 
             <div className="venue-timeline" aria-label="Venue match timeline">
+              {panelMatches.length === 0 && (
+                <p className="map-panel__empty" role="status">No matches at this venue for the current selection.</p>
+              )}
               {panelMatches.map(match => {
                 const status = matchStatus(match, nowMs);
                 const score = matchScoreLabel(match);

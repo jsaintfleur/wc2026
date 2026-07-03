@@ -1708,8 +1708,10 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
           type: "ko",
           match: m,
           fixture: f,
-          home: f.home || "TBD",
-          away: f.away || "TBD",
+          // canon() maps vendor names ("Cape Verde Islands", "Korea
+          // Republic") to app names — fixes flag lookups and long labels
+          home: f.home ? canon(f.home) : "TBD",
+          away: f.away ? canon(f.away) : "TBD",
           venue: data.venues[m.v]?.common || m.v,
         });
       }
@@ -1742,8 +1744,8 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
           match,
           fixture,
           ts: match.ts,
-          home: fixture?.home || "TBD",
-          away: fixture?.away || "TBD",
+          home: fixture?.home ? canon(fixture.home) : "TBD",
+          away: fixture?.away ? canon(fixture.away) : "TBD",
           venue: data.venues[match.v]?.common || match.v,
           iso: match.iso,
           et: match.et,
@@ -1784,7 +1786,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
         const synthMatch: GroupStageMatch = {
           no: parseInt(m.mr.replace("M", ""), 10) || 0,
           iso: m.iso, local: m.local, et: m.et,
-          g: "KO", t1: f.home || "TBD", t2: f.away || "TBD",
+          g: "KO", t1: f.home ? canon(f.home) : "TBD", t2: f.away ? canon(f.away) : "TBD",
           v: m.v, ts: m.ts,
         };
         return { match: synthMatch, fixture: f, roundLabel: m.round };
@@ -1843,12 +1845,12 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
               <div className="home-live-card__teams">
                 <div className="home-live-card__side">
                   <span className="home-live-card__flag">{fl(home)}</span>
-                  <span className="home-live-card__name">{home}</span>
+                  <span className={`home-live-card__name${home.length > 11 ? " home-live-card__name--long" : ""}`}>{home}</span>
                 </div>
                 <div className="home-live-card__score">{fixture.gh ?? 0} – {fixture.ga ?? 0}</div>
                 <div className="home-live-card__side">
                   <span className="home-live-card__flag">{fl(away)}</span>
-                  <span className="home-live-card__name">{away}</span>
+                  <span className={`home-live-card__name${away.length > 11 ? " home-live-card__name--long" : ""}`}>{away}</span>
                 </div>
               </div>
               <div className="home-live-card__venue">{venue}</div>
@@ -2684,8 +2686,8 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
         local: m.local,
         et: m.et,
         stage: m.round,
-        homeTeam: fixture?.home || "TBD",
-        awayTeam: fixture?.away || "TBD",
+        homeTeam: fixture?.home ? canon(fixture.home) : "TBD",
+        awayTeam: fixture?.away ? canon(fixture.away) : "TBD",
         fixture,
         sourceMatch: {
           no,
@@ -2693,8 +2695,8 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
           local: m.local,
           et: m.et,
           g: "",
-          t1: fixture?.home || "TBD",
-          t2: fixture?.away || "TBD",
+          t1: fixture?.home ? canon(fixture.home) : "TBD",
+          t2: fixture?.away ? canon(fixture.away) : "TBD",
           v: m.v,
           ts: m.ts,
         },

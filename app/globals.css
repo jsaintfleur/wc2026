@@ -1453,16 +1453,29 @@ body::after {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Both sides claim equal width so a long name (Bosnia & Herzegovina)
+     can't shove the score off-center */
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: flex-end;
 }
+
+.home-live-card__side:last-child { justify-content: flex-start; }
 
 .home-live-card__flag { font-size: 28px; line-height: 1; }
 
 .home-live-card__name {
+  min-width: 0;
   font-family: var(--disp);
   font-size: 18px;
   font-weight: 800;
   text-transform: uppercase;
+  line-height: 1.1;
+  text-wrap: balance;
 }
+
+/* Long canonical names scale down instead of dominating the card */
+.home-live-card__name--long { font-size: 14px; letter-spacing: .2px; }
 
 .home-live-card__score {
   font-family: var(--disp);

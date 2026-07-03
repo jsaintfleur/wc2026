@@ -43,3 +43,6 @@ next-env.d.ts
 
 # prisma generated client
 lib/generated/
+
+# squad-photo fetch script checkpoint (working state, not source)
+scripts/.squad-photos-progress.json

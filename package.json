@@ -13,7 +13,8 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "npx tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "photos:fetch": "tsx scripts/fetch-squad-photos.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

@@ -5,6 +5,7 @@ import { HOST_VENUE_DETAILS, MOCK_FIXTURES, type TournamentData, type LiveFixtur
 import { nrm, canon, canonPlayer } from "@/lib/merge";
 import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type TournamentStats } from "@/lib/stats";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
+import { PLAYER_PHOTO_IDS, playerPhotoUrl } from "@/lib/player-photos";
 import TriondaBall from "@/app/components/TriondaBall";
 import WorldCupTrophy from "@/app/components/WorldCupTrophy";
 
@@ -4891,11 +4892,13 @@ function PlayerAvatar({ playerName, teamName, player, size = "md", className = "
   size?: PlayerAvatarSize;
   className?: string;
 }) {
-  /* Direct source first, then the global index — so a roster entry without
-     its own URL still shows the headshot captured from live match data. */
+  /* Resolution order: direct source (fixture data) → live-data index (ESPN
+     leaders + match payloads) → baked-in squad photos from the one-time
+     fetch script (covers bench players who never appear in live data). */
   const src = playerImageUrl(player)
     || PLAYER_IMAGE_INDEX.get(playerImageKey(playerName, teamName))
     || PLAYER_IMAGE_INDEX.get(playerImageKey(playerName))
+    || playerPhotoUrl(PLAYER_PHOTO_IDS[playerImageKey(playerName, teamName)] ?? PLAYER_PHOTO_IDS[playerImageKey(playerName)])
     || null;
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const showImage = !!src && src !== failedSrc;

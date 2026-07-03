@@ -2400,11 +2400,19 @@ function countryFilterKey(country: string): MapFilter {
   return "mexico";
 }
 
+/* Equirectangular projection onto the 1000x620 viewBox. The longitude
+   domain must reach -70 so Gillette Stadium (Foxborough, -71.26) projects
+   inside the frame — a -72 east edge clamped Boston off its true position. */
 function mapPoint(venue: VenueDetails): { x: number; y: number } {
-  const x = ((venue.longitude + 128) / 56) * 1000;
+  const x = ((venue.longitude + 128) / 58) * 1000;
   const y = ((52 - venue.latitude) / 36) * 620;
   return { x: Math.max(18, Math.min(982, x)), y: Math.max(18, Math.min(602, y)) };
 }
+
+/* Northeast venues cluster tightly (Boston / New York / Philadelphia); these
+   labels anchor to the LEFT of their marker so they stay on the map and
+   don't stack on each other. */
+const MAP_LABEL_LEFT_VENUES = new Set(["GILLETTE", "METLIFE"]);
 
 /* Map match status mirrors the Schedule view's source precedence exactly
    (see renderSchedule's isMatchDone/isLiveMatch): fresh live-vendor fixture
@@ -2723,7 +2731,12 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
                     >
                       <circle cx={point.x} cy={point.y} r={active ? 13 : 10} className="map-marker" />
                     </g>
-                    <text x={point.x + 14} y={point.y - 12} className="map-marker-label">{venue.city}</text>
+                    <text
+                      x={MAP_LABEL_LEFT_VENUES.has(venue.venueId) ? point.x - 14 : point.x + 14}
+                      y={point.y - 12}
+                      textAnchor={MAP_LABEL_LEFT_VENUES.has(venue.venueId) ? "end" : "start"}
+                      className="map-marker-label"
+                    >{venue.city}</text>
                     <title>{venue.stadiumName} · {venue.matchesHosted} matches</title>
                   </g>
                 );

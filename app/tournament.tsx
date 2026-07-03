@@ -2420,6 +2420,24 @@ function matchScoreLabel(match: MapMatch): string {
   return base;
 }
 
+/* Formatter cache — Intl.DateTimeFormat construction is expensive and the
+   map re-evaluates filters often; one formatter per venue timezone. */
+const VENUE_DAY_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+
+/* Today's YYYY-MM-DD in a venue's own timezone. Match dates (`iso`) are
+   stored venue-local, so "Today" must be venue-local too — comparing against
+   the browser's calendar date shows the wrong slate for users in other
+   timezones (a 9 PM Vancouver kickoff is already "tomorrow" in Europe). */
+function venueTodayISO(timezone: string, nowMs: number): string {
+  let fmt = VENUE_DAY_FORMATTERS.get(timezone);
+  if (!fmt) {
+    // en-CA renders as YYYY-MM-DD, matching the schedule's iso format
+    fmt = new Intl.DateTimeFormat("en-CA", { timeZone: timezone });
+    VENUE_DAY_FORMATTERS.set(timezone, fmt);
+  }
+  return fmt.format(new Date(nowMs));
+}
+
 function formatVenueLocalTime(ts: number, timezone: string): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
@@ -2527,7 +2545,6 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
   }).sort((a, b) => b.liveCount - a.liveCount || b.matchesHosted - a.matchesHosted || a.city.localeCompare(b.city)), [data.venues, mapMatches, nowMs]);
 
   const activeVenue = venueModels.find(venue => venue.venueId === activeVenueId) || venueModels[0];
-  const today = todayISO();
   const selectedTeamCanon = selectedTeam === "ALL" ? "" : canon(selectedTeam);
 
   const teamJourney = useMemo(() => {
@@ -2546,7 +2563,7 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
         : venue.matches.filter(match => [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon));
       const hasMatch = venueMatches.some(match => {
         const status = matchStatus(match.fixture, match.ts, nowMs);
-        if (filter === "today") return match.iso === today;
+        if (filter === "today") return match.iso === venueTodayISO(venue.timezone, nowMs);
         if (filter === "live") return status === "live";
         if (filter === "upcoming") return status === "upcoming";
         if (filter === "completed") return status === "completed";
@@ -2559,7 +2576,7 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
       if (countryMatch && hasMatch) ids.add(venue.venueId);
     }
     return ids;
-  }, [venueModels, selectedTeam, selectedTeamCanon, filter, nowMs, today]);
+  }, [venueModels, selectedTeam, selectedTeamCanon, filter, nowMs]);
 
   const panelMatches = activeVenue.matches
     .filter(match => selectedTeam === "ALL" || [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon))

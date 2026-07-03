@@ -2406,18 +2406,43 @@ function mapPoint(venue: VenueDetails): { x: number; y: number } {
   return { x: Math.max(18, Math.min(982, x)), y: Math.max(18, Math.min(602, y)) };
 }
 
-function matchStatus(fixture: LiveFixture | null, ts: number, nowMs: number): "live" | "completed" | "upcoming" {
-  if (fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(ts, fixture.status, nowMs)) return "live";
-  if (fixture && DONE_STATUSES.has(fixture.status)) return "completed";
-  return ts > nowMs ? "upcoming" : "completed";
+/* Map match status mirrors the Schedule view's source precedence exactly
+   (see renderSchedule's isMatchDone/isLiveMatch): fresh live-vendor fixture
+   first, then the DB-ingested dbStatus/dbGh/dbGa fallback, with the same
+   isStaleStatus guard. Without the DB fallback the map disagreed with the
+   Schedule tab whenever the vendor fixture was missing. */
+function matchStatus(match: MapMatch, nowMs: number): "live" | "completed" | "upcoming" {
+  const f = match.fixture;
+  const { ts, sourceMatch } = match;
+  const db = sourceMatch.dbStatus;
+  // Same staleness rule the schedule applies: a live status that has not
+  // updated long past its plausible window is treated as unreliable.
+  const stale = (f && isStaleStatus(ts, f.status, nowMs)) || (!f && db && isStaleStatus(ts, db, nowMs));
+  if (!stale) {
+    if (f && LIVE_STATUSES.has(f.status)) return "live";
+    if (!f && db && LIVE_STATUSES.has(db)) return "live";
+  }
+  if (f && DONE_STATUSES.has(f.status)) return "completed";
+  if (db && DONE_STATUSES.has(db) && sourceMatch.dbGh != null && sourceMatch.dbGa != null) return "completed";
+  if (ts > nowMs) return "upcoming";
+  // Kickoff has passed but no source confirms a result: hold as "upcoming"
+  // for the plausible match window (~150 min) instead of fabricating
+  // "completed" while play may still be under way.
+  return nowMs - ts < 150 * 60000 ? "upcoming" : "completed";
 }
 
 function matchScoreLabel(match: MapMatch): string {
   const f = match.fixture;
-  if (!f || f.gh == null || f.ga == null) return "";
-  const base = `${f.gh}-${f.ga}`;
-  if (f.penHome != null && f.penAway != null) return `${base} (${f.penHome}-${f.penAway} pens)`;
-  return base;
+  if (f && f.gh != null && f.ga != null) {
+    const base = `${f.gh}-${f.ga}`;
+    if (f.penHome != null && f.penAway != null) return `${base} (${f.penHome}-${f.penAway} pens)`;
+    return base;
+  }
+  // DB-ingested final score when the live vendor fixture is missing —
+  // keeps map scores consistent with the Schedule view.
+  const sm = match.sourceMatch;
+  if (sm.dbGh != null && sm.dbGa != null) return `${sm.dbGh}-${sm.dbGa}`;
+  return "";
 }
 
 /* Formatter cache — Intl.DateTimeFormat construction is expensive and the
@@ -2538,9 +2563,9 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
       matchesHosted: 0,
     } satisfies VenueDetails;
     const matches = mapMatches.filter(match => match.venueId === venueId);
-    const liveCount = matches.filter(match => matchStatus(match.fixture, match.ts, nowMs) === "live").length;
-    const completedCount = matches.filter(match => matchStatus(match.fixture, match.ts, nowMs) === "completed").length;
-    const upcomingCount = matches.filter(match => matchStatus(match.fixture, match.ts, nowMs) === "upcoming").length;
+    const liveCount = matches.filter(match => matchStatus(match, nowMs) === "live").length;
+    const completedCount = matches.filter(match => matchStatus(match, nowMs) === "completed").length;
+    const upcomingCount = matches.filter(match => matchStatus(match, nowMs) === "upcoming").length;
     return { ...detail, stadiumName: venue.common, capacity: venue.cap, matchesHosted: matches.length, matches, liveCount, completedCount, upcomingCount };
   }).sort((a, b) => b.liveCount - a.liveCount || b.matchesHosted - a.matchesHosted || a.city.localeCompare(b.city)), [data.venues, mapMatches, nowMs]);
 
@@ -2562,7 +2587,7 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
         ? venue.matches
         : venue.matches.filter(match => [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon));
       const hasMatch = venueMatches.some(match => {
-        const status = matchStatus(match.fixture, match.ts, nowMs);
+        const status = matchStatus(match, nowMs);
         if (filter === "today") return match.iso === venueTodayISO(venue.timezone, nowMs);
         if (filter === "live") return status === "live";
         if (filter === "upcoming") return status === "upcoming";
@@ -2581,7 +2606,7 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
   const panelMatches = activeVenue.matches
     .filter(match => selectedTeam === "ALL" || [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon))
     .sort((a, b) => a.ts - b.ts);
-  const liveMatches = mapMatches.filter(match => matchStatus(match.fixture, match.ts, nowMs) === "live");
+  const liveMatches = mapMatches.filter(match => matchStatus(match, nowMs) === "live");
   const routePoints = teamJourney.map(match => {
     const venue = venueModels.find(v => v.venueId === match.venueId);
     return venue ? mapPoint(venue) : null;
@@ -2736,7 +2761,7 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
 
             <div className="venue-timeline" aria-label="Venue match timeline">
               {panelMatches.map(match => {
-                const status = matchStatus(match.fixture, match.ts, nowMs);
+                const status = matchStatus(match, nowMs);
                 const score = matchScoreLabel(match);
                 return (
                   <button key={match.key} type="button" className={`venue-timeline__item venue-timeline__item--${status}`} onClick={() => openMatch(match)}>
@@ -2767,7 +2792,7 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
               {teamJourney.map((match, index) => {
                 const venue = venueModels.find(v => v.venueId === match.venueId);
                 const score = matchScoreLabel(match);
-                const status = matchStatus(match.fixture, match.ts, nowMs);
+                const status = matchStatus(match, nowMs);
                 return (
                   <button key={match.key} type="button" className="team-journey-stop" onClick={() => openMatch(match)}>
                     <span>{index + 1}</span>

@@ -1524,6 +1524,16 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
             findLive={findLive}
             nowMs={nowMs}
             onMatchClick={(match, fixture) => setMatchDetail({ match, fixture })}
+            onViewVenueMatches={(stadiumName) => {
+              /* Land on the Schedule filtered to this stadium: the schedule's
+                 search matches venue names, and the query stays visible in
+                 the search box so the user can clear it. */
+              setQuery(stadiumName);
+              setStage("ALL");
+              setGroup("ALL");
+              setTeam("ALL");
+              handleTab("schedule");
+            }}
           />
         ) : view === "more" ? (
           <MoreView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
@@ -2420,12 +2430,13 @@ function formatVenueLocalTime(ts: number, timezone: string): string {
   }).format(new Date(ts));
 }
 
-function MapView({ data, fixtures, findLive, nowMs, onMatchClick }: {
+function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMatches }: {
   data: TournamentData;
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
   onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
+  onViewVenueMatches: (stadiumName: string) => void;
 }) {
   const [activeVenueId, setActiveVenueId] = useState("METLIFE");
   const [filter, setFilter] = useState<MapFilter>("all");
@@ -2702,7 +2713,9 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick }: {
               <span><b>{activeVenue.liveCount}</b> live</span>
             </div>
 
-            <button type="button" className="map-panel__cta" onClick={() => setFilter("all")}>View matches</button>
+            <button type="button" className="map-panel__cta" onClick={() => onViewVenueMatches(activeVenue.stadiumName)}>
+              View matches at this stadium
+            </button>
 
             <div className="venue-timeline" aria-label="Venue match timeline">
               {panelMatches.map(match => {

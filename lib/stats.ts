@@ -31,6 +31,9 @@ export const STATS_LIVE_STATUSES = new Set(["1H", "2H", "HT", "ET", "BT", "P", "
 export type PlayerLeader = {
   name: string;
   team: string;
+  imageUrl?: string | null;
+  headshotUrl?: string | null;
+  avatarUrl?: string | null;
   goals: number;
   penalties: number;
   assists: number;
@@ -85,6 +88,9 @@ export type TournamentStats = {
 export type ExternalLeaderStat = {
   name: string;
   team: string;
+  imageUrl?: string | null;
+  headshotUrl?: string | null;
+  avatarUrl?: string | null;
   goals?: number;
   assists?: number;
   yellows?: number;
@@ -176,6 +182,20 @@ function ensurePlayer(players: Record<string, PlayerLeader>, name: string, team:
     players[key].name = normalizedName;
   }
   return players[key];
+}
+
+function playerImageUrl(player: { imageUrl?: string | null; headshotUrl?: string | null; avatarUrl?: string | null }): string | null {
+  return player.headshotUrl || player.imageUrl || player.avatarUrl || null;
+}
+
+function applyPlayerImage(
+  leader: PlayerLeader,
+  source: { imageUrl?: string | null; headshotUrl?: string | null; avatarUrl?: string | null },
+) {
+  if (leader.headshotUrl || leader.imageUrl || leader.avatarUrl || !playerImageUrl(source)) return;
+  leader.headshotUrl = source.headshotUrl ?? null;
+  leader.imageUrl = source.imageUrl ?? null;
+  leader.avatarUrl = source.avatarUrl ?? null;
 }
 
 function isShootoutGoal(ev: MatchEvent): boolean {
@@ -356,6 +376,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
       for (const p of fm.players!) {
         if (!isValidPlayerName(p.name, countryTeamNames) || !p.team) continue;
         const player = ensure(p.name, p.team);
+        applyPlayerImage(player, p);
         if (!hasEvents && p.goals > 0) player.goals += p.goals;
         if (p.assists > 0) {
           player.assists += p.assists;
@@ -407,6 +428,7 @@ export function buildTournamentStats(data: TournamentData, fixtures: LiveFixture
   for (const external of externalStats.players || []) {
     if (!isValidPlayerName(external.name, countryTeamNames) || !external.team) continue;
     const player = ensure(external.name, external.team);
+    applyPlayerImage(player, external);
     player.goals = Math.max(player.goals, external.goals || 0);
     player.assists = Math.max(player.assists, external.assists || 0);
     player.yellows = Math.max(player.yellows, external.yellows || 0);

@@ -340,7 +340,7 @@ interface FixtureResponse {
 
 type VendorStat = { type?: string; value?: string | number | null };
 type VendorPlayer = {
-  player?: { id?: number; name?: string; number?: number; pos?: string; grid?: string | null };
+  player?: { id?: number; name?: string; number?: number; pos?: string; grid?: string | null; photo?: string | null; image?: string | null };
   statistics?: Array<{
     games?: { minutes?: number | null; rating?: string | number | null };
     goals?: { total?: number; assists?: number; saves?: number };
@@ -379,6 +379,9 @@ type VendorFixture = {
 type LeaderboardStat = {
   name: string;
   team: string;
+  imageUrl?: string | null;
+  headshotUrl?: string | null;
+  avatarUrl?: string | null;
   goals?: number;
   assists?: number;
   matches?: number;
@@ -427,10 +430,14 @@ function mapVendorLineups(f: VendorFixture) {
       startXI: (l.startXI || []).map((p) => ({
         name: p.player?.name ?? "", number: p.player?.number ?? 0,
         pos: p.player?.pos ?? "", grid: p.player?.grid ?? null,
+        imageUrl: p.player?.photo ?? p.player?.image ?? null,
+        headshotUrl: p.player?.photo ?? null,
       })),
       substitutes: (l.substitutes || []).map((p) => ({
         name: p.player?.name ?? "", number: p.player?.number ?? 0,
         pos: p.player?.pos ?? "", grid: p.player?.grid ?? null,
+        imageUrl: p.player?.photo ?? p.player?.image ?? null,
+        headshotUrl: p.player?.photo ?? null,
       })),
     }))
     : undefined;
@@ -445,6 +452,8 @@ function mapVendorPlayers(f: VendorFixture) {
         const s = p.statistics?.[0] || {};
         return {
           id: p.player?.id ?? null, name: p.player?.name ?? "", number: p.player?.number ?? 0, team: teamName,
+          imageUrl: p.player?.photo ?? p.player?.image ?? null,
+          headshotUrl: p.player?.photo ?? null,
           minutes: s.games?.minutes ?? null, rating: s.games?.rating ?? null,
           goals: s.goals?.total ?? 0, assists: s.goals?.assists ?? 0,
           shots: s.shots?.total ?? 0, shotsOn: s.shots?.on ?? 0,
@@ -593,6 +602,16 @@ async function fetchEspnLeaderStats(): Promise<LeaderboardStat[]> {
         const value = Math.round(entry.value || 0);
         if (!name || !team || value <= 0) continue;
         const leader = ensure(name, team);
+        const headshot =
+          athlete.headshot?.href ||
+          athlete.headshot ||
+          athlete.image?.href ||
+          athlete.image ||
+          null;
+        if (typeof headshot === "string" && headshot) {
+          leader.headshotUrl ||= headshot;
+          leader.imageUrl ||= headshot;
+        }
         leader[field] = Math.max(leader[field] || 0, value);
         const appearances = (athlete.statistics || []).find((s: { name?: string }) => s.name === "appearances");
         if (appearances?.value) leader.matches = Math.max(leader.matches || 0, Math.round(appearances.value));

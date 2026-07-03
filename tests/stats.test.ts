@@ -258,16 +258,19 @@ test("uses the same normalized model for goals and cards", () => {
 });
 
 test("separates match-score goal totals from credited player leaderboard goals", () => {
-  const fixtures = [
+  const fixtures: LiveFixture[] = [
     {
       home: "United States",
       away: "Mexico",
       gh: 3,
       ga: 2,
       status: "FT",
+      elapsed: 90,
+      venue: "Test Stadium",
+      round: "Group Stage - 1",
       ts: Date.UTC(2026, 5, 11),
       events: [
-        { type: "Goal", team: "United States", player: "Christian Pulisic", minute: 10, assist: "Timothy Weah" },
+        { type: "Goal", detail: "Normal Goal", team: "United States", player: "Christian Pulisic", minute: 10, extra: null, assist: "Timothy Weah" },
       ],
     },
   ];

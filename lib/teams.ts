@@ -9,6 +9,9 @@ export interface PlayerInfo {
   goals: number;
   age: number;
   number?: number;
+  imageUrl?: string | null;
+  headshotUrl?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface TeamProfile {

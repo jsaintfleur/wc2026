@@ -8935,7 +8935,7 @@ button.settings-row:active,
 .map-filter-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; flex: 1; padding: 2px 0; }
 .map-filter-row::-webkit-scrollbar { display: none; }
 .map-chip { appearance: none; flex: 0 0 auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 999px; padding: 9px 12px; color: var(--ink); background: rgba(255,255,255,0.045); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
-.map-chip[aria-pressed="true"] { border-color: rgba(212,175,55,0.55); color: #111; background: var(--gold); }
+.map-chip[aria-pressed="true"] { border-color: color-mix(in srgb, var(--gold) 55%, transparent); color: #111; background: var(--gold); }
 .map-team-select { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .map-team-select select { min-height: 38px; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 0 10px; color: var(--ink); background: rgba(255,255,255,0.06); }
 .map-shell { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: stretch; }
@@ -8974,7 +8974,8 @@ button.settings-row:active,
 .map-marker-group--live .map-marker { fill: var(--live); }
 .map-marker-group--route .map-marker { stroke: var(--gold-bright); stroke-width: 4; }
 .map-marker-group--muted { opacity: .34; }
-.map-marker-pulse { fill: rgba(239,68,68,0.2); stroke: rgba(239,68,68,0.72); animation: mapPulse 1.55s ease-out infinite; }
+/* Pulse ring uses the app's --live token so it matches the marker fill */
+.map-marker-pulse { fill: color-mix(in srgb, var(--live) 20%, transparent); stroke: color-mix(in srgb, var(--live) 72%, transparent); animation: mapPulse 1.55s ease-out infinite; }
 .map-marker-label { fill: rgba(255,255,255,0.86); font-family: var(--disp); font-size: 12px; font-weight: 800; paint-order: stroke; stroke: rgba(7,17,29,0.88); stroke-width: 4px; pointer-events: none; }
 @keyframes mapPulse { from { r: 14; opacity: .9; } to { r: 34; opacity: 0; } }
 .map-panel, .team-journey-panel { border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; background: linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)), rgba(8, 13, 24, 0.94); box-shadow: 0 18px 50px rgba(0,0,0,0.26); }
@@ -8985,7 +8986,7 @@ button.settings-row:active,
 .map-panel__handle span { display: block; width: 46px; height: 4px; border-radius: 999px; margin: 0 auto; background: rgba(255,255,255,0.22); }
 .map-panel__handle:focus-visible span { outline: 2px solid var(--gold-bright); outline-offset: 4px; }
 .map-panel__hero { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 12px; align-items: center; }
-.map-panel__image { display: grid; place-items: center; width: 82px; height: 82px; border-radius: 18px; background: radial-gradient(circle at 24% 20%, rgba(255,255,255,0.2), transparent 34%), linear-gradient(145deg, rgba(10,92,62,0.9), rgba(212,175,55,0.36)); background-size: cover; background-position: center; }
+.map-panel__image { display: grid; place-items: center; width: 82px; height: 82px; border-radius: 18px; background: radial-gradient(circle at 24% 20%, rgba(255,255,255,0.2), transparent 34%), linear-gradient(145deg, rgba(10,92,62,0.9), color-mix(in srgb, var(--gold) 36%, transparent)); background-size: cover; background-position: center; }
 .map-panel__image span { color: #fff; font-family: var(--disp); font-size: 22px; font-weight: 900; }
 .map-panel__eyebrow { color: var(--gold-bright); font-family: var(--disp); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .map-panel h3 { margin: 4px 0; color: #fff; font-family: var(--disp); font-size: 24px; line-height: 1; }
@@ -9000,7 +9001,7 @@ button.settings-row:active,
 .venue-timeline__item, .team-journey-stop { appearance: none; width: 100%; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 10px; color: var(--ink); background: rgba(255,255,255,0.045); text-align: left; cursor: pointer; }
 .venue-timeline__item { display: grid; grid-template-columns: 10px 42px minmax(0,1fr) auto; gap: 8px; align-items: center; }
 .venue-timeline__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
-.venue-timeline__item--live .venue-timeline__dot { background: var(--live); box-shadow: 0 0 0 6px rgba(239,68,68,0.16); }
+.venue-timeline__item--live .venue-timeline__dot { background: var(--live); box-shadow: 0 0 0 6px color-mix(in srgb, var(--live) 16%, transparent); }
 .venue-timeline__item--completed .venue-timeline__dot { background: var(--pitch); }
 .venue-timeline__stage { color: var(--gold-bright); font-family: var(--disp); font-size: 11px; font-weight: 800; }
 .venue-timeline__item b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }

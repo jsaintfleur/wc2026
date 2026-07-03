@@ -2503,14 +2503,56 @@ type MapViewProps = {
   onViewVenueMatches: (stadiumName: string) => void;
 };
 
+/* Map preferences from the shared settings store (Settings view writes it).
+   Read once per MapView mount — the map unmounts on tab switches, so edits
+   in Settings apply the next time the map opens. */
+const MAP_STATE_KEY = "compet-map-state-v1";
+function loadMapPrefs(): Pick<SettingsModel, "mapStyle" | "mapCenter" | "rememberMap" | "defaultTeam"> {
+  const fallback = {
+    mapStyle: DEFAULT_SETTINGS.mapStyle,
+    mapCenter: DEFAULT_SETTINGS.mapCenter,
+    rememberMap: DEFAULT_SETTINGS.rememberMap,
+    defaultTeam: DEFAULT_SETTINGS.defaultTeam,
+  };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const saved = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!saved) return fallback;
+    const merged = mergeSettings(JSON.parse(saved));
+    return { mapStyle: merged.mapStyle, mapCenter: merged.mapCenter, rememberMap: merged.rememberMap, defaultTeam: merged.defaultTeam };
+  } catch {
+    return fallback;
+  }
+}
+
+/* Last viewed venue/zoom, persisted when "Remember last viewed map location"
+   is enabled in Settings. */
+function loadRememberedMapState(): { venueId: string; zoom: number } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(MAP_STATE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { venueId?: unknown; zoom?: unknown };
+    if (typeof parsed.venueId !== "string" || !HOST_VENUE_DETAILS[parsed.venueId]) return null;
+    const zoom = typeof parsed.zoom === "number" && parsed.zoom >= 0.85 && parsed.zoom <= 1.45 ? parsed.zoom : 1;
+    return { venueId: parsed.venueId, zoom };
+  } catch {
+    return null;
+  }
+}
+
 /* Memoized with minute-granular time comparison: nothing on the map needs
    sub-minute precision, so parent re-renders (drawer state, search typing,
    nowMs ticks) don't re-run the venue/status computations. */
 const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMatches }: MapViewProps) {
-  const [activeVenueId, setActiveVenueId] = useState("METLIFE");
+  /* Settings-driven map preferences (style, auto-center, remember) */
+  const prefs = useMemo(loadMapPrefs, []);
+  const remembered = useMemo(() => (prefs.rememberMap ? loadRememberedMapState() : null), [prefs.rememberMap]);
+
+  const [activeVenueId, setActiveVenueId] = useState(remembered?.venueId || "METLIFE");
   const [filter, setFilter] = useState<MapFilter>("all");
   const [selectedTeam, setSelectedTeam] = useState("ALL");
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(remembered?.zoom || 1);
   /* Mobile bottom sheet: collapsible so the southern venues (Mexico City)
      are reachable behind it. Desktop side panel ignores this state. */
   const [panelCollapsed, setPanelCollapsed] = useState(false);
@@ -2673,6 +2715,53 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     if (first) setActiveVenueId(first.venueId);
   }, [filteredVenueIds, activeVenueId, venueModels]);
 
+  /* Auto-center per the "Automatically center map" setting — runs once per
+     mount, and only when no remembered location took precedence. */
+  const autoCenteredRef = useRef(false);
+  useEffect(() => {
+    if (autoCenteredRef.current || remembered) return;
+    autoCenteredRef.current = true;
+    if (prefs.mapCenter === "Current live venue") {
+      const liveVenue = venueModels.find(venue => venue.liveCount > 0);
+      if (liveVenue) setActiveVenueId(liveVenue.venueId);
+      return;
+    }
+    if (prefs.mapCenter === "Favorite team") {
+      const teamCanon = canon(prefs.defaultTeam);
+      const teamMatches = mapMatches.filter(match =>
+        [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(teamCanon));
+      // Center on the team's next match, falling back to their latest one
+      const target = teamMatches.find(match => match.ts > nowMs) || teamMatches[teamMatches.length - 1];
+      if (target) setActiveVenueId(target.venueId);
+      return;
+    }
+    if (prefs.mapCenter === "User location" && typeof navigator !== "undefined" && navigator.permissions && navigator.geolocation) {
+      // Never prompt from the map — only use geolocation when the user has
+      // already granted permission elsewhere; otherwise keep the default.
+      navigator.permissions.query({ name: "geolocation" }).then(status => {
+        if (status.state !== "granted") return;
+        navigator.geolocation.getCurrentPosition(position => {
+          const { latitude, longitude } = position.coords;
+          let nearest: { venueId: string; d: number } | null = null;
+          for (const venue of Object.values(HOST_VENUE_DETAILS)) {
+            const d = (venue.latitude - latitude) ** 2 + (venue.longitude - longitude) ** 2;
+            if (!nearest || d < nearest.d) nearest = { venueId: venue.venueId, d };
+          }
+          if (nearest) setActiveVenueId(nearest.venueId);
+        }, () => { /* keep default on error */ });
+      }).catch(() => { /* permissions API unavailable — keep default */ });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [venueModels, mapMatches]);
+
+  /* Persist last viewed venue + zoom when the setting is enabled */
+  useEffect(() => {
+    if (!prefs.rememberMap) return;
+    try {
+      window.localStorage.setItem(MAP_STATE_KEY, JSON.stringify({ venueId: activeVenueId, zoom }));
+    } catch { /* private mode / quota */ }
+  }, [activeVenueId, zoom, prefs.rememberMap]);
+
   return (
     <main className="map-view" aria-label="World Cup 2026 host map">
       <section className="map-hero">
@@ -2728,7 +2817,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
                 Zoom drives the SVG's laid-out width via --map-zoom rather
                 than transform: scale() — transforms don't grow the scroll
                 extent, which made zoomed-in coasts unreachable. */}
-            <svg className="host-map" viewBox="0 0 1000 620" style={{ "--map-zoom": zoom } as CSSProperties} role="group" aria-label="Map of World Cup 2026 host venues">
+            <svg className={`host-map host-map--${prefs.mapStyle.toLowerCase()}`} viewBox="0 0 1000 620" style={{ "--map-zoom": zoom } as CSSProperties} role="group" aria-label="Map of World Cup 2026 host venues">
               <defs>
                 <linearGradient id="mapLand" x1="0" x2="1" y1="0" y2="1">
                   <stop offset="0%" stopColor="#173926" />

@@ -8950,6 +8950,21 @@ button.settings-row:active,
 .map-empty { position: absolute; inset: auto 16px 16px; z-index: 4; margin: 0; padding: 12px 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; color: var(--ink); background: rgba(8,13,24,0.92); font-size: 13px; text-align: center; }
 .map-panel__empty { margin: 0; padding: 14px 10px; border: 1px dashed rgba(255,255,255,0.14); border-radius: 14px; color: var(--muted); font-size: 12.5px; text-align: center; }
 .map-controls button { width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; color: #fff; background: rgba(8,13,24,0.78); font-size: 22px; cursor: pointer; }
+/* ── Map style palettes (Settings → Map style) ─────────────────
+   CSS fill/stop-color beat SVG presentation attributes, so each variant
+   recolors the ocean rect and the #mapLand gradient without JSX changes. */
+.host-map--light > rect { fill: #c7d6e4; }
+.host-map--light linearGradient stop:first-child { stop-color: #7fae8e; }
+.host-map--light linearGradient stop:last-child { stop-color: #5c8b74; }
+.host-map--light .map-marker-label { fill: #14202e; stroke: rgba(255,255,255,0.85); }
+.host-map--light .map-line { stroke: rgba(20,32,46,0.18); }
+.host-map--satellite > rect { fill: #04070d; }
+.host-map--satellite linearGradient stop:first-child { stop-color: #0f2d1c; }
+.host-map--satellite linearGradient stop:last-child { stop-color: #060f14; }
+.host-map--terrain > rect { fill: #0d2233; }
+.host-map--terrain linearGradient stop:first-child { stop-color: #4d5a33; }
+.host-map--terrain linearGradient stop:last-child { stop-color: #2a3524; }
+
 .map-line { fill: none; stroke: rgba(255,255,255,0.07); stroke-width: 2; stroke-dasharray: 4 10; }
 .team-route { fill: none; stroke: var(--gold-bright); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
 .map-marker-button { cursor: pointer; outline: none; }

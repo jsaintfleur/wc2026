@@ -58,6 +58,9 @@ Top scorers, assists, and discipline, aggregated from match events with player-n
 ### Tournament Leaders
 Golden Boot race and team leaderboards computed from verified match data.
 
+### Host City Map
+Interactive tournament map covering all 16 World Cup 2026 host venues across the United States, Canada, and Mexico. The map uses the same schedule and live overlay data as Schedule, Knockout, Team pages, and Match details, so live venues pulse, scores update, and team travel paths stay aligned with the canonical tournament state.
+
 ### Mobile-First Navigation
 Bottom tab bar, safe-area-inset handling, and an installable PWA (web manifest + service worker) for a home-screen app experience.
 
@@ -78,6 +81,7 @@ Verified against `package.json` — nothing here is aspirational.
 |---|---|
 | Framework | [Next.js 16](https://nextjs.org) (App Router) |
 | UI | [React 19](https://react.dev), hand-written CSS (`app/globals.css` — no CSS framework) |
+| Map | Custom responsive SVG map in React — no external token or map SDK required |
 | Language | TypeScript 5 |
 | Database | PostgreSQL via [Prisma 7](https://www.prisma.io) (`@prisma/client`, `@prisma/adapter-pg`, `pg`) |
 | Data fetching | Native `fetch` + client-side polling (no external data library) |
@@ -170,9 +174,31 @@ Documented in [.env.example](.env.example). Placeholders only — never commit r
 | `WC_LEAGUE` | No | API-Football league id (default `1` = FIFA World Cup) |
 | `WC_SEASON` | No | Season (default `2026`) |
 
+No map token is required. The host map is rendered with a custom SVG layer and shared tournament data.
+
 ## Data Architecture
 
 **Source of truth:** the validated match schedule in `lib/data.ts` (match numbers, kickoff times, venues, group assignments). Vendor data never overwrites these facts.
+
+**Venue geography:** `HOST_VENUE_DETAILS` in `lib/data.ts` extends the canonical venue IDs with map metadata:
+
+```ts
+{
+  venueId: string;
+  stadiumName: string;
+  city: string;
+  stateOrProvince: string;
+  country: "USA" | "Canada" | "Mexico";
+  latitude: number;
+  longitude: number;
+  capacity: number;
+  timezone: string;
+  imageUrl?: string | null;
+  matchesHosted: number;
+}
+```
+
+The map view joins that venue metadata to `DATA.gs`, `DATA.ko`, and the live fixture overlay at render time. Match rows expose venue ID, kickoff time, local kickoff time, stage, teams, status, score, and winner where verified/live data provides it.
 
 **Flow:**
 
@@ -205,6 +231,9 @@ Live data is unofficial; FIFA is the source of record. The data provider is attr
 - [ ] Improve bracket gestures (pinch-to-zoom, momentum tuning on iOS)
 - [ ] Add match notifications (web push for kickoffs and goals)
 - [ ] Add deeper player profiles (per-match logs, heat maps)
+- [ ] Add richer venue imagery and city guides to the host map
+- [ ] Add distance totals and rest-day summaries to team travel paths
+- [ ] Add optional Mapbox/Leaflet mode if a future product need requires street-level geography
 - [ ] Add offline fallback (cache last-known data in the service worker)
 - [ ] Improve test coverage (merge logic, standings math, bracket progression)
 

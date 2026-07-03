@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type TeamLineup } from "@/lib/data";
+import { HOST_VENUE_DETAILS, MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type PlayerMatchStat, type TeamLineup, type VenueDetails } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
 import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type TournamentStats } from "@/lib/stats";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
@@ -42,7 +42,11 @@ function isStaleStatus(ts: number, status: string, now = Date.now()): boolean {
   return now - ts > STALE_LIVE_THRESHOLD;
 }
 
-type ViewType = "home" | "schedule" | "groups" | "bracket" | "teams" | "more" | "stats" | "venues" | "about";
+type ViewType = "home" | "schedule" | "groups" | "bracket" | "teams" | "map" | "more" | "settings" | "stats" | "venues" | "about";
+const VIEW_TYPES = ["home","schedule","groups","bracket","teams","map","more","settings","stats","venues","about"] as const;
+function isViewType(value: string | null | undefined): value is ViewType {
+  return !!value && (VIEW_TYPES as readonly string[]).includes(value);
+}
 type LiveStatus = "init" | "off" | "idle" | "active" | "paused" | "nofix";
 type PersistedLiveData = {
   version: 1;
@@ -482,7 +486,7 @@ function esc(s: string | number): string {
   return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] || c));
 }
 
-type AppIconName = "home" | "bracket" | "groups" | "calendar" | "stats" | "teams" | "more" | "boot" | "assist" | "venue" | "ball" | "info" | "bell" | "share" | "settings";
+type AppIconName = "home" | "bracket" | "groups" | "calendar" | "stats" | "teams" | "map" | "more" | "boot" | "assist" | "venue" | "ball" | "info" | "bell" | "share" | "settings";
 
 function AppIcon({ name, className = "" }: { name: AppIconName; className?: string }) {
   const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -494,6 +498,7 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
       {name === "calendar" && <><rect {...common} x="4" y="5" width="16" height="15" rx="2"/><path {...common} d="M8 3v4M16 3v4M4 10h16"/></>}
       {name === "stats" && <><path {...common} d="M6 19V12M12 19V5M18 19v-9"/><path {...common} d="M4 19h16"/></>}
       {name === "teams" && <><path {...common} d="M12 3 4 6v5c0 5.2 3.4 10 8 11 4.6-1 8-5.8 8-11V6z"/></>}
+      {name === "map" && <><path {...common} d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z"/><path {...common} d="M9 3v15"/><path {...common} d="M15 6v15"/><circle {...common} cx="15" cy="11" r="1.8"/></>}
       {name === "more" && <><circle {...common} cx="6" cy="12" r="1.4"/><circle {...common} cx="12" cy="12" r="1.4"/><circle {...common} cx="18" cy="12" r="1.4"/></>}
       {name === "boot" && <><path {...common} d="M5 5v7.5c0 2 1.4 3.5 3.4 3.5H19c.7 0 1.2.5 1.2 1.2V19H8.5C5.5 19 3 16.5 3 13.5V5z"/><path {...common} d="M7 8h5M7 11h4M14 16l2.5-3"/></>}
       {name === "assist" && <><path {...common} d="M4 16c4.8-7.8 10.5-9 16-7"/><path {...common} d="M16 5h4v4"/><circle {...common} cx="7" cy="17" r="2.2"/></>}
@@ -512,7 +517,7 @@ function isMock(): boolean {
   return window.location.search.indexOf("mock") > -1;
 }
 
-export default function Tournament({ data }: { data: TournamentData }) {
+export default function Tournament({ data, initialView = "home" }: { data: TournamentData; initialView?: string }) {
   const fl = (t: string) => data.flags[t] || "⚽";
   const ven = (k: string) => data.venues[k] || { common: "", fifa: "", city: "", country: "", cap: 0 };
   const vName = (k: string) => (data.venues[k] || { common: "" }).common || "";
@@ -549,11 +554,11 @@ export default function Tournament({ data }: { data: TournamentData }) {
     return best;
   }
 
-  const [view, setView] = useState<ViewType>("home");
+  const [view, setView] = useState<ViewType>(() => isViewType(initialView) ? initialView : "home");
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("view");
-    if (p && ["home","schedule","groups","bracket","teams","more","stats","venues","about"].includes(p)) {
-      queueMicrotask(() => setView(p as ViewType));
+    if (isViewType(p)) {
+      queueMicrotask(() => setView(p));
     }
   }, []);
   const [group, setGroup] = useState("ALL");
@@ -1339,6 +1344,7 @@ export default function Tournament({ data }: { data: TournamentData }) {
     { key: "groups", label: "Groups" },
     { key: "bracket", label: "Knockout" },
     { key: "teams", label: "Teams" },
+    { key: "map", label: "Map" },
     { key: "more", label: "More" },
   ];
 
@@ -1348,7 +1354,9 @@ export default function Tournament({ data }: { data: TournamentData }) {
     groups: <AppIcon name="groups" />,
     bracket: <AppIcon name="bracket" />,
     teams: <AppIcon name="teams" />,
+    map: <AppIcon name="map" />,
     more: <AppIcon name="more" />,
+    settings: <AppIcon name="settings" />,
     stats: <AppIcon name="stats" />,
     venues: <AppIcon name="venue" />,
     about: <AppIcon name="info" />,
@@ -1382,10 +1390,10 @@ export default function Tournament({ data }: { data: TournamentData }) {
           <div className="hero__pitch-lines" aria-hidden="true" />
           <div className="hero__context">
             <h1 className="hero__context-title">
-              {view === "schedule" ? "Schedule" : view === "groups" ? "Groups" : view === "teams" ? "Teams" : view === "stats" ? "Statistics" : view === "more" ? "More" : view === "venues" ? "Venues" : view === "about" ? "About" : "COMPET 2026"}
+              {view === "schedule" ? "Schedule" : view === "groups" ? "Groups" : view === "teams" ? "Teams" : view === "map" ? "Map" : view === "settings" ? "Settings" : view === "stats" ? "Statistics" : view === "more" ? "More" : view === "venues" ? "Venues" : view === "about" ? "About" : "COMPET 2026"}
             </h1>
             <p className="hero__context-sub">
-              {view === "schedule" ? `${data.gs.length + data.ko.length} matches · Group stage & knockout` : view === "groups" ? `${Object.keys(data.groups).length} groups · 48 teams` : view === "teams" ? "48 nations competing" : view === "stats" ? "Goals, assists & cards" : view === "more" ? "Venues, about & more" : ""}
+              {view === "schedule" ? `${data.gs.length + data.ko.length} matches · Group stage & knockout` : view === "groups" ? `${Object.keys(data.groups).length} groups · 48 teams` : view === "teams" ? "48 nations competing" : view === "map" ? "16 host cities across three countries" : view === "settings" ? "Personalize tournament, alerts, map, data, and display" : view === "stats" ? "Goals, assists & cards" : view === "more" ? "Venues, about & more" : ""}
             </p>
           </div>
         </section>
@@ -1509,8 +1517,18 @@ export default function Tournament({ data }: { data: TournamentData }) {
           />
         ) : view === "teams" ? (
           <TeamsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} favs={favs} toggleFav={toggleFav} />
+        ) : view === "map" ? (
+          <MapView
+            data={data}
+            fixtures={fixtures}
+            findLive={findLive}
+            nowMs={nowMs}
+            onMatchClick={(match, fixture) => setMatchDetail({ match, fixture })}
+          />
         ) : view === "more" ? (
           <MoreView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
+        ) : view === "settings" ? (
+          <SettingsView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} liveTs={liveTs} liveStatus={liveStatus} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
         ) : (
           <main
             ref={mainRef}
@@ -1925,10 +1943,10 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
               <button type="button" className="home-leader-card home-leader-card--gold" onClick={() => onPlayerClick(topScorer.name, topScorer.team)}>
                 <div className="home-leader-card__award"><AppIcon name="boot" /> Golden Boot</div>
                 <div className="home-leader-card__player">
-                  <span className="home-leader-card__flag">{fl(topScorer.team)}</span>
+                  <PlayerAvatar playerName={topScorer.name} teamName={topScorer.team} player={topScorer} size="lg" />
                   <div>
                     <b>{topScorer.name}</b>
-                    <span>{topScorer.team}</span>
+                    <span>{fl(topScorer.team)} {topScorer.team}</span>
                   </div>
                 </div>
                 <div className="home-leader-card__stat">{topScorer.goals}<small>goals</small></div>
@@ -1938,10 +1956,10 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
               <button type="button" className="home-leader-card home-leader-card--silver" onClick={() => onPlayerClick(topAssister.name, topAssister.team)}>
                 <div className="home-leader-card__award"><AppIcon name="assist" /> Top Assists</div>
                 <div className="home-leader-card__player">
-                  <span className="home-leader-card__flag">{fl(topAssister.team)}</span>
+                  <PlayerAvatar playerName={topAssister.name} teamName={topAssister.team} player={topAssister} size="lg" />
                   <div>
                     <b>{topAssister.name}</b>
-                    <span>{topAssister.team}{topAssistTieCount > 1 ? ` · ${topAssistTieCount} tied` : ""}</span>
+                    <span>{fl(topAssister.team)} {topAssister.team}{topAssistTieCount > 1 ? ` · ${topAssistTieCount} tied` : ""}</span>
                   </div>
                 </div>
                 <div className="home-leader-card__stat">{topAssister.assists}<small>assists</small></div>
@@ -2339,6 +2357,844 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
   );
 }
 
+type MapFilter = "all" | "today" | "live" | "upcoming" | "completed" | "knockout" | "usa" | "canada" | "mexico";
+
+type MapMatch = {
+  key: string;
+  no: number;
+  venueId: string;
+  ts: number;
+  iso: string;
+  local: string;
+  et: string;
+  stage: string;
+  homeTeam: string;
+  awayTeam: string;
+  fixture: LiveFixture | null;
+  sourceMatch: GroupStageMatch;
+};
+
+function stageShortLabel(stage: string): string {
+  if (stage === "Group Stage") return "Group";
+  if (stage === "Round of 32") return "R32";
+  if (stage === "Round of 16") return "R16";
+  if (stage.startsWith("Quarter")) return "QF";
+  if (stage.startsWith("Semi")) return "SF";
+  if (stage.includes("Third")) return "3rd";
+  return stage;
+}
+
+function countryFilterKey(country: string): MapFilter {
+  if (country === "USA") return "usa";
+  if (country === "Canada") return "canada";
+  return "mexico";
+}
+
+function mapPoint(venue: VenueDetails): { x: number; y: number } {
+  const x = ((venue.longitude + 128) / 56) * 1000;
+  const y = ((52 - venue.latitude) / 36) * 620;
+  return { x: Math.max(18, Math.min(982, x)), y: Math.max(18, Math.min(602, y)) };
+}
+
+function matchStatus(fixture: LiveFixture | null, ts: number, nowMs: number): "live" | "completed" | "upcoming" {
+  if (fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(ts, fixture.status, nowMs)) return "live";
+  if (fixture && DONE_STATUSES.has(fixture.status)) return "completed";
+  return ts > nowMs ? "upcoming" : "completed";
+}
+
+function matchScoreLabel(match: MapMatch): string {
+  const f = match.fixture;
+  if (!f || f.gh == null || f.ga == null) return "";
+  const base = `${f.gh}-${f.ga}`;
+  if (f.penHome != null && f.penAway != null) return `${base} (${f.penHome}-${f.penAway} pens)`;
+  return base;
+}
+
+function formatVenueLocalTime(ts: number, timezone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(ts));
+}
+
+function MapView({ data, fixtures, findLive, nowMs, onMatchClick }: {
+  data: TournamentData;
+  fixtures: LiveFixture[];
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
+  nowMs: number;
+  onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
+}) {
+  const [activeVenueId, setActiveVenueId] = useState("METLIFE");
+  const [filter, setFilter] = useState<MapFilter>("all");
+  const [selectedTeam, setSelectedTeam] = useState("ALL");
+  const [zoom, setZoom] = useState(1);
+
+  const allTeams = useMemo(() => Object.values(data.groups).flat().sort((a, b) => a.localeCompare(b)), [data.groups]);
+
+  const mapMatches = useMemo<MapMatch[]>(() => {
+    const groupMatches = data.gs.map((m): MapMatch => {
+      const fixture = findLive({ ts: m.ts, v: m.v, t1: m.t1, t2: m.t2 }, fixtures);
+      return {
+        key: `gs-${m.no}`,
+        no: m.no,
+        venueId: m.v,
+        ts: m.ts,
+        iso: m.iso,
+        local: m.local,
+        et: m.et,
+        stage: "Group Stage",
+        homeTeam: m.t1,
+        awayTeam: m.t2,
+        fixture,
+        sourceMatch: m,
+      };
+    });
+
+    const knockoutMatches = data.ko.map((m, index): MapMatch => {
+      const fixture = findLive({ ts: m.ts, v: m.v }, fixtures);
+      const no = index + 73;
+      return {
+        key: `ko-${no}`,
+        no,
+        venueId: m.v,
+        ts: m.ts,
+        iso: m.iso,
+        local: m.local,
+        et: m.et,
+        stage: m.round,
+        homeTeam: fixture?.home || "TBD",
+        awayTeam: fixture?.away || "TBD",
+        fixture,
+        sourceMatch: {
+          no,
+          iso: m.iso,
+          local: m.local,
+          et: m.et,
+          g: "",
+          t1: fixture?.home || "TBD",
+          t2: fixture?.away || "TBD",
+          v: m.v,
+          ts: m.ts,
+        },
+      };
+    });
+
+    return [...groupMatches, ...knockoutMatches].sort((a, b) => a.ts - b.ts);
+  }, [data.gs, data.ko, fixtures, findLive]);
+
+  const venueModels = useMemo(() => Object.entries(data.venues).map(([venueId, venue]) => {
+    const detail = HOST_VENUE_DETAILS[venueId] || {
+      venueId,
+      stadiumName: venue.common,
+      city: venue.city,
+      stateOrProvince: "",
+      country: venue.country === "USA" ? "USA" : venue.country === "Canada" ? "Canada" : "Mexico",
+      latitude: 0,
+      longitude: 0,
+      capacity: venue.cap,
+      timezone: "America/New_York",
+      imageUrl: null,
+      matchesHosted: 0,
+    } satisfies VenueDetails;
+    const matches = mapMatches.filter(match => match.venueId === venueId);
+    const liveCount = matches.filter(match => matchStatus(match.fixture, match.ts, nowMs) === "live").length;
+    const completedCount = matches.filter(match => matchStatus(match.fixture, match.ts, nowMs) === "completed").length;
+    const upcomingCount = matches.filter(match => matchStatus(match.fixture, match.ts, nowMs) === "upcoming").length;
+    return { ...detail, stadiumName: venue.common, capacity: venue.cap, matchesHosted: matches.length, matches, liveCount, completedCount, upcomingCount };
+  }).sort((a, b) => b.liveCount - a.liveCount || b.matchesHosted - a.matchesHosted || a.city.localeCompare(b.city)), [data.venues, mapMatches, nowMs]);
+
+  const activeVenue = venueModels.find(venue => venue.venueId === activeVenueId) || venueModels[0];
+  const today = todayISO();
+  const selectedTeamCanon = selectedTeam === "ALL" ? "" : canon(selectedTeam);
+
+  const teamJourney = useMemo(() => {
+    if (selectedTeam === "ALL") return [];
+    return mapMatches.filter(match => {
+      const teams = [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon);
+      return teams.includes(selectedTeamCanon);
+    });
+  }, [mapMatches, selectedTeam, selectedTeamCanon]);
+
+  const filteredVenueIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const venue of venueModels) {
+      const venueMatches = selectedTeam === "ALL"
+        ? venue.matches
+        : venue.matches.filter(match => [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon));
+      const hasMatch = venueMatches.some(match => {
+        const status = matchStatus(match.fixture, match.ts, nowMs);
+        if (filter === "today") return match.iso === today;
+        if (filter === "live") return status === "live";
+        if (filter === "upcoming") return status === "upcoming";
+        if (filter === "completed") return status === "completed";
+        if (filter === "knockout") return match.stage !== "Group Stage";
+        return true;
+      });
+      const countryMatch = filter === "usa" || filter === "canada" || filter === "mexico"
+        ? countryFilterKey(venue.country) === filter
+        : true;
+      if (countryMatch && hasMatch) ids.add(venue.venueId);
+    }
+    return ids;
+  }, [venueModels, selectedTeam, selectedTeamCanon, filter, nowMs, today]);
+
+  const panelMatches = activeVenue.matches
+    .filter(match => selectedTeam === "ALL" || [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon))
+    .sort((a, b) => a.ts - b.ts);
+  const liveMatches = mapMatches.filter(match => matchStatus(match.fixture, match.ts, nowMs) === "live");
+  const routePoints = teamJourney.map(match => {
+    const venue = venueModels.find(v => v.venueId === match.venueId);
+    return venue ? mapPoint(venue) : null;
+  }).filter((point): point is { x: number; y: number } => !!point);
+
+  const openMatch = (match: MapMatch) => onMatchClick(match.sourceMatch, match.fixture);
+
+  return (
+    <main className="map-view" aria-label="World Cup 2026 host map">
+      <section className="map-hero">
+        <div>
+          <span className="map-hero__eyebrow">Tournament Geography</span>
+          <h2>Host City Map</h2>
+          <p>Explore every World Cup 2026 venue, live stadium state, local kickoff time, and team travel path across the United States, Canada, and Mexico.</p>
+        </div>
+        <div className="map-hero__stats">
+          <span><b>{venueModels.length}</b> venues</span>
+          <span><b>{mapMatches.length}</b> matches</span>
+          <span><b>{liveMatches.length}</b> live</span>
+        </div>
+      </section>
+
+      <div className="map-toolbar">
+        <div className="map-filter-row" role="group" aria-label="Map filters">
+          {[
+            ["all", "All venues"],
+            ["today", "Today"],
+            ["live", "Live"],
+            ["upcoming", "Upcoming"],
+            ["completed", "Completed"],
+            ["knockout", "Knockout"],
+            ["usa", "USA"],
+            ["canada", "Canada"],
+            ["mexico", "Mexico"],
+          ].map(([key, label]) => (
+            <button key={key} type="button" className="map-chip" aria-pressed={filter === key} onClick={() => setFilter(key as MapFilter)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <label className="map-team-select">
+          <span>Team path</span>
+          <select value={selectedTeam} onChange={event => setSelectedTeam(event.target.value)}>
+            <option value="ALL">All teams</option>
+            {allTeams.map(team => <option key={team} value={team}>{team}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <section className="map-shell">
+        <div className="map-canvas-card">
+          <div className="map-controls" aria-label="Map zoom controls">
+            <button type="button" onClick={() => setZoom(z => Math.min(1.45, +(z + 0.15).toFixed(2)))} aria-label="Zoom in">+</button>
+            <button type="button" onClick={() => setZoom(z => Math.max(0.85, +(z - 0.15).toFixed(2)))} aria-label="Zoom out">−</button>
+          </div>
+          <div className="map-canvas-scroll">
+            <svg className="host-map" viewBox="0 0 1000 620" style={{ transform: `scale(${zoom})` }} role="img" aria-label="Map of World Cup 2026 host venues">
+              <defs>
+                <linearGradient id="mapLand" x1="0" x2="1" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#173926" />
+                  <stop offset="100%" stopColor="#0d1726" />
+                </linearGradient>
+                <filter id="routeGlow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="4" result="blur" />
+                  <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                </filter>
+              </defs>
+              <rect x="0" y="0" width="1000" height="620" rx="34" fill="#07111d" />
+              <path d="M75 115 C165 60 245 62 330 92 C430 126 520 88 625 116 C742 147 855 120 932 175 L930 520 C792 560 672 520 546 546 C420 573 308 545 188 565 C120 576 72 540 50 486 Z" fill="url(#mapLand)" stroke="rgba(255,255,255,.1)" strokeWidth="2" />
+              <path d="M152 142 C218 183 254 238 260 310 C266 382 235 446 204 526" className="map-line map-line--west" />
+              <path d="M335 126 C376 215 391 320 374 448" className="map-line" />
+              <path d="M515 138 C535 236 522 352 556 512" className="map-line" />
+              <path d="M712 142 C750 230 764 350 748 512" className="map-line" />
+              <path d="M145 482 C300 440 466 431 610 454 C724 472 808 438 900 390" className="map-line map-line--south" />
+              {routePoints.length > 1 && (
+                <polyline
+                  points={routePoints.map(point => `${point.x},${point.y}`).join(" ")}
+                  className="team-route"
+                  filter="url(#routeGlow)"
+                />
+              )}
+              {venueModels.map(venue => {
+                const point = mapPoint(venue);
+                const visible = filteredVenueIds.has(venue.venueId);
+                const active = activeVenue?.venueId === venue.venueId;
+                const live = venue.liveCount > 0;
+                const onTeamPath = selectedTeam !== "ALL" && teamJourney.some(match => match.venueId === venue.venueId);
+                return (
+                  <g key={venue.venueId} className={`map-marker-group${visible ? "" : " map-marker-group--muted"}${active ? " map-marker-group--active" : ""}${live ? " map-marker-group--live" : ""}${onTeamPath ? " map-marker-group--route" : ""}`}>
+                    {live && <circle cx={point.x} cy={point.y} r="24" className="map-marker-pulse" />}
+                    <g
+                      role="button"
+                      tabIndex={0}
+                      className="map-marker-button"
+                      aria-label={`${venue.city}, ${venue.stadiumName}`}
+                      onClick={() => setActiveVenueId(venue.venueId)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setActiveVenueId(venue.venueId);
+                        }
+                      }}
+                    >
+                      <circle cx={point.x} cy={point.y} r={active ? 13 : 10} className="map-marker" />
+                    </g>
+                    <text x={point.x + 14} y={point.y - 12} className="map-marker-label">{venue.city}</text>
+                    <title>{venue.stadiumName} · {venue.matchesHosted} matches</title>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        </div>
+
+        {activeVenue && (
+          <aside className="map-panel" aria-label={`${activeVenue.stadiumName} details`}>
+            <div className="map-panel__handle" aria-hidden="true" />
+            <div className="map-panel__hero">
+              <div className="map-panel__image" style={activeVenue.imageUrl ? { backgroundImage: `url(${activeVenue.imageUrl})` } : undefined}>
+                {!activeVenue.imageUrl && <span>{activeVenue.city.slice(0, 3).toUpperCase()}</span>}
+              </div>
+              <div>
+                <span className="map-panel__eyebrow">{activeVenue.country} · {activeVenue.stateOrProvince}</span>
+                <h3>{activeVenue.stadiumName}</h3>
+                <p>{activeVenue.city} · {activeVenue.capacity.toLocaleString("en-US")} seats</p>
+              </div>
+            </div>
+
+            <div className="map-panel__metrics">
+              <span><b>{activeVenue.matchesHosted}</b> hosted</span>
+              <span><b>{activeVenue.upcomingCount}</b> upcoming</span>
+              <span><b>{activeVenue.completedCount}</b> complete</span>
+              <span><b>{activeVenue.liveCount}</b> live</span>
+            </div>
+
+            <button type="button" className="map-panel__cta" onClick={() => setFilter("all")}>View matches</button>
+
+            <div className="venue-timeline" aria-label="Venue match timeline">
+              {panelMatches.map(match => {
+                const status = matchStatus(match.fixture, match.ts, nowMs);
+                const score = matchScoreLabel(match);
+                return (
+                  <button key={match.key} type="button" className={`venue-timeline__item venue-timeline__item--${status}`} onClick={() => openMatch(match)}>
+                    <span className="venue-timeline__dot" />
+                    <span className="venue-timeline__stage">{stageShortLabel(match.stage)}</span>
+                    <b>{match.homeTeam} vs {match.awayTeam}</b>
+                    <small>{formatVenueLocalTime(match.ts, activeVenue.timezone)} · {match.local}</small>
+                    {status === "live" && <em>LIVE {match.fixture?.elapsed ? `${match.fixture.elapsed}'` : ""} {score}</em>}
+                    {status === "completed" && score && <em>{score}</em>}
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+        )}
+      </section>
+
+      {selectedTeam !== "ALL" && (
+        <section className="team-journey-panel">
+          <div>
+            <span className="map-hero__eyebrow">Team Travel Path</span>
+            <h3>{selectedTeam}</h3>
+          </div>
+          {teamJourney.length === 0 ? (
+            <p>No confirmed venue path yet. Knockout destinations appear once the live bracket resolves.</p>
+          ) : (
+            <div className="team-journey-list">
+              {teamJourney.map((match, index) => {
+                const venue = venueModels.find(v => v.venueId === match.venueId);
+                const score = matchScoreLabel(match);
+                const status = matchStatus(match.fixture, match.ts, nowMs);
+                return (
+                  <button key={match.key} type="button" className="team-journey-stop" onClick={() => openMatch(match)}>
+                    <span>{index + 1}</span>
+                    <div>
+                      <b>{venue?.city || match.venueId}</b>
+                      <small>{match.stage} · {match.homeTeam} vs {match.awayTeam}</small>
+                    </div>
+                    <em>{status === "live" ? "LIVE" : score || formatVenueLocalTime(match.ts, venue?.timezone || "America/New_York")}</em>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+    </main>
+  );
+}
+
+type SettingsModel = {
+  defaultTeam: string;
+  favoritePlayers: string[];
+  favoriteStadiums: string[];
+  defaultTournamentView: ViewType;
+  defaultLandingPage: ViewType;
+  matchCard: "Compact" | "Comfortable" | "Expanded";
+  liveRefresh: "Auto" | "15 sec" | "30 sec" | "60 sec" | "Manual";
+  scoreDisplay: "Goals only" | "Goals + Assists" | "Detailed stats";
+  timeline: "Expanded" | "Collapsed";
+  mapStyle: "Light" | "Dark" | "Satellite" | "Terrain";
+  mapCenter: "Favorite team" | "Current live venue" | "User location";
+  rememberMap: boolean;
+  theme: "Light" | "Dark" | "System";
+  accent: "Official FIFA Blue" | "Green" | "Gold" | "Red" | "Minimal Gray";
+  bracketTheme: "Classic" | "Broadcast" | "Modern" | "Minimal";
+  animations: "Reduced" | "Normal" | "Enhanced";
+  corners: "Compact" | "Medium" | "Large";
+  fontSize: "Small" | "Default" | "Large" | "Extra Large";
+  highContrast: boolean;
+  dynamicType: boolean;
+  flags: "Always" | "Minimal" | "Off";
+  crests: boolean;
+  language: string;
+  timezone: string;
+  dateFormat: string;
+  temperature: "Fahrenheit" | "Celsius";
+  distance: "Miles" | "Kilometers";
+  currency: "USD" | "CAD" | "MXN";
+  clock: "12-hour" | "24-hour";
+  offlineMode: boolean;
+  calendarScope: "Favorite Team" | "Knockout Stage" | "All Matches";
+  reminder: "15 minutes" | "30 minutes" | "1 hour" | "2 hours";
+  developerUnlocked: boolean;
+  notifications: Record<string, boolean>;
+  stadium: Record<string, boolean>;
+  stats: Record<string, boolean>;
+  downloads: Record<string, boolean>;
+  pinnedStats: string[];
+};
+
+const SETTINGS_STORAGE_KEY = "compet-settings-v1";
+const DEFAULT_SETTINGS: SettingsModel = {
+  defaultTeam: "United States",
+  favoritePlayers: [],
+  favoriteStadiums: ["METLIFE"],
+  defaultTournamentView: "schedule",
+  defaultLandingPage: "home",
+  matchCard: "Comfortable",
+  liveRefresh: "Auto",
+  scoreDisplay: "Goals + Assists",
+  timeline: "Expanded",
+  mapStyle: "Dark",
+  mapCenter: "Favorite team",
+  rememberMap: true,
+  theme: "System",
+  accent: "Gold",
+  bracketTheme: "Broadcast",
+  animations: "Normal",
+  corners: "Medium",
+  fontSize: "Default",
+  highContrast: false,
+  dynamicType: true,
+  flags: "Always",
+  crests: true,
+  language: "English",
+  timezone: "Device",
+  dateFormat: "Jun 11, 2026",
+  temperature: "Fahrenheit",
+  distance: "Miles",
+  currency: "USD",
+  clock: "12-hour",
+  offlineMode: false,
+  calendarScope: "Favorite Team",
+  reminder: "30 minutes",
+  developerUnlocked: false,
+  notifications: {
+    "Match starting soon": true,
+    Kickoff: true,
+    Halftime: false,
+    "Full Time": true,
+    Goals: true,
+    "Red Cards": true,
+    Penalties: true,
+    "Extra Time": true,
+    "Penalty Shootouts": true,
+    "VAR decisions": true,
+    "Team advances": true,
+    "Favorite team only": false,
+    "Favorite player milestones": true,
+    "Daily tournament recap": true,
+    "Breaking FIFA news": false,
+    "Injury updates": false,
+    "Transfer-related news": false,
+  },
+  stadium: {
+    "Show stadium capacity": true,
+    "Show altitude": false,
+    "Show weather": true,
+    "Show city facts": true,
+    "Show transportation": false,
+    "Show travel distances": true,
+    "Show local kickoff time": true,
+  },
+  stats: {
+    Goals: true,
+    Assists: true,
+    xG: true,
+    xA: false,
+    Possession: true,
+    Passing: true,
+    Defensive: false,
+    Goalkeeping: false,
+    "Advanced Metrics": true,
+    "Radar Charts": true,
+    "Advanced Analytics": true,
+    "Expected Goals": true,
+    "Pressing Statistics": false,
+    "Progressive Carries": false,
+    "Shot Maps": true,
+    "Passing Networks": false,
+    "Heat Maps": true,
+    "Player Comparison": true,
+  },
+  downloads: {
+    "Entire Schedule": false,
+    Bracket: false,
+    "Team Data": false,
+    "Player Photos": false,
+    "Venue Images": false,
+    "Offline Package": false,
+  },
+  pinnedStats: ["Goals", "Assists", "xG"],
+};
+
+function mergeSettings(raw: Partial<SettingsModel>): SettingsModel {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...raw,
+    notifications: { ...DEFAULT_SETTINGS.notifications, ...(raw.notifications || {}) },
+    stadium: { ...DEFAULT_SETTINGS.stadium, ...(raw.stadium || {}) },
+    stats: { ...DEFAULT_SETTINGS.stats, ...(raw.stats || {}) },
+    downloads: { ...DEFAULT_SETTINGS.downloads, ...(raw.downloads || {}) },
+  };
+}
+
+function SettingsView({ data, fixtures, leaderboardStats, liveTs, liveStatus, onNavigate, onTeamClick }: {
+  data: TournamentData;
+  fixtures: LiveFixture[];
+  leaderboardStats: ExternalLeaderStat[];
+  liveTs: number;
+  liveStatus: LiveStatus;
+  onNavigate: (view: ViewType) => void;
+  onTeamClick: (team: string) => void;
+}) {
+  const [settings, setSettings] = useState<SettingsModel>(() => {
+    if (typeof window === "undefined") return DEFAULT_SETTINGS;
+    try {
+      const saved = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+      return saved ? mergeSettings(JSON.parse(saved)) : DEFAULT_SETTINGS;
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
+  });
+  const [query, setQuery] = useState("");
+  const [recentSearches, setRecentSearches] = useState<string[]>(["notifications", "map", "favorite team"]);
+  const [quietHours, setQuietHours] = useState({ start: "22:00", end: "07:00" });
+
+  useEffect(() => {
+    try { window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings)); } catch { /* ignore private mode */ }
+  }, [settings]);
+
+  const update = <K extends keyof SettingsModel>(key: K, value: SettingsModel[K]) => setSettings(prev => ({ ...prev, [key]: value }));
+  const toggleGroup = (group: "notifications" | "stadium" | "stats" | "downloads", key: string) => {
+    setSettings(prev => ({ ...prev, [group]: { ...prev[group], [key]: !prev[group][key] } }));
+  };
+  const toggleList = (key: "favoritePlayers" | "favoriteStadiums" | "pinnedStats", value: string) => {
+    setSettings(prev => {
+      const exists = prev[key].includes(value);
+      return { ...prev, [key]: exists ? prev[key].filter(item => item !== value) : [...prev[key], value] };
+    });
+  };
+
+  const allTeams = useMemo(() => Object.values(data.groups).flat().sort((a, b) => a.localeCompare(b)), [data.groups]);
+  const tournamentStats = useMemo(() => buildTournamentStats(data, fixtures, { players: leaderboardStats }), [data, fixtures, leaderboardStats]);
+  const playerOptions = useMemo(() => {
+    const names = [...tournamentStats.topScorers, ...tournamentStats.topAssisters]
+      .map(player => `${player.name} · ${player.team}`);
+    return [...new Set(names)].slice(0, 12);
+  }, [tournamentStats]);
+  const venueOptions = useMemo(() => Object.entries(data.venues).map(([id, venue]) => ({ id, label: venue.common, meta: `${venue.city}, ${venue.country}` })), [data.venues]);
+  const nextMatch = useMemo(() => [...data.gs, ...data.ko].filter(match => match.ts > Date.now()).sort((a, b) => a.ts - b.ts)[0] || null, [data.gs, data.ko]);
+  const lastSync = liveTs ? new Date(liveTs).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Static schedule";
+  const searchText = query.trim().toLowerCase();
+
+  const rememberSearch = (value: string) => {
+    const clean = value.trim();
+    if (!clean) return;
+    setRecentSearches(prev => [clean, ...prev.filter(item => item.toLowerCase() !== clean.toLowerCase())].slice(0, 4));
+  };
+  const handleShare = async (label = "Compet 2026") => {
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({ title: label, text: "Track World Cup 2026 with Compet.", url: window.location.href });
+      } catch { /* user cancelled */ }
+    }
+  };
+
+  const SelectControl = <T extends string>({ value, options, onChange, label }: { value: T; options: readonly T[]; onChange: (value: T) => void; label: string }) => (
+    <select className="settings-select" value={value} onChange={event => onChange(event.target.value as T)} aria-label={label}>
+      {options.map(option => <option key={option} value={option}>{option}</option>)}
+    </select>
+  );
+  const SegmentControl = <T extends string>({ value, options, onChange, label }: { value: T; options: readonly T[]; onChange: (value: T) => void; label: string }) => (
+    <div className="settings-segment" role="group" aria-label={label}>
+      {options.map(option => (
+        <button key={option} type="button" aria-pressed={value === option} onClick={() => onChange(option)}>{option}</button>
+      ))}
+    </div>
+  );
+  const Toggle = ({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) => (
+    <button type="button" className="settings-switch" aria-pressed={checked} aria-label={label} onClick={onChange}><span /></button>
+  );
+  const StatusPill = ({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "good" | "warn" }) => (
+    <span className={`settings-pill settings-pill--${tone}`}>{children}</span>
+  );
+  const Row = ({ icon, title, subtitle, tags = [], children, action }: { icon: AppIconName; title: string; subtitle: string; tags?: string[]; children?: ReactNode; action?: () => void }) => {
+    const haystack = [title, subtitle, ...tags].join(" ").toLowerCase();
+    if (searchText && !haystack.includes(searchText)) return null;
+    const body = (
+      <>
+        <span className="settings-row__icon"><AppIcon name={icon} /></span>
+        <span className="settings-row__copy"><b>{title}</b><small>{subtitle}</small></span>
+        <span className="settings-row__control">{children || <span className="settings-row__chevron">›</span>}</span>
+      </>
+    );
+    return action ? <button type="button" className="settings-row" onClick={action}>{body}</button> : <div className="settings-row">{body}</div>;
+  };
+  const ChipChooser = ({ values, selected, onToggle }: { values: { key: string; label: string; meta?: string }[]; selected: string[]; onToggle: (key: string) => void }) => (
+    <div className="settings-chip-grid">
+      {values.map(item => (
+        <button key={item.key} type="button" className="settings-choice-chip" aria-pressed={selected.includes(item.key)} onClick={() => onToggle(item.key)}>
+          <b>{item.label}</b>{item.meta && <small>{item.meta}</small>}
+        </button>
+      ))}
+    </div>
+  );
+
+  const sections: { title: string; icon: AppIconName; rows: ReactNode[] }[] = [
+    { title: "Tournament", icon: "ball", rows: [
+      <Row key="default-team" icon="teams" title="Default Team" subtitle="Personalizes Home, bracket highlights, schedule priority, and map journey." tags={["favorite national team"]}>
+        <select className="settings-select" value={settings.defaultTeam} onChange={event => update("defaultTeam", event.target.value)} aria-label="Default team">
+          {allTeams.map(team => <option key={team} value={team}>{data.flags[team] || ""} {team}</option>)}
+        </select>
+      </Row>,
+      <Row key="fav-players" icon="boot" title="Favorite Players" subtitle="Follow milestones and highlight players across stats, cards, and match details." tags={["players milestones"]}>
+        <ChipChooser values={playerOptions.map(player => ({ key: player, label: player }))} selected={settings.favoritePlayers} onToggle={key => toggleList("favoritePlayers", key)} />
+      </Row>,
+      <Row key="default-view" icon="calendar" title="Default Tournament View" subtitle="Choose the tournament workspace you prefer when browsing." tags={["schedule bracket home stats"]}>
+        <SegmentControl value={settings.defaultTournamentView} options={["schedule", "bracket", "home", "stats"] as const} label="Default tournament view" onChange={value => update("defaultTournamentView", value)} />
+      </Row>,
+      <Row key="landing" icon="home" title="Default Landing Page" subtitle="Controls which main tab opens first on launch." tags={["landing page tab"]}>
+        <select className="settings-select" value={settings.defaultLandingPage} onChange={event => update("defaultLandingPage", event.target.value as ViewType)} aria-label="Default landing page">
+          {(["home", "schedule", "groups", "bracket", "teams", "map", "stats", "more"] as ViewType[]).map(view => <option key={view} value={view}>{view[0].toUpperCase() + view.slice(1)}</option>)}
+        </select>
+      </Row>,
+    ] },
+    { title: "Notifications", icon: "bell", rows: [
+      ...Object.keys(settings.notifications).map(label => (
+        <Row key={label} icon="bell" title={label} subtitle={label === "Favorite team only" ? `Limit alerts to ${settings.defaultTeam}.` : "Granular match and tournament alert control."} tags={["alerts push notifications live"]}>
+          <Toggle checked={settings.notifications[label]} label={label} onChange={() => toggleGroup("notifications", label)} />
+        </Row>
+      )),
+      <Row key="quiet" icon="settings" title="Quiet Hours" subtitle="Silence non-critical alerts while preserving live match status." tags={["do not disturb quiet hours"]}>
+        <span className="settings-time-pair"><input value={quietHours.start} onChange={event => setQuietHours(prev => ({ ...prev, start: event.target.value }))} aria-label="Quiet hours start" /><input value={quietHours.end} onChange={event => setQuietHours(prev => ({ ...prev, end: event.target.value }))} aria-label="Quiet hours end" /></span>
+      </Row>,
+    ] },
+    { title: "Match Experience", icon: "calendar", rows: [
+      <Row key="card" icon="calendar" title="Preferred Match Card" subtitle="Controls schedule density and how much live context appears at a glance." tags={["compact comfortable expanded"]}>
+        <SegmentControl value={settings.matchCard} options={["Compact", "Comfortable", "Expanded"] as const} label="Preferred match card" onChange={value => update("matchCard", value)} />
+      </Row>,
+      <Row key="refresh" icon="settings" title="Live Match Refresh" subtitle="Balances live score freshness with battery and data usage." tags={["auto 15 30 60 manual"]}>
+        <SelectControl value={settings.liveRefresh} options={["Auto", "15 sec", "30 sec", "60 sec", "Manual"] as const} label="Live match refresh" onChange={value => update("liveRefresh", value)} />
+      </Row>,
+      <Row key="score" icon="stats" title="Default Score Display" subtitle="Choose whether player contributions and detailed stats appear by default." tags={["goals assists detailed stats"]}>
+        <SelectControl value={settings.scoreDisplay} options={["Goals only", "Goals + Assists", "Detailed stats"] as const} label="Default score display" onChange={value => update("scoreDisplay", value)} />
+      </Row>,
+      <Row key="timeline" icon="more" title="Match Timeline" subtitle="Sets event timelines to open expanded or condensed in match details." tags={["expanded collapsed"]}>
+        <SegmentControl value={settings.timeline} options={["Expanded", "Collapsed"] as const} label="Match timeline" onChange={value => update("timeline", value)} />
+      </Row>,
+    ] },
+    { title: "Map", icon: "map", rows: [
+      <Row key="map-style" icon="map" title="Default Map Style" subtitle="Sets the visual style for the host city map." tags={["light dark satellite terrain"]}>
+        <SegmentControl value={settings.mapStyle} options={["Light", "Dark", "Satellite", "Terrain"] as const} label="Map style" onChange={value => update("mapStyle", value)} />
+      </Row>,
+      <Row key="map-center" icon="venue" title="Automatically Center On" subtitle="Choose the map context that should take priority when opening Map." tags={["favorite team live venue user location"]}>
+        <SelectControl value={settings.mapCenter} options={["Favorite team", "Current live venue", "User location"] as const} label="Automatically center map" onChange={value => update("mapCenter", value)} />
+      </Row>,
+      <Row key="remember-map" icon="settings" title="Remember Last Viewed Location" subtitle="Restores your previous map position, zoom, and selected venue." tags={["remember location map"]}>
+        <Toggle checked={settings.rememberMap} label="Remember last viewed map location" onChange={() => update("rememberMap", !settings.rememberMap)} />
+      </Row>,
+    ] },
+    { title: "Stadium Experience", icon: "venue", rows: Object.keys(settings.stadium).map(label => (
+      <Row key={label} icon="venue" title={label} subtitle="Controls venue cards, match detail panels, and map stadium sheets." tags={["stadium venue city travel local kickoff"]}>
+        <Toggle checked={settings.stadium[label]} label={label} onChange={() => toggleGroup("stadium", label)} />
+      </Row>
+    )) },
+    { title: "Statistics", icon: "stats", rows: [
+      <Row key="pinned" icon="stats" title="Pinned Statistics" subtitle="Choose the stats that appear first in leaders and team dashboards." tags={["goals assists xg possession passing"]}>
+        <ChipChooser values={["Goals", "Assists", "xG", "xA", "Possession", "Passing", "Defensive", "Goalkeeping"].map(key => ({ key, label: key }))} selected={settings.pinnedStats} onToggle={key => toggleList("pinnedStats", key)} />
+      </Row>,
+      ...Object.keys(settings.stats).map(label => (
+        <Row key={label} icon="stats" title={label} subtitle="Enable this metric family across team pages, stats, and match analysis." tags={["analytics xg shot maps radar heat maps comparison"]}>
+          <Toggle checked={settings.stats[label]} label={label} onChange={() => toggleGroup("stats", label)} />
+        </Row>
+      )),
+    ] },
+    { title: "Appearance", icon: "settings", rows: [
+      <Row key="theme" icon="settings" title="Theme" subtitle="Choose light, dark, or system appearance." tags={["light dark system"]}><SegmentControl value={settings.theme} options={["Light", "Dark", "System"] as const} label="Theme" onChange={value => update("theme", value)} /></Row>,
+      <Row key="accent" icon="ball" title="Accent Color" subtitle="Tune the app’s highlight color while keeping the World Cup look." tags={["blue green gold red gray"]}><SelectControl value={settings.accent} options={["Official FIFA Blue", "Green", "Gold", "Red", "Minimal Gray"] as const} label="Accent color" onChange={value => update("accent", value)} /></Row>,
+      <Row key="bracket-theme" icon="bracket" title="Bracket Theme" subtitle="Controls knockout bracket density, contrast, and broadcast polish." tags={["classic broadcast modern minimal"]}><SegmentControl value={settings.bracketTheme} options={["Classic", "Broadcast", "Modern", "Minimal"] as const} label="Bracket theme" onChange={value => update("bracketTheme", value)} /></Row>,
+      <Row key="animations" icon="settings" title="Animations" subtitle="Adjust motion for comfort, performance, or a richer matchday feel." tags={["reduced normal enhanced"]}><SegmentControl value={settings.animations} options={["Reduced", "Normal", "Enhanced"] as const} label="Animations" onChange={value => update("animations", value)} /></Row>,
+      <Row key="corners" icon="settings" title="Rounded Corners" subtitle="Changes the softness of cards, sheets, and controls." tags={["compact medium large"]}><SegmentControl value={settings.corners} options={["Compact", "Medium", "Large"] as const} label="Rounded corners" onChange={value => update("corners", value)} /></Row>,
+    ] },
+    { title: "Display", icon: "info", rows: [
+      <Row key="font" icon="info" title="Font Size" subtitle="Sets the default reading size for cards, tables, and timelines." tags={["small default large extra"]}><SelectControl value={settings.fontSize} options={["Small", "Default", "Large", "Extra Large"] as const} label="Font size" onChange={value => update("fontSize", value)} /></Row>,
+      <Row key="contrast" icon="info" title="High Contrast" subtitle="Boosts borders and text contrast for better readability." tags={["accessibility contrast"]}><Toggle checked={settings.highContrast} label="High contrast" onChange={() => update("highContrast", !settings.highContrast)} /></Row>,
+      <Row key="dynamic" icon="info" title="Dynamic Type" subtitle="Allows the interface to respect larger system text preferences." tags={["accessibility dynamic type"]}><Toggle checked={settings.dynamicType} label="Dynamic type" onChange={() => update("dynamicType", !settings.dynamicType)} /></Row>,
+      <Row key="flags" icon="teams" title="Country Flags" subtitle="Controls how often flags appear beside teams and players." tags={["flags minimal off"]}><SegmentControl value={settings.flags} options={["Always", "Minimal", "Off"] as const} label="Country flags" onChange={value => update("flags", value)} /></Row>,
+      <Row key="crests" icon="teams" title="Show National Crests" subtitle="Displays federation marks where official assets are available." tags={["crests teams"]}><Toggle checked={settings.crests} label="Show national crests" onChange={() => update("crests", !settings.crests)} /></Row>,
+    ] },
+    { title: "Regional", icon: "more", rows: [
+      <Row key="language" icon="more" title="Language" subtitle="Sets app copy, match labels, and tournament glossary language." tags={["language"]}><SelectControl value={settings.language} options={["English", "Spanish", "French"] as const} label="Language" onChange={value => update("language", value)} /></Row>,
+      <Row key="timezone" icon="calendar" title="Time Zone" subtitle="Controls kickoff times across schedules, map, and calendar exports." tags={["timezone time zone"]}><SelectControl value={settings.timezone} options={["Device", "Eastern", "Central", "Mountain", "Pacific", "Venue local"] as const} label="Time zone" onChange={value => update("timezone", value)} /></Row>,
+      <Row key="date" icon="calendar" title="Date Format" subtitle="Applies to match cards, tournament timeline, and exports." tags={["date format"]}><SelectControl value={settings.dateFormat} options={["Jun 11, 2026", "11 Jun 2026", "2026-06-11"] as const} label="Date format" onChange={value => update("dateFormat", value)} /></Row>,
+      <Row key="units" icon="settings" title="Units" subtitle="Temperature, distance, currency, and clock display." tags={["temperature distance currency clock"]}>
+        <span className="settings-inline-selects">
+          <SelectControl value={settings.temperature} options={["Fahrenheit", "Celsius"] as const} label="Temperature" onChange={value => update("temperature", value)} />
+          <SelectControl value={settings.distance} options={["Miles", "Kilometers"] as const} label="Distance" onChange={value => update("distance", value)} />
+          <SelectControl value={settings.currency} options={["USD", "CAD", "MXN"] as const} label="Currency" onChange={value => update("currency", value)} />
+          <SelectControl value={settings.clock} options={["12-hour", "24-hour"] as const} label="Clock" onChange={value => update("clock", value)} />
+        </span>
+      </Row>,
+    ] },
+    { title: "Data & Sync", icon: "settings", rows: [
+      <Row key="source" icon="settings" title="Current Data Source" subtitle="Live API when available, bundled static tournament schedule as fallback." tags={["api data source"]}><StatusPill tone={liveStatus === "active" ? "good" : "warn"}>{liveStatus === "active" ? "Live API" : "Static fallback"}</StatusPill></Row>,
+      <Row key="sync" icon="calendar" title="Last Successful Sync" subtitle={`Last live timestamp: ${lastSync}. Cache refreshes automatically during active tournament use.`} tags={["sync update cache"]}><StatusPill>{fixtures.length} fixtures</StatusPill></Row>,
+      <Row key="cache" icon="settings" title="Cache & Offline Mode" subtitle={`Local cache stores live scores briefly; offline mode is ${settings.offlineMode ? "enabled" : "disabled"}.`} tags={["cache offline storage"]}><Toggle checked={settings.offlineMode} label="Offline mode" onChange={() => update("offlineMode", !settings.offlineMode)} /></Row>,
+      <Row key="refresh" icon="settings" title="Force Refresh" subtitle="Requests fresh match, standings, stats, and live-feed state." tags={["force refresh rebuild cache api"]}><button type="button" className="settings-action">Refresh</button></Row>,
+      <Row key="health" icon="info" title="API Status & Connection Health" subtitle="Connection health is monitored from live feed success, stale status, and fixture count." tags={["api status health"]}><StatusPill tone={liveStatus === "active" ? "good" : "warn"}>{liveStatus === "active" ? "Healthy" : "Monitoring"}</StatusPill></Row>,
+    ] },
+    { title: "Downloads", icon: "share", rows: [
+      <Row key="download-summary" icon="share" title="Storage Used" subtitle="Downloaded assets remain removable, and missing files fall back to live data." tags={["downloads clear storage"]}><StatusPill>{Object.values(settings.downloads).filter(Boolean).length} packs</StatusPill></Row>,
+      ...Object.keys(settings.downloads).map(label => (
+        <Row key={label} icon="share" title={`Download ${label}`} subtitle="Prepare this tournament package for offline access." tags={["download offline package schedule bracket team photos venue images"]}>
+          <button type="button" className="settings-action" onClick={() => toggleGroup("downloads", label)}>{settings.downloads[label] ? "Clear" : "Download"}</button>
+        </Row>
+      )),
+    ] },
+    { title: "Favorites", icon: "teams", rows: [
+      <Row key="fav-teams" icon="teams" title="Favorite Teams" subtitle={`${settings.defaultTeam} is your default team; tap to open its profile.`} tags={["favorite teams"]} action={() => onTeamClick(settings.defaultTeam)}><span className="settings-row__chevron">›</span></Row>,
+      <Row key="fav-stadiums" icon="venue" title="Favorite Stadiums" subtitle="Prioritize venue timelines, maps, and city travel cards." tags={["favorite stadiums cities"]}>
+        <ChipChooser values={venueOptions.map(v => ({ key: v.id, label: v.label, meta: v.meta }))} selected={settings.favoriteStadiums} onToggle={key => toggleList("favoriteStadiums", key)} />
+      </Row>,
+      <Row key="fav-matches" icon="calendar" title="Favorite Matches" subtitle={nextMatch ? `Next suggested pin: ${"t1" in nextMatch ? `${nextMatch.t1} vs ${nextMatch.t2}` : nextMatch.round}.` : "Favorite matches appear first in calendar and alerts."} tags={["favorite matches cities pinned statistics"]}><StatusPill>{settings.pinnedStats.length} pinned stats</StatusPill></Row>,
+    ] },
+    { title: "Calendar", icon: "calendar", rows: [
+      <Row key="calendar-scope" icon="calendar" title="Automatically Add Matches" subtitle="Creates calendar-ready match entries using your tournament preference." tags={["calendar add matches favorite knockout all"]}><SegmentControl value={settings.calendarScope} options={["Favorite Team", "Knockout Stage", "All Matches"] as const} label="Calendar scope" onChange={value => update("calendarScope", value)} /></Row>,
+      <Row key="reminder" icon="bell" title="Reminders" subtitle="Default pre-match reminder for calendar exports and match alerts." tags={["15 30 1 hour 2 hours reminder"]}><SelectControl value={settings.reminder} options={["15 minutes", "30 minutes", "1 hour", "2 hours"] as const} label="Reminder" onChange={value => update("reminder", value)} /></Row>,
+    ] },
+    { title: "Sharing", icon: "share", rows: ["Bracket", "Player Card", "Match Card", "Team Stats", "Tournament Stats", "Custom Graphics"].map(label => (
+      <Row key={label} icon="share" title={`Share ${label}`} subtitle="Generate a polished share card for social, messages, or notes." tags={["share graphics bracket player match team stats"]}>
+        <button type="button" className="settings-action" onClick={() => handleShare(label)}>Share</button>
+      </Row>
+    )) },
+    { title: "Achievements", icon: "ball", rows: [
+      ["Watched 25 matches", `${Math.min(fixtures.filter(f => DONE_STATUSES.has(f.status)).length, 25)}/25 complete`],
+      ["Predicted 20 winners", "Prediction center ready for bracket mode"],
+      ["Visited every host city", `${settings.favoriteStadiums.length}/16 favorite venues saved`],
+      ["Completed every bracket", "Knockout path tools enabled"],
+      ["Followed entire tournament", `${Object.values(settings.notifications).filter(Boolean).length} alert types active`],
+    ].map(([title, subtitle]) => <Row key={title} icon="ball" title={title} subtitle={subtitle} tags={["achievement milestone"]}><StatusPill>{subtitle.includes("/") ? subtitle.split(" ")[0] : "Ready"}</StatusPill></Row>) },
+    { title: "About the Tournament", icon: "info", rows: ["History", "Format", "Qualification", "Host Cities", "Stadiums", "Official Match Ball", "Mascot", "Official Song", "Records", "Golden Ball History", "Golden Boot History", "Past Champions"].map(label => (
+      <Row key={label} icon="info" title={label} subtitle="Open tournament reference material curated for World Cup 2026." tags={["about tournament history format records champions"]} action={() => onNavigate(label === "Host Cities" || label === "Stadiums" ? "more" : "about")}><span className="settings-row__chevron">›</span></Row>
+    )) },
+    { title: "App Information", icon: "settings", rows: [
+      <Row key="version" icon="settings" title="Version" subtitle="Compet 2026 app build." tags={["version build"]}><StatusPill>v1.0.0</StatusPill></Row>,
+      <Row key="data-version" icon="settings" title="Data Version" subtitle={`${data.gs.length + data.ko.length} canonical matches, ${Object.keys(data.venues).length} venues, ${allTeams.length} teams.`} tags={["data api repository license credits"]}><StatusPill>2026.1</StatusPill></Row>,
+      <Row key="repo" icon="share" title="Repository" subtitle="Open the project source and implementation history." tags={["repository open source"]}><button type="button" className="settings-action" onClick={() => window.open("https://github.com/jsaintfleur/wc2026", "_blank", "noopener,noreferrer")}>Open</button></Row>,
+      <Row key="legal" icon="info" title="License, Privacy, Terms, Credits" subtitle="App information, open-source licenses, privacy policy, and usage terms." tags={["license privacy terms credits"]} action={() => onNavigate("about")}><span className="settings-row__chevron">›</span></Row>,
+    ] },
+    { title: "Developer", icon: "settings", rows: [
+      <Row key="unlock" icon="settings" title="Developer Console" subtitle="Hidden tools for feed inspection, performance, logs, and demo data." tags={["developer debug api inspector cache performance fps logs"]}>
+        <button type="button" className="settings-action" onClick={() => update("developerUnlocked", !settings.developerUnlocked)}>{settings.developerUnlocked ? "Hide" : "Unlock"}</button>
+      </Row>,
+      ...(settings.developerUnlocked ? ["Debug Mode", "API Inspector", "Cache Inspector", "Live Feed Inspector", "Performance Monitor", "FPS Counter", "Network Requests", "Reset Demo Data", "Export Logs"].map(label => (
+        <Row key={label} icon="settings" title={label} subtitle="Developer-only diagnostic control for tournament data and UI performance." tags={["developer debug inspector performance logs"]}><StatusPill>Ready</StatusPill></Row>
+      )) : []),
+    ] },
+    { title: "Support", icon: "info", rows: ["FAQ", "Contact Support", "Report Bug", "Suggest Feature", "Rate App", "Join Beta"].map(label => (
+      <Row key={label} icon="info" title={label} subtitle="Get help, send feedback, or join future Compet test flights." tags={["support faq bug feature beta rate"]}><button type="button" className="settings-action" onClick={() => handleShare(label)}>{label === "Report Bug" ? "Report" : label === "Suggest Feature" ? "Suggest" : "Open"}</button></Row>
+    )) },
+  ];
+
+  const visibleSections = sections.map(section => ({ ...section, rows: section.rows.filter(Boolean) })).filter(section => section.rows.length > 0);
+
+  return (
+    <main className="settings-view" aria-label="Settings">
+      <section className="settings-hero">
+        <div>
+          <span className="settings-eyebrow">Control Center</span>
+          <h2>Settings</h2>
+          <p>Personalize the tournament around your team, alerts, match cards, map, stats, regional preferences, downloads, and data health.</p>
+        </div>
+        <div className="settings-hero__stats" aria-label="Settings summary">
+          <span><b>{data.flags[settings.defaultTeam] || "•"}</b><small>{settings.defaultTeam}</small></span>
+          <span><b>{Object.values(settings.notifications).filter(Boolean).length}</b><small>alerts on</small></span>
+          <span><b>{Object.values(settings.downloads).filter(Boolean).length}</b><small>offline packs</small></span>
+        </div>
+      </section>
+
+      <section className="settings-search-card" aria-label="Search settings">
+        <label className="settings-search">
+          <AppIcon name="settings" />
+          <input
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            onBlur={event => rememberSearch(event.target.value)}
+            placeholder="Search Settings"
+            aria-label="Search Settings"
+          />
+          {query && <button type="button" onClick={() => setQuery("")} aria-label="Clear settings search">×</button>}
+        </label>
+        <div className="settings-recent" aria-label="Recent settings searches">
+          <span>Recent</span>
+          {recentSearches.map(item => <button key={item} type="button" onClick={() => setQuery(item)}>{item}</button>)}
+        </div>
+      </section>
+
+      <section className="settings-favorites" aria-label="Favorite settings">
+        <button type="button" onClick={() => onNavigate(settings.defaultTournamentView)}><AppIcon name="home" /><b>Open default view</b><small>{settings.defaultTournamentView}</small></button>
+        <button type="button" onClick={() => onTeamClick(settings.defaultTeam)}><AppIcon name="teams" /><b>Favorite team</b><small>{settings.defaultTeam}</small></button>
+        <button type="button" onClick={() => onNavigate("map")}><AppIcon name="map" /><b>Map focus</b><small>{settings.mapCenter}</small></button>
+        <button type="button" onClick={() => setQuery("notifications")}><AppIcon name="bell" /><b>Alerts</b><small>{Object.values(settings.notifications).filter(Boolean)} enabled</small></button>
+      </section>
+
+      {visibleSections.map(section => (
+        <section key={section.title} className="settings-section">
+          <div className="settings-section__heading">
+            <span><AppIcon name={section.icon} /></span>
+            <h3>{section.title}</h3>
+            <small>{section.rows.length}</small>
+          </div>
+          <div className="settings-card">{section.rows}</div>
+        </section>
+      ))}
+    </main>
+  );
+}
+
 /* ---------------------------------------------------------------
  * MoreView — comprehensive tournament dashboard
  * Sections: Hero, Progress, Quick Access, Stadiums, Host Cities,
@@ -2687,9 +3543,9 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
             <span>About Compet 2026</span>
             <span className="more-settings-row__chevron">›</span>
           </button>
-          <button type="button" className="more-settings-row" onClick={() => {}}>
-            <span className="more-settings-row__icon"><AppIcon name="bell" /></span>
-            <span>Notifications</span>
+          <button type="button" className="more-settings-row" onClick={() => onNavigate("settings")}>
+            <span className="more-settings-row__icon"><AppIcon name="settings" /></span>
+            <span>Settings Control Center</span>
             <span className="more-settings-row__chevron">›</span>
           </button>
           <button type="button" className="more-settings-row" onClick={handleShare}>
@@ -3696,6 +4552,82 @@ function posColor(p: string): string {
   return ({ GK: "#b58900", DF: "#2563eb", MF: "#0A5C3E", FW: "#D23B2E" }[p]) || "#5C6B62";
 }
 
+type PlayerImageSource = {
+  name?: string;
+  team?: string;
+  imageUrl?: string | null;
+  headshotUrl?: string | null;
+  avatarUrl?: string | null;
+};
+
+type PlayerAvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
+
+function playerInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const initials = (parts[0]?.[0] || "?") + (parts.length > 1 ? parts[parts.length - 1][0] : "");
+  return initials.toUpperCase();
+}
+
+function playerImageUrl(player?: PlayerImageSource | null): string | null {
+  return player?.headshotUrl || player?.imageUrl || player?.avatarUrl || null;
+}
+
+function playerTeamColors(teamName: string): { primary: string; secondary: string } {
+  const colors = TEAM_PROFILES[teamName]?.kitColors;
+  return {
+    primary: colors?.primary || "#0A5C3E",
+    secondary: colors?.secondary || "#D4AF37",
+  };
+}
+
+function PlayerAvatar({ playerName, teamName, player, size = "md", className = "" }: {
+  playerName: string;
+  teamName: string;
+  player?: PlayerImageSource | null;
+  size?: PlayerAvatarSize;
+  className?: string;
+}) {
+  const src = playerImageUrl(player);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const showImage = !!src && src !== failedSrc;
+  const colors = playerTeamColors(teamName);
+  const style = {
+    "--player-avatar-primary": colors.primary,
+    "--player-avatar-secondary": colors.secondary,
+  } as CSSProperties;
+
+  useEffect(() => {
+    setFailedSrc(null);
+  }, [src]);
+
+  return (
+    <span
+      className={`player-avatar player-avatar--${size} ${className}`}
+      style={style}
+      role={showImage ? undefined : "img"}
+      aria-label={showImage ? undefined : `${playerName} headshot`}
+    >
+      {showImage ? (
+        <img
+          src={src}
+          alt={`${playerName} headshot`}
+          width={64}
+          height={64}
+          loading="lazy"
+          decoding="async"
+          onError={() => setFailedSrc(src)}
+        />
+      ) : (
+        <span className="player-avatar__initials" aria-hidden="true">{playerInitials(playerName)}</span>
+      )}
+    </span>
+  );
+}
+
+function findFixturePlayer(fixture: LiveFixture | null | undefined, playerName: string, teamName: string): PlayerMatchStat | undefined {
+  return fixture?.players?.find(player => canon(player.team) === canon(teamName) && nrm(player.name) === nrm(playerName));
+}
+
 function PlayerProfileDrawer({ playerName, teamName, flags, data, onClose, onTeamClick }: {
   playerName: string;
   teamName: string;
@@ -3727,6 +4659,7 @@ function PlayerProfileDrawer({ playerName, teamName, flags, data, onClose, onTea
         <div className="drawer pp-drawer" onClick={e => e.stopPropagation()}>
           <div className="pp-drawer__header" style={{ background: headerBg, color: headerText }}>
             <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
+            <PlayerAvatar playerName={playerName} teamName={teamName} size="xl" />
             <div className="pp-drawer__name">{playerName}</div>
             <button className="pp-drawer__team-link" onClick={() => { onClose(); onTeamClick(teamName); }}>
               {flag} {teamName} →
@@ -3745,6 +4678,7 @@ function PlayerProfileDrawer({ playerName, teamName, flags, data, onClose, onTea
       <div className="drawer pp-drawer" onClick={e => e.stopPropagation()}>
         <div className="pp-drawer__header" style={{ background: headerBg, color: headerText }}>
           <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
+          <PlayerAvatar playerName={player.name} teamName={teamName} player={player} size="xl" />
           {player.number != null && <div className="pp-drawer__number">{player.number}</div>}
           <div className="pp-drawer__name">{player.name}</div>
           <div className="pp-drawer__pos" style={{ background: posColor(player.pos) }}>{posLabel(player.pos)}</div>
@@ -4045,6 +4979,7 @@ function TeamDrawer({ name, flags, groups, gcolor, gs, hosts, onClose, onPlayerC
                 {byPos[pos].map(p => (
                   <div key={p.name} className="drawer__player drawer__player--clickable" onClick={() => onPlayerClick(p.name, name)} role="button" tabIndex={0}>
                     <div className="drawer__player-main">
+                      <PlayerAvatar playerName={p.name} teamName={name} player={p} size="sm" />
                       {p.number && <span className="drawer__player-num">{p.number}</span>}
                       <span className="drawer__player-name">{p.name}</span>
                       <span className="drawer__player-pos" style={{ background: posColor(p.pos) }}>{p.pos}</span>
@@ -4224,14 +5159,26 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
               {homeGoals.map((g, i) => {
                 const min = g.extra ? `${g.minute}+${g.extra}'` : `${g.minute}'`;
                 const pen = g.detail === "Penalty" ? " (P)" : g.detail === "Own Goal" ? " (OG)" : "";
-                return <div key={i} className="md-drawer__scorer">⚽ {g.player} {min}{pen}</div>;
+                const scorerTeam = g.team || match.t1;
+                return (
+                  <div key={i} className="md-drawer__scorer">
+                    <PlayerAvatar playerName={g.player} teamName={scorerTeam} player={findFixturePlayer(fixture, g.player, scorerTeam)} size="xs" />
+                    <span>⚽ {g.player} {min}{pen}</span>
+                  </div>
+                );
               })}
             </div>
             <div className="md-drawer__scorers-col md-drawer__scorers-col--away">
               {awayGoals.map((g, i) => {
                 const min = g.extra ? `${g.minute}+${g.extra}'` : `${g.minute}'`;
                 const pen = g.detail === "Penalty" ? " (P)" : g.detail === "Own Goal" ? " (OG)" : "";
-                return <div key={i} className="md-drawer__scorer">{g.player} {min}{pen} ⚽</div>;
+                const scorerTeam = g.team || match.t2;
+                return (
+                  <div key={i} className="md-drawer__scorer md-drawer__scorer--away">
+                    <span>{g.player} {min}{pen} ⚽</span>
+                    <PlayerAvatar playerName={g.player} teamName={scorerTeam} player={findFixturePlayer(fixture, g.player, scorerTeam)} size="xs" />
+                  </div>
+                );
               })}
             </div>
           </div>
@@ -4382,6 +5329,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
             <div className="md-drawer__performers">
               {[...fixture.players].filter(p => p.rating).sort((a, b) => parseFloat(b.rating || "0") - parseFloat(a.rating || "0")).slice(0, 6).map((p, i) => (
                 <div key={i} className="md-drawer__performer">
+                  <PlayerAvatar playerName={p.name} teamName={p.team} player={p} size="sm" />
                   <div className="md-drawer__performer-rating">{parseFloat(p.rating || "0").toFixed(1)}</div>
                   <div className="md-drawer__performer-info">
                     <span className="md-drawer__performer-name">{p.name}</span>
@@ -4418,6 +5366,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
           const playerStats = fixture?.players?.find(ps => ps.number === p.number && canon(ps.team) === canon(teamName));
           return (
             <div key={i} className="md-lineup__player md-lineup__player--clickable" onClick={() => onPlayerClick(p.name, matchTeam)} role="button" tabIndex={0}>
+              <PlayerAvatar playerName={p.name} teamName={matchTeam} player={playerStats || p} size="xs" />
               <span className="md-lineup__num">{p.number}</span>
               <span className="md-lineup__name">{p.name}</span>
               <span className="md-lineup__pos" data-pos={p.pos}>{p.pos}</span>
@@ -4437,6 +5386,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
             <div className="md-lineup__section-label">Substitutes</div>
             {lineup.substitutes.map((p, i) => (
               <div key={i} className="md-lineup__player md-lineup__player--sub md-lineup__player--clickable" onClick={() => onPlayerClick(p.name, matchTeam)} role="button" tabIndex={0}>
+                <PlayerAvatar playerName={p.name} teamName={matchTeam} player={findFixturePlayer(fixture, p.name, matchTeam) || p} size="xs" />
                 <span className="md-lineup__num">{p.number}</span>
                 <span className="md-lineup__name">{p.name}</span>
                 <span className="md-lineup__pos" data-pos={p.pos}>{p.pos}</span>
@@ -4478,6 +5428,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
                   return (
                     <button key={i} className="fm-pitch__player" style={{ left: `${left}%` }}
                       onClick={() => onPlayerClick(p.name, resolvedTeam)}>
+                      <PlayerAvatar playerName={p.name} teamName={resolvedTeam} player={ps || p} size="xs" />
                       <span className="fm-pitch__num">{p.number}</span>
                       <span className="fm-pitch__name">{p.name.split(" ").pop()}</span>
                       {ps?.rating && <span className="fm-pitch__rating">{parseFloat(ps.rating).toFixed(1)}</span>}
@@ -4624,6 +5575,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
               <h4 className="report__h4">Player of the Match</h4>
               {topPerformers.map((p, i) => (
                 <div key={i} className="report__potm">
+                  <PlayerAvatar playerName={p.name} teamName={p.team} player={p} size="sm" />
                   <span className="report__potm-rating">{parseFloat(p.rating || "0").toFixed(1)}</span>
                   <span className="report__potm-name">{p.name}</span>
                   <span className="report__potm-team">{flags[p.team] || "⚽"} {p.team}</span>
@@ -4645,7 +5597,10 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
                 return (
                   <div key={i} className="report__goal">
                     <span className="report__goal-min">{min}</span>
-                    <span>{eventIcon(g.type, g.detail)} {g.player}</span>
+                    <span className="report__goal-player">
+                      <PlayerAvatar playerName={g.player} teamName={g.team} player={findFixturePlayer(fixture, g.player, g.team)} size="xs" />
+                      <span>{eventIcon(g.type, g.detail)} {g.player}</span>
+                    </span>
                     <span className="report__goal-team">{flags[g.team] || "⚽"}</span>
                     {g.detail !== "Normal Goal" && <span className="report__goal-detail">({g.detail})</span>}
                   </div>
@@ -4678,6 +5633,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
             <div className="md-squad__pos" style={{ color: posColor(pos) }}>{posLabel(pos)}s</div>
             {byPos[pos].map(p => (
               <div key={p.name} className="md-squad__player" onClick={() => onPlayerClick(p.name, teamName)} role="button" tabIndex={0}>
+                <PlayerAvatar playerName={p.name} teamName={teamName} player={p} size="xs" />
                 {p.number != null && <span className="md-squad__num">{p.number}</span>}
                 <span className="md-squad__name">{p.name}</span>
                 <span className="md-squad__club">{p.club}</span>
@@ -4756,11 +5712,6 @@ type LeaderboardCategory = {
   detail: (leader: PlayerLeader) => string;
 };
 
-function playerInitials(name: string): string {
-  const parts = name.split(/\s+/).filter(Boolean);
-  return (parts[0]?.[0] || "?") + (parts.length > 1 ? parts[parts.length - 1][0] : "");
-}
-
 const KNOWN_TEAM_NAMES = new Set(Object.keys(TEAM_PROFILES).map(team => canon(team)));
 
 function isRenderableLeader(leader: PlayerLeader): boolean {
@@ -4777,10 +5728,10 @@ function rankFor(leaders: PlayerLeader[], index: number, value: (leader: PlayerL
   return current === previous ? rankFor(leaders, index - 1, value) : index + 1;
 }
 
-function playerMeta(leader: PlayerLeader): { number?: number; pos?: string; club?: string } {
+function playerMeta(leader: PlayerLeader): { number?: number; pos?: string; club?: string; player?: PlayerInfo } {
   const squad = TEAM_PROFILES[leader.team]?.squad || [];
   const found = squad.find(p => nrm(p.name) === nrm(leader.name));
-  return found ? { number: found.number, pos: found.pos, club: found.club } : {};
+  return found ? { number: found.number, pos: found.pos, club: found.club, player: found } : {};
 }
 
 function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistData, matchesPlayed }: {
@@ -4839,13 +5790,11 @@ function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistD
             const pct = (value / max) * 100;
             const rank = rankFor(leaders, index, category.value);
             const meta = playerMeta(leader);
-            const initials = playerInitials(leader.name);
+            const avatarSource = playerImageUrl(leader) ? leader : meta.player;
             return (
               <article key={`${category.key}-${leader.name}-${leader.team}`} className={`stats-leader-card${index < 3 ? " stats-leader-card--podium" : ""}`}>
                 <div className="stats-leader-card__rank">#{rank}</div>
-                <div className="stats-leader-card__photo" aria-hidden="true">
-                  <span>{initials === "?" ? "◎" : initials}</span>
-                </div>
+                <PlayerAvatar playerName={leader.name} teamName={leader.team} player={avatarSource} size="lg" className="stats-leader-card__photo" />
                 <div className="stats-leader-card__main">
                   <div className="stats-leader-card__name-row">
                     <b>{leader.name}</b>

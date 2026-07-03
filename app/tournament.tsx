@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { HOST_VENUE_DETAILS, MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type PlayerMatchStat, type TeamLineup, type VenueDetails } from "@/lib/data";
-import { nrm, canon } from "@/lib/merge";
+import { nrm, canon, canonPlayer } from "@/lib/merge";
 import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type TournamentStats } from "@/lib/stats";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import TriondaBall from "@/app/components/TriondaBall";
@@ -571,6 +571,11 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
   const [query, setQuery] = useState("");
   const [fixtures, setFixtures] = useState<LiveFixture[]>(() => getStartupLiveDataCache()?.fixtures || []);
   const [leaderboardStats, setLeaderboardStats] = useState<ExternalLeaderStat[]>(() => getStartupLiveDataCache()?.leaderboardStats || []);
+
+  /* Populate the global player-image index during render (useMemo, not
+     useEffect) so avatars sourced from the index appear in the same pass —
+     the write is idempotent and keyed only on the live payload. */
+  useMemo(() => rebuildPlayerImageIndex(fixtures, leaderboardStats), [fixtures, leaderboardStats]);
   const [liveStatus, setLiveStatus] = useState<LiveStatus>("init");
   const [liveTs, setLiveTs] = useState(() => getStartupLiveDataCache()?.ts || 0);
   const [, setLiveStale] = useState(false);
@@ -4831,6 +4836,42 @@ function playerInitials(name: string): string {
   return initials.toUpperCase();
 }
 
+/* ── Global player-image index ─────────────────────────────────
+   Aggregates every headshot URL seen in live data (fixture player stats,
+   lineups, ESPN leader stats) keyed by canonical player name. PlayerAvatar
+   consults it when its direct source carries no image, so static-roster
+   surfaces (team squads, player profiles) still show real headshots once a
+   player has appeared in any data source. */
+const PLAYER_IMAGE_INDEX = new Map<string, string>();
+
+function playerImageKey(name: string, team?: string): string {
+  return `${nrm(canonPlayer(name))}|${team ? nrm(canon(team)) : ""}`;
+}
+
+function indexPlayerImage(name: string | undefined, team: string | undefined, source: PlayerImageSource): void {
+  const url = source.headshotUrl || source.imageUrl || source.avatarUrl;
+  if (!name || !url) return;
+  // First-seen wins: sources are processed most-reliable-first and headshot
+  // URLs for a player rarely change mid-tournament.
+  const teamKey = playerImageKey(name, team);
+  if (!PLAYER_IMAGE_INDEX.has(teamKey)) PLAYER_IMAGE_INDEX.set(teamKey, url);
+  const nameKey = playerImageKey(name);
+  if (!PLAYER_IMAGE_INDEX.has(nameKey)) PLAYER_IMAGE_INDEX.set(nameKey, url);
+}
+
+/* Rebuilds the index from the current live payload. Called from the top-level
+   Tournament component whenever fixtures or leader stats change. */
+function rebuildPlayerImageIndex(fixtures: LiveFixture[], leaderStats: ExternalLeaderStat[]): void {
+  // ESPN leader stats first — their headshots are the highest quality
+  for (const leader of leaderStats) indexPlayerImage(leader.name, leader.team, leader);
+  for (const f of fixtures) {
+    for (const p of f.players || []) indexPlayerImage(p.name, p.team, p);
+    for (const lineup of f.lineups || []) {
+      for (const p of [...lineup.startXI, ...lineup.substitutes]) indexPlayerImage(p.name, lineup.team, p);
+    }
+  }
+}
+
 function playerImageUrl(player?: PlayerImageSource | null): string | null {
   return player?.headshotUrl || player?.imageUrl || player?.avatarUrl || null;
 }
@@ -4850,7 +4891,12 @@ function PlayerAvatar({ playerName, teamName, player, size = "md", className = "
   size?: PlayerAvatarSize;
   className?: string;
 }) {
-  const src = playerImageUrl(player);
+  /* Direct source first, then the global index — so a roster entry without
+     its own URL still shows the headshot captured from live match data. */
+  const src = playerImageUrl(player)
+    || PLAYER_IMAGE_INDEX.get(playerImageKey(playerName, teamName))
+    || PLAYER_IMAGE_INDEX.get(playerImageKey(playerName))
+    || null;
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const showImage = !!src && src !== failedSrc;
   const colors = playerTeamColors(teamName);

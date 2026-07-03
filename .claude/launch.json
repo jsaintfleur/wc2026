@@ -2,8 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "wc2026-prod",
+      "cwd": "/Users/luko90s/Developer/wc2026",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start", "--", "-p", "3002"],
+      "port": 3002
+    },
+    {
       "name": "wc2026",
-      "cwd": "/Users/luko90s/wc2026",
+      "cwd": "/Users/luko90s/Developer/wc2026",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "-p", "3001"],
       "port": 3001

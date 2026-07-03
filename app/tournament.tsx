@@ -1,6 +1,8 @@
 "use client";
 
-import { memo, useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Component, memo, useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import dynamic from "next/dynamic";
+import type { VenueFocusRequest, VenueMapMarker } from "@/app/components/VenueMap";
 import { HOST_VENUE_DETAILS, MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type PlayerMatchStat, type TeamLineup, type VenueDetails } from "@/lib/data";
 import { nrm, canon, canonPlayer } from "@/lib/merge";
 import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type TournamentStats } from "@/lib/stats";
@@ -2533,19 +2535,51 @@ function loadMapPrefs(): Pick<SettingsModel, "mapStyle" | "mapCenter" | "remembe
 
 /* Last viewed venue/zoom, persisted when "Remember last viewed map location"
    is enabled in Settings. */
-function loadRememberedMapState(): { venueId: string; zoom: number } | null {
+/* Default Leaflet view: continental North America — all 16 venues from
+   Vancouver to Mexico City fit at zoom 4 on typical viewports. */
+const MAP_DEFAULT_CENTER: [number, number] = [39.5, -97];
+const MAP_DEFAULT_ZOOM = 4;
+
+function loadRememberedMapState(): { venueId: string; center: [number, number]; zoom: number } | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(MAP_STATE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { venueId?: unknown; zoom?: unknown };
+    const parsed = JSON.parse(raw) as { venueId?: unknown; center?: unknown; zoom?: unknown };
     if (typeof parsed.venueId !== "string" || !HOST_VENUE_DETAILS[parsed.venueId]) return null;
-    const zoom = typeof parsed.zoom === "number" && parsed.zoom >= 0.85 && parsed.zoom <= 1.45 ? parsed.zoom : 1;
-    return { venueId: parsed.venueId, zoom };
+    // Leaflet zoom levels (3-12); values saved by the old SVG map (0.85-1.45)
+    // fail this range check and fall back to the default view.
+    const zoom = typeof parsed.zoom === "number" && parsed.zoom >= 3 && parsed.zoom <= 12 ? parsed.zoom : MAP_DEFAULT_ZOOM;
+    const c = parsed.center;
+    const center: [number, number] = Array.isArray(c) && c.length === 2 && c.every(v => typeof v === "number")
+      ? [c[0] as number, c[1] as number]
+      : MAP_DEFAULT_CENTER;
+    return { venueId: parsed.venueId, center, zoom };
   } catch {
     return null;
   }
 }
+
+/* Bottom-sheet / side-panel display states. Mobile: closed → floating map
+   only; collapsed → header pill; half → 46svh sheet; expanded → 80svh.
+   Desktop treats half/expanded as the open side panel and collapsed as a
+   narrow rail. */
+type MapPanelState = "closed" | "collapsed" | "half" | "expanded";
+
+/* Renders the legacy SVG map if the Leaflet chunk throws — the fallback
+   keeps every marker clickable, just without real tiles. */
+class MapErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() { return this.state.failed ? this.props.fallback : this.props.children; }
+}
+
+/* Leaflet touches `window` at import time, so the real map loads client-side
+   only; SSR and the loading gap render a lightweight placeholder. */
+const VenueMap = dynamic(() => import("@/app/components/VenueMap"), {
+  ssr: false,
+  loading: () => <div className="venue-map-loading" role="status">Loading map…</div>,
+});
 
 /* Memoized with minute-granular time comparison: nothing on the map needs
    sub-minute precision, so parent re-renders (drawer state, search typing,
@@ -2558,37 +2592,60 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   const [activeVenueId, setActiveVenueId] = useState(remembered?.venueId || "METLIFE");
   const [filter, setFilter] = useState<MapFilter>("all");
   const [selectedTeam, setSelectedTeam] = useState("ALL");
-  const [zoom, setZoom] = useState(remembered?.zoom || 1);
-  /* Mobile bottom sheet: collapsible so the southern venues (Mexico City)
-     are reachable behind it. Desktop side panel ignores this state. */
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  /* Zoom for the SVG FALLBACK map only — the Leaflet map manages its own */
+  const [svgZoom, setSvgZoom] = useState(1);
+  /* Bottom sheet (mobile) / side panel (desktop) display state */
+  const [panelState, setPanelState] = useState<MapPanelState>("half");
+  /* One-shot auto-pan request consumed by the Leaflet map */
+  const [focusRequest, setFocusRequest] = useState<VenueFocusRequest | null>(null);
+  /* Live view (center/zoom) mirrored from Leaflet's moveend for persistence */
+  const viewRef = useRef<{ center: [number, number]; zoom: number }>({
+    center: remembered?.center || MAP_DEFAULT_CENTER,
+    zoom: remembered?.zoom || MAP_DEFAULT_ZOOM,
+  });
   /* Focus target for the venue panel — when a marker is activated we move
      focus to the panel heading so keyboard/screen-reader users land on the
      content that just changed instead of staying lost among the markers. */
   const panelHeadingRef = useRef<HTMLHeadingElement>(null);
   const canvasScrollRef = useRef<HTMLDivElement>(null);
 
-  /* Scroll the map canvas so the given projected point is centered — keeps
-     the selected marker visible when it sits under the mobile sheet or
-     outside the current pan position. */
-  const panToPoint = (point: { x: number; y: number }) => {
-    const scroller = canvasScrollRef.current;
-    if (!scroller) return;
-    const canScroll = scroller.scrollWidth > scroller.clientWidth || scroller.scrollHeight > scroller.clientHeight;
-    if (!canScroll) return;
-    scroller.scrollTo({
-      left: (point.x / 1000) * scroller.scrollWidth - scroller.clientWidth / 2,
-      top: (point.y / 620) * scroller.scrollHeight - scroller.clientHeight / 2,
-      behavior: "smooth",
-    });
-  };
-
-  const selectVenue = (venueId: string, point?: { x: number; y: number }) => {
+  const selectVenue = (venueId: string) => {
     setActiveVenueId(venueId);
-    setPanelCollapsed(false);
-    if (point) panToPoint(point);
+    /* Opening from closed/collapsed lands on the half sheet; an already
+       open panel keeps its current size. */
+    const nextPanel: MapPanelState = panelState === "closed" || panelState === "collapsed" ? "half" : panelState;
+    setPanelState(nextPanel);
+    /* Auto-pan so the marker stays visible above the sheet (mobile) or
+       left of the side panel (desktop). */
+    const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
+    const offsetY = isMobile ? Math.round(window.innerHeight * (nextPanel === "expanded" ? 0.3 : 0.2)) : 0;
+    const offsetX = isMobile ? 0 : 180;
+    setFocusRequest(req => ({ venueId, offsetX, offsetY, seq: (req?.seq || 0) + 1 }));
     window.requestAnimationFrame(() => panelHeadingRef.current?.focus());
   };
+
+  /* Persist the live map view when "remember last location" is on */
+  const handleViewChange = useCallback((center: [number, number], zoom: number) => {
+    viewRef.current = { center, zoom };
+    if (!prefs.rememberMap) return;
+    try {
+      window.localStorage.setItem(MAP_STATE_KEY, JSON.stringify({ venueId: activeVenueIdRef.current, center, zoom }));
+    } catch { /* private mode / quota */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs.rememberMap]);
+  /* Ref mirror so handleViewChange stays identity-stable for the map */
+  const activeVenueIdRef = useRef(activeVenueId);
+  activeVenueIdRef.current = activeVenueId;
+
+  /* Escape closes the venue panel from anywhere in the view */
+  useEffect(() => {
+    if (panelState === "closed") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPanelState("closed");
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [panelState]);
 
   const allTeams = useMemo(() => Object.values(data.groups).flat().sort((a, b) => a.localeCompare(b)), [data.groups]);
 
@@ -2712,6 +2769,29 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     return venue ? mapPoint(venue) : null;
   }).filter((point): point is { x: number; y: number } => !!point), [teamJourney, venueModels]);
 
+  /* Marker models for the Leaflet map (real lat/lng, not SVG projection) */
+  const mapMarkers = useMemo<VenueMapMarker[]>(() => venueModels.map(venue => ({
+    venueId: venue.venueId,
+    stadiumName: venue.stadiumName,
+    city: venue.city,
+    country: venue.country,
+    latitude: venue.latitude,
+    longitude: venue.longitude,
+    live: venue.liveCount > 0,
+    active: venue.venueId === activeVenueId,
+    muted: !filteredVenueIds.has(venue.venueId),
+    matchesHosted: venue.matchesHosted,
+    liveCount: venue.liveCount,
+    upcomingCount: venue.upcomingCount,
+    completedCount: venue.completedCount,
+  })), [venueModels, filteredVenueIds, activeVenueId]);
+
+  /* Team travel path as geographic stops for the Leaflet polyline */
+  const routeLatLngs = useMemo<[number, number][]>(() => teamJourney.map(match => {
+    const venue = venueModels.find(v => v.venueId === match.venueId);
+    return venue ? [venue.latitude, venue.longitude] as [number, number] : null;
+  }).filter((p): p is [number, number] => !!p), [teamJourney, venueModels]);
+
   const openMatch = (match: MapMatch) => onMatchClick(match.sourceMatch, match.fixture);
 
   /* Keep the venue panel in sync with the active filter: if the selected
@@ -2763,13 +2843,14 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [venueModels, mapMatches]);
 
-  /* Persist last viewed venue + zoom when the setting is enabled */
+  /* Persist the selected venue when it changes (map center/zoom persist on
+     moveend via handleViewChange) */
   useEffect(() => {
     if (!prefs.rememberMap) return;
     try {
-      window.localStorage.setItem(MAP_STATE_KEY, JSON.stringify({ venueId: activeVenueId, zoom }));
+      window.localStorage.setItem(MAP_STATE_KEY, JSON.stringify({ venueId: activeVenueId, ...viewRef.current }));
     } catch { /* private mode / quota */ }
-  }, [activeVenueId, zoom, prefs.rememberMap]);
+  }, [activeVenueId, prefs.rememberMap]);
 
   return (
     // <section>, not <main> — the app shell already renders the single
@@ -2815,11 +2896,16 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
         </label>
       </div>
 
-      <section className="map-shell">
+      <section className={`map-shell map-shell--panel-${panelState}`}>
         <div className="map-canvas-card">
+          {/* Real interactive map (tiles, pan, pinch-zoom). The legacy SVG
+              map below is ONLY the error fallback if the Leaflet chunk
+              fails to load. */}
+          <MapErrorBoundary fallback={(
+            <>
           <div className="map-controls" aria-label="Map zoom controls">
-            <button type="button" onClick={() => setZoom(z => Math.min(1.45, +(z + 0.15).toFixed(2)))} aria-label="Zoom in">+</button>
-            <button type="button" onClick={() => setZoom(z => Math.max(0.85, +(z - 0.15).toFixed(2)))} aria-label="Zoom out">−</button>
+            <button type="button" onClick={() => setSvgZoom(z => Math.min(1.45, +(z + 0.15).toFixed(2)))} aria-label="Zoom in">+</button>
+            <button type="button" onClick={() => setSvgZoom(z => Math.max(0.85, +(z - 0.15).toFixed(2)))} aria-label="Zoom out">−</button>
           </div>
           <div className="map-canvas-scroll" ref={canvasScrollRef}>
             {/* role="group" (not "img") — an img role would flatten the whole
@@ -2828,7 +2914,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
                 Zoom drives the SVG's laid-out width via --map-zoom rather
                 than transform: scale() — transforms don't grow the scroll
                 extent, which made zoomed-in coasts unreachable. */}
-            <svg className={`host-map host-map--${prefs.mapStyle.toLowerCase()}`} viewBox="0 0 1000 620" style={{ "--map-zoom": zoom } as CSSProperties} role="group" aria-label="Map of World Cup 2026 host venues">
+            <svg className={`host-map host-map--${prefs.mapStyle.toLowerCase()}`} viewBox="0 0 1000 620" style={{ "--map-zoom": svgZoom } as CSSProperties} role="group" aria-label="Map of World Cup 2026 host venues">
               <defs>
                 <linearGradient id="mapLand" x1="0" x2="1" y1="0" y2="1">
                   <stop offset="0%" stopColor="#173926" />
@@ -2875,11 +2961,11 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
                       className="map-marker-button"
                       aria-label={markerLabel}
                       aria-pressed={active}
-                      onClick={() => selectVenue(venue.venueId, point)}
+                      onClick={() => selectVenue(venue.venueId)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          selectVenue(venue.venueId, point);
+                          selectVenue(venue.venueId);
                         }
                       }}
                     >
@@ -2896,27 +2982,60 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
                 );
               })}
             </svg>
-            {filteredVenueIds.size === 0 && (
-              <p className="map-empty" role="status">No venues match this filter. Try a different filter or team.</p>
-            )}
           </div>
+            </>
+          )}>
+            <VenueMap
+              markers={mapMarkers}
+              routePoints={routeLatLngs}
+              mapStyle={prefs.mapStyle}
+              initialCenter={viewRef.current.center}
+              initialZoom={viewRef.current.zoom}
+              focusRequest={focusRequest}
+              layoutKey={panelState}
+              onSelect={selectVenue}
+              onViewChange={handleViewChange}
+            />
+          </MapErrorBoundary>
+          {filteredVenueIds.size === 0 && (
+            <p className="map-empty" role="status">No venues match this filter. Try a different filter or team.</p>
+          )}
         </div>
 
         {/* aria-live lets screen readers hear panel updates triggered from
-            the map; the heading takes focus when a marker is activated. */}
-        {activeVenue && (
-          <aside className={`map-panel${panelCollapsed ? " map-panel--collapsed" : ""}`} aria-label={`${activeVenue.stadiumName} details`} aria-live="polite">
-            {/* Real control on mobile (visually a drag-handle bar): collapses
-                the sheet so venues behind it — Mexico City — stay reachable. */}
+            the map; the heading takes focus when a marker is activated.
+            States: collapsed (header pill), half, expanded — closed unmounts
+            the panel so the map is fully usable. Escape closes. */}
+        {activeVenue && panelState !== "closed" && (
+          <aside className={`map-panel map-panel--${panelState}`} aria-label={`${activeVenue.stadiumName} details`} aria-live="polite">
+            {/* Drag-handle bar (mobile): toggles between half and expanded */}
             <button
               type="button"
               className="map-panel__handle"
-              aria-expanded={!panelCollapsed}
-              aria-label={panelCollapsed ? "Expand venue details" : "Collapse venue details"}
-              onClick={() => setPanelCollapsed(collapsed => !collapsed)}
+              aria-label={panelState === "expanded" ? "Shrink venue details to half height" : "Expand venue details"}
+              onClick={() => setPanelState(state => state === "expanded" ? "half" : "expanded")}
             >
               <span aria-hidden="true" />
             </button>
+            <div className="map-panel__bar">
+              <span className="map-panel__bar-title">{activeVenue.stadiumName}</span>
+              <button
+                type="button"
+                className="map-panel__bar-btn"
+                aria-label={panelState === "collapsed" ? "Restore venue details" : "Minimize venue details"}
+                onClick={() => setPanelState(state => state === "collapsed" ? "half" : "collapsed")}
+              >
+                {panelState === "collapsed" ? "▴" : "▾"}
+              </button>
+              <button
+                type="button"
+                className="map-panel__bar-btn"
+                aria-label="Close venue details"
+                onClick={() => setPanelState("closed")}
+              >
+                ×
+              </button>
+            </div>
             <div className="map-panel__hero">
               <div className="map-panel__image" style={activeVenue.imageUrl ? { backgroundImage: `url(${activeVenue.imageUrl})` } : undefined}>
                 {!activeVenue.imageUrl && <span>{activeVenue.city.slice(0, 3).toUpperCase()}</span>}

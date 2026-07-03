@@ -8957,6 +8957,10 @@ button.settings-row:active,
 .map-panel__image span { color: #fff; font-family: var(--disp); font-size: 22px; font-weight: 900; }
 .map-panel__eyebrow { color: var(--gold-bright); font-family: var(--disp); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .map-panel h3 { margin: 4px 0; color: #fff; font-family: var(--disp); font-size: 24px; line-height: 1; }
+/* Heading receives programmatic focus when a marker is activated — show a
+   ring only for keyboard-driven focus so mouse users aren't distracted. */
+.map-panel h3:focus { outline: none; }
+.map-panel h3:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; border-radius: 4px; }
 .map-panel p { margin: 0; color: var(--muted); font-size: 12px; }
 .map-panel__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin: 14px 0; }
 .map-panel__cta { width: 100%; min-height: 42px; border: 0; border-radius: 12px; color: #10140f; background: var(--gold); font: inherit; font-weight: 800; cursor: pointer; }

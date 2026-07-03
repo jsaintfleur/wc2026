@@ -2431,6 +2431,15 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const [filter, setFilter] = useState<MapFilter>("all");
   const [selectedTeam, setSelectedTeam] = useState("ALL");
   const [zoom, setZoom] = useState(1);
+  /* Focus target for the venue panel — when a marker is activated we move
+     focus to the panel heading so keyboard/screen-reader users land on the
+     content that just changed instead of staying lost among the markers. */
+  const panelHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  const selectVenue = (venueId: string) => {
+    setActiveVenueId(venueId);
+    window.requestAnimationFrame(() => panelHeadingRef.current?.focus());
+  };
 
   const allTeams = useMemo(() => Object.values(data.groups).flat().sort((a, b) => a.localeCompare(b)), [data.groups]);
 
@@ -2601,7 +2610,10 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick }: {
             <button type="button" onClick={() => setZoom(z => Math.max(0.85, +(z - 0.15).toFixed(2)))} aria-label="Zoom out">−</button>
           </div>
           <div className="map-canvas-scroll">
-            <svg className="host-map" viewBox="0 0 1000 620" style={{ transform: `scale(${zoom})` }} role="img" aria-label="Map of World Cup 2026 host venues">
+            {/* role="group" (not "img") — an img role would flatten the whole
+                subtree in the accessibility tree and hide the interactive
+                venue markers from screen readers. */}
+            <svg className="host-map" viewBox="0 0 1000 620" style={{ transform: `scale(${zoom})` }} role="group" aria-label="Map of World Cup 2026 host venues">
               <defs>
                 <linearGradient id="mapLand" x1="0" x2="1" y1="0" y2="1">
                   <stop offset="0%" stopColor="#173926" />
@@ -2632,6 +2644,13 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick }: {
                 const active = activeVenue?.venueId === venue.venueId;
                 const live = venue.liveCount > 0;
                 const onTeamPath = selectedTeam !== "ALL" && teamJourney.some(match => match.venueId === venue.venueId);
+                /* Full announcement for assistive tech: venue, location, match
+                   counts, and live state — the SVG <title> tooltip is
+                   mouse-only so everything must live in the aria-label. */
+                const markerLabel =
+                  `${venue.stadiumName}, ${venue.city}, ${venue.country}. ` +
+                  `${venue.matchesHosted} matches: ${venue.liveCount} live, ${venue.upcomingCount} upcoming, ${venue.completedCount} completed.` +
+                  (live ? " Live now." : "");
                 return (
                   <g key={venue.venueId} className={`map-marker-group${visible ? "" : " map-marker-group--muted"}${active ? " map-marker-group--active" : ""}${live ? " map-marker-group--live" : ""}${onTeamPath ? " map-marker-group--route" : ""}`}>
                     {live && <circle cx={point.x} cy={point.y} r="24" className="map-marker-pulse" />}
@@ -2639,12 +2658,13 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick }: {
                       role="button"
                       tabIndex={0}
                       className="map-marker-button"
-                      aria-label={`${venue.city}, ${venue.stadiumName}`}
-                      onClick={() => setActiveVenueId(venue.venueId)}
+                      aria-label={markerLabel}
+                      aria-pressed={active}
+                      onClick={() => selectVenue(venue.venueId)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          setActiveVenueId(venue.venueId);
+                          selectVenue(venue.venueId);
                         }
                       }}
                     >
@@ -2659,8 +2679,10 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick }: {
           </div>
         </div>
 
+        {/* aria-live lets screen readers hear panel updates triggered from
+            the map; the heading takes focus when a marker is activated. */}
         {activeVenue && (
-          <aside className="map-panel" aria-label={`${activeVenue.stadiumName} details`}>
+          <aside className="map-panel" aria-label={`${activeVenue.stadiumName} details`} aria-live="polite">
             <div className="map-panel__handle" aria-hidden="true" />
             <div className="map-panel__hero">
               <div className="map-panel__image" style={activeVenue.imageUrl ? { backgroundImage: `url(${activeVenue.imageUrl})` } : undefined}>
@@ -2668,7 +2690,7 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick }: {
               </div>
               <div>
                 <span className="map-panel__eyebrow">{activeVenue.country} · {activeVenue.stateOrProvince}</span>
-                <h3>{activeVenue.stadiumName}</h3>
+                <h3 ref={panelHeadingRef} tabIndex={-1}>{activeVenue.stadiumName}</h3>
                 <p>{activeVenue.city} · {activeVenue.capacity.toLocaleString("en-US")} seats</p>
               </div>
             </div>

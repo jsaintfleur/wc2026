@@ -8913,6 +8913,13 @@ button.settings-row:active,
   .more-record-row {
     animation: none !important;
   }
+  /* Live venue markers: keep a static ring so live state stays identifiable
+     without the pulsing animation (the marker fill is also --live red). */
+  .map-marker-pulse {
+    animation: none !important;
+    r: 20;
+    opacity: .55;
+  }
 }
 
 /* ── Host City Map ───────────────────────────────────────────── */

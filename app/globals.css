@@ -8957,7 +8957,11 @@ button.settings-row:active,
 @keyframes mapPulse { from { r: 14; opacity: .9; } to { r: 34; opacity: 0; } }
 .map-panel, .team-journey-panel { border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; background: linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)), rgba(8, 13, 24, 0.94); box-shadow: 0 18px 50px rgba(0,0,0,0.26); }
 .map-panel { max-height: 640px; overflow: auto; padding: 14px; }
-.map-panel__handle { display: none; width: 46px; height: 4px; border-radius: 999px; margin: 0 auto 10px; background: rgba(255,255,255,0.22); }
+/* Sheet handle — a real button on mobile that collapses/expands the panel;
+   hidden entirely on desktop where the panel is a static side column. */
+.map-panel__handle { display: none; appearance: none; width: 100%; padding: 4px 0 10px; border: 0; background: none; cursor: pointer; }
+.map-panel__handle span { display: block; width: 46px; height: 4px; border-radius: 999px; margin: 0 auto; background: rgba(255,255,255,0.22); }
+.map-panel__handle:focus-visible span { outline: 2px solid var(--gold-bright); outline-offset: 4px; }
 .map-panel__hero { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 12px; align-items: center; }
 .map-panel__image { display: grid; place-items: center; width: 82px; height: 82px; border-radius: 18px; background: radial-gradient(circle at 24% 20%, rgba(255,255,255,0.2), transparent 34%), linear-gradient(145deg, rgba(10,92,62,0.9), rgba(212,175,55,0.36)); background-size: cover; background-position: center; }
 .map-panel__image span { color: #fff; font-family: var(--disp); font-size: 22px; font-weight: 900; }
@@ -8991,10 +8995,16 @@ button.settings-row:active,
   .map-hero, .map-toolbar { flex-direction: column; align-items: stretch; }
   .map-hero__stats { min-width: 0; }
   .map-shell { display: block; }
-  .map-canvas-card { min-height: calc(100svh - 245px); border-radius: 20px; }
+  /* Bottom padding reserves the strip the sheet's negative margin overlaps,
+     so the sheet covers padding — not the southern venues (Mexico City). */
+  .map-canvas-card { min-height: calc(100svh - 245px); padding-bottom: 150px; border-radius: 20px; }
   .host-map { min-width: calc(var(--map-zoom, 1) * 820px); min-height: calc(100svh - 245px); }
   .map-panel { position: sticky; bottom: calc(74px + env(safe-area-inset-bottom)); z-index: 5; max-height: 54svh; margin: -130px 10px 0; border-radius: 22px 22px 0 0; }
   .map-panel__handle { display: block; }
+  /* Collapsed sheet: keep the handle + venue header visible, hide the rest */
+  .map-panel--collapsed .map-panel__metrics,
+  .map-panel--collapsed .map-panel__cta,
+  .map-panel--collapsed .venue-timeline { display: none; }
   .map-panel__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .venue-timeline__item { grid-template-columns: 10px 38px minmax(0,1fr); }
   .venue-timeline__item em { grid-column: 3; grid-row: auto; }

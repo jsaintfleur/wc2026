@@ -2493,13 +2493,34 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
   const [filter, setFilter] = useState<MapFilter>("all");
   const [selectedTeam, setSelectedTeam] = useState("ALL");
   const [zoom, setZoom] = useState(1);
+  /* Mobile bottom sheet: collapsible so the southern venues (Mexico City)
+     are reachable behind it. Desktop side panel ignores this state. */
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   /* Focus target for the venue panel — when a marker is activated we move
      focus to the panel heading so keyboard/screen-reader users land on the
      content that just changed instead of staying lost among the markers. */
   const panelHeadingRef = useRef<HTMLHeadingElement>(null);
+  const canvasScrollRef = useRef<HTMLDivElement>(null);
 
-  const selectVenue = (venueId: string) => {
+  /* Scroll the map canvas so the given projected point is centered — keeps
+     the selected marker visible when it sits under the mobile sheet or
+     outside the current pan position. */
+  const panToPoint = (point: { x: number; y: number }) => {
+    const scroller = canvasScrollRef.current;
+    if (!scroller) return;
+    const canScroll = scroller.scrollWidth > scroller.clientWidth || scroller.scrollHeight > scroller.clientHeight;
+    if (!canScroll) return;
+    scroller.scrollTo({
+      left: (point.x / 1000) * scroller.scrollWidth - scroller.clientWidth / 2,
+      top: (point.y / 620) * scroller.scrollHeight - scroller.clientHeight / 2,
+      behavior: "smooth",
+    });
+  };
+
+  const selectVenue = (venueId: string, point?: { x: number; y: number }) => {
     setActiveVenueId(venueId);
+    setPanelCollapsed(false);
+    if (point) panToPoint(point);
     window.requestAnimationFrame(() => panelHeadingRef.current?.focus());
   };
 
@@ -2680,7 +2701,7 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
             <button type="button" onClick={() => setZoom(z => Math.min(1.45, +(z + 0.15).toFixed(2)))} aria-label="Zoom in">+</button>
             <button type="button" onClick={() => setZoom(z => Math.max(0.85, +(z - 0.15).toFixed(2)))} aria-label="Zoom out">−</button>
           </div>
-          <div className="map-canvas-scroll">
+          <div className="map-canvas-scroll" ref={canvasScrollRef}>
             {/* role="group" (not "img") — an img role would flatten the whole
                 subtree in the accessibility tree and hide the interactive
                 venue markers from screen readers.
@@ -2734,11 +2755,11 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
                       className="map-marker-button"
                       aria-label={markerLabel}
                       aria-pressed={active}
-                      onClick={() => selectVenue(venue.venueId)}
+                      onClick={() => selectVenue(venue.venueId, point)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          selectVenue(venue.venueId);
+                          selectVenue(venue.venueId, point);
                         }
                       }}
                     >
@@ -2764,8 +2785,18 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
         {/* aria-live lets screen readers hear panel updates triggered from
             the map; the heading takes focus when a marker is activated. */}
         {activeVenue && (
-          <aside className="map-panel" aria-label={`${activeVenue.stadiumName} details`} aria-live="polite">
-            <div className="map-panel__handle" aria-hidden="true" />
+          <aside className={`map-panel${panelCollapsed ? " map-panel--collapsed" : ""}`} aria-label={`${activeVenue.stadiumName} details`} aria-live="polite">
+            {/* Real control on mobile (visually a drag-handle bar): collapses
+                the sheet so venues behind it — Mexico City — stay reachable. */}
+            <button
+              type="button"
+              className="map-panel__handle"
+              aria-expanded={!panelCollapsed}
+              aria-label={panelCollapsed ? "Expand venue details" : "Collapse venue details"}
+              onClick={() => setPanelCollapsed(collapsed => !collapsed)}
+            >
+              <span aria-hidden="true" />
+            </button>
             <div className="map-panel__hero">
               <div className="map-panel__image" style={activeVenue.imageUrl ? { backgroundImage: `url(${activeVenue.imageUrl})` } : undefined}>
                 {!activeVenue.imageUrl && <span>{activeVenue.city.slice(0, 3).toUpperCase()}</span>}

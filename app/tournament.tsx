@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { HOST_VENUE_DETAILS, MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type PlayerMatchStat, type TeamLineup, type VenueDetails } from "@/lib/data";
 import { nrm, canon } from "@/lib/merge";
 import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type TournamentStats } from "@/lib/stats";
@@ -523,7 +523,10 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
   const vName = (k: string) => (data.venues[k] || { common: "" }).common || "";
   const allTeams = [...new Set(Object.values(data.groups).flat())].sort();
 
-  function findLive(m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]): LiveFixture | null {
+  /* useCallback keeps findLive's identity stable across renders — it is a
+     dependency of memos in nearly every child view, so a fresh function per
+     render silently defeated all of them. */
+  const findLive = useCallback((m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]): LiveFixture | null => {
     if (!fx.length) return null;
     let best: LiveFixture | null = null;
     let bd = Number.POSITIVE_INFINITY;
@@ -552,7 +555,8 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
       if (distance < bd) { bd = distance; best = f; }
     }
     return best;
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   const [view, setView] = useState<ViewType>(() => isViewType(initialView) ? initialView : "home");
   useEffect(() => {
@@ -1338,6 +1342,24 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
     window.scrollTo({ top: 0 });
   }
 
+  /* Stable callbacks for MapView so React.memo can skip re-renders — inline
+     arrows would give the memoized component fresh props every render. */
+  const openMatchDetail = useCallback((match: GroupStageMatch, fixture: LiveFixture | null) => {
+    setMatchDetail({ match, fixture });
+  }, []);
+  const openVenueSchedule = useCallback((stadiumName: string) => {
+    /* Land on the Schedule filtered to this stadium: the schedule's search
+       matches venue names, and the query stays visible in the search box so
+       the user can clear it. */
+    setQuery(stadiumName);
+    setStage("ALL");
+    setGroup("ALL");
+    setTeam("ALL");
+    setAnimate(true);
+    setView("schedule");
+    window.scrollTo({ top: 0 });
+  }, []);
+
   const tabs: { key: ViewType; label: string }[] = [
     { key: "home", label: "Home" },
     { key: "schedule", label: "Schedule" },
@@ -1523,17 +1545,8 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
             fixtures={fixtures}
             findLive={findLive}
             nowMs={nowMs}
-            onMatchClick={(match, fixture) => setMatchDetail({ match, fixture })}
-            onViewVenueMatches={(stadiumName) => {
-              /* Land on the Schedule filtered to this stadium: the schedule's
-                 search matches venue names, and the query stays visible in
-                 the search box so the user can clear it. */
-              setQuery(stadiumName);
-              setStage("ALL");
-              setGroup("ALL");
-              setTeam("ALL");
-              handleTab("schedule");
-            }}
+            onMatchClick={openMatchDetail}
+            onViewVenueMatches={openVenueSchedule}
           />
         ) : view === "more" ? (
           <MoreView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
@@ -2481,14 +2494,19 @@ function formatVenueLocalTime(ts: number, timezone: string): string {
   }).format(new Date(ts));
 }
 
-function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMatches }: {
+type MapViewProps = {
   data: TournamentData;
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
   onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
   onViewVenueMatches: (stadiumName: string) => void;
-}) {
+};
+
+/* Memoized with minute-granular time comparison: nothing on the map needs
+   sub-minute precision, so parent re-renders (drawer state, search typing,
+   nowMs ticks) don't re-run the venue/status computations. */
+const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMatches }: MapViewProps) {
   const [activeVenueId, setActiveVenueId] = useState("METLIFE");
   const [filter, setFilter] = useState<MapFilter>("all");
   const [selectedTeam, setSelectedTeam] = useState("ALL");
@@ -2632,14 +2650,16 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
     return ids;
   }, [venueModels, selectedTeam, selectedTeamCanon, filter, nowMs]);
 
-  const panelMatches = activeVenue.matches
+  const panelMatches = useMemo(() => activeVenue.matches
     .filter(match => selectedTeam === "ALL" || [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon))
-    .sort((a, b) => a.ts - b.ts);
-  const liveMatches = mapMatches.filter(match => matchStatus(match, nowMs) === "live");
-  const routePoints = teamJourney.map(match => {
+    .sort((a, b) => a.ts - b.ts), [activeVenue, selectedTeam, selectedTeamCanon]);
+  // Live total derives from the per-venue counts already computed above —
+  // no need for another full scan of mapMatches.
+  const liveTotal = useMemo(() => venueModels.reduce((sum, venue) => sum + venue.liveCount, 0), [venueModels]);
+  const routePoints = useMemo(() => teamJourney.map(match => {
     const venue = venueModels.find(v => v.venueId === match.venueId);
     return venue ? mapPoint(venue) : null;
-  }).filter((point): point is { x: number; y: number } => !!point);
+  }).filter((point): point is { x: number; y: number } => !!point), [teamJourney, venueModels]);
 
   const openMatch = (match: MapMatch) => onMatchClick(match.sourceMatch, match.fixture);
 
@@ -2664,7 +2684,7 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
         <div className="map-hero__stats">
           <span><b>{venueModels.length}</b> venues</span>
           <span><b>{mapMatches.length}</b> matches</span>
-          <span><b>{liveMatches.length}</b> live</span>
+          <span><b>{liveTotal}</b> live</span>
         </div>
       </section>
 
@@ -2873,7 +2893,16 @@ function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMat
       )}
     </main>
   );
-}
+}, (prev, next) =>
+  prev.data === next.data &&
+  prev.fixtures === next.fixtures &&
+  prev.findLive === next.findLive &&
+  prev.onMatchClick === next.onMatchClick &&
+  prev.onViewVenueMatches === next.onViewVenueMatches &&
+  // Minute granularity: map statuses don't need sub-minute time precision,
+  // so nowMs ticks within the same minute skip the render entirely.
+  Math.floor(prev.nowMs / 60000) === Math.floor(next.nowMs / 60000)
+);
 
 type SettingsModel = {
   defaultTeam: string;

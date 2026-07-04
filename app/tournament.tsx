@@ -1689,7 +1689,17 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
         ) : view === "analytics" ? (
           <AnalyticsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} liveTs={liveTs} liveStatus={liveStatus} onTeamClick={setTeamDrawer} onMatchClick={openMatchDetail} />
         ) : view === "more" ? (
-          <MoreView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} onVenueClick={(venueId) => { setMapVenueTarget(venueId); handleTab("map"); }} />
+          <MoreView
+            data={data}
+            fixtures={fixtures}
+            leaderboardStats={leaderboardStats}
+            findLive={findLive}
+            nowMs={nowMs}
+            onNavigate={handleTab}
+            onVenueClick={(venueId) => { setMapVenueTarget(venueId); handleTab("map"); }}
+            onTeamClick={setTeamDrawer}
+            onPlayerClick={(name, team) => setPlayerProfile({ name, team })}
+          />
         ) : view === "settings" ? (
           <SettingsView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} liveTs={liveTs} liveStatus={liveStatus} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
         ) : (
@@ -5111,7 +5121,7 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, liveTs, liveStatus, on
  * Sections: Hero, Progress, Quick Access, Stadiums, Host Cities,
  *           Calendar Timeline, History, App Settings
  * --------------------------------------------------------------- */
-function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigate, onVenueClick }: {
+function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigate, onVenueClick, onTeamClick, onPlayerClick }: {
   data: TournamentData;
   fixtures: LiveFixture[];
   leaderboardStats: ExternalLeaderStat[];
@@ -5120,7 +5130,38 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
   onNavigate: (view: ViewType) => void;
   /* Opens the Map view centered on the given venue (stadium card tap) */
   onVenueClick: (venueId: string) => void;
+  onTeamClick: (team: string) => void;
+  onPlayerClick: (playerName: string, teamName: string) => void;
 }) {
+  type MoreHostFilter = "all" | "live" | "upcoming" | "completed" | "knockout";
+  type MoreHostFixture = MapMatch & { status: ReturnType<typeof matchStatus>; statusLabel: string; scoreLabel: string };
+  type MoreHostCity = {
+    venueId: string;
+    city: string;
+    country: string;
+    stadiumName: string;
+    capacity: number;
+    imageUrl?: string;
+    timezone: string;
+    fixtures: MoreHostFixture[];
+    matchingFixtures: MoreHostFixture[];
+    counts: { total: number; live: number; upcoming: number; completed: number };
+    nextMatch: MoreHostFixture | null;
+  };
+  type MoreHostCountry = {
+    key: string;
+    label: string;
+    cities: MoreHostCity[];
+    matchingCities: MoreHostCity[];
+    counts: { cities: number; stadiums: number; total: number; live: number; upcoming: number; completed: number };
+  };
+
+  const [hostQuery, setHostQuery] = useState("");
+  const [hostFilter, setHostFilter] = useState<MoreHostFilter>("all");
+  const [openCountry, setOpenCountry] = useState("USA");
+  const [openCity, setOpenCity] = useState<string | null>(null);
+  const [selectedCity, setSelectedCity] = useState<string | null>(null);
+  const [hostMatchDetail, setHostMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture | null } | null>(null);
 
   const countryFlag = (country: string) => {
     const key = country === "USA" ? "United States" : country;
@@ -5129,6 +5170,16 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
 
   /* -- helper: format large numbers with commas ---------------- */
   const fmtNum = (n: number) => n.toLocaleString("en-US");
+
+  const statusLabel = (match: MapMatch, status: ReturnType<typeof matchStatus>) => {
+    const raw = match.fixture?.status || match.sourceMatch.dbStatus || "";
+    if (raw === "HT") return "HT";
+    if (raw === "AET" || raw === "ET") return "ET";
+    if (raw === "PEN") return "Pens";
+    if (status === "live") return raw && raw !== "LIVE" ? raw : "Live";
+    if (status === "completed") return raw === "PEN" ? "Pens" : raw === "AET" ? "ET" : "FT";
+    return "Scheduled";
+  };
 
   /* =============================================================
    * 1. Tournament progress calculations
@@ -5223,19 +5274,141 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
   );
 
   /* =============================================================
-   * 3. Host cities — unique cities with stats
+   * 3. Host cities — country/city/fixture accordion model
    * ============================================================= */
-  const hostCities = useMemo(() => {
-    const cityMap: Record<string, { city: string; country: string; venues: string[]; matches: number }> = {};
-    for (const v of venueList) {
-      if (!cityMap[v.city]) {
-        cityMap[v.city] = { city: v.city, country: v.country, venues: [], matches: 0 };
-      }
-      cityMap[v.city].venues.push(v.common);
-      cityMap[v.city].matches += v.matches;
-    }
-    return Object.values(cityMap).sort((a, b) => b.matches - a.matches);
-  }, [venueList]);
+  const hostFixtures = useMemo<MoreHostFixture[]>(() => {
+    const groupMatches = data.gs.map((m): MapMatch => {
+      const fixture = findLive({ ts: m.ts, v: m.v, t1: m.t1, t2: m.t2 }, fixtures);
+      return {
+        key: `gs-${m.no}`,
+        no: m.no,
+        venueId: m.v,
+        ts: m.ts,
+        iso: m.iso,
+        local: m.local,
+        et: m.et,
+        stage: "Group Stage",
+        homeTeam: m.t1,
+        awayTeam: m.t2,
+        fixture,
+        sourceMatch: m,
+      };
+    });
+    const knockoutMatches = buildKnockoutCards(data, fixtures, findLive, nowMs).map((card): MapMatch => {
+      const [teamA, teamB] = card.teams;
+      const t1 = teamA.placeholder ? "TBD" : teamA.name;
+      const t2 = teamB.placeholder ? "TBD" : teamB.name;
+      return {
+        key: `ko-${card.matchNo}`,
+        no: card.matchNo,
+        venueId: card.match.v,
+        ts: card.match.ts,
+        iso: card.match.iso,
+        local: card.match.local,
+        et: card.match.et,
+        stage: card.match.round,
+        homeTeam: t1,
+        awayTeam: t2,
+        fixture: card.fixture,
+        sourceMatch: {
+          no: card.matchNo,
+          iso: card.match.iso,
+          local: card.match.local,
+          et: card.match.et,
+          g: "KO",
+          t1,
+          t2,
+          v: card.match.v,
+          ts: card.match.ts,
+        },
+      };
+    });
+    return [...groupMatches, ...knockoutMatches]
+      .map(match => {
+        const status = matchStatus(match, nowMs);
+        return {
+          ...match,
+          status,
+          statusLabel: statusLabel(match, status),
+          scoreLabel: matchScoreLabel(match),
+        };
+      })
+      .sort((a, b) => a.ts - b.ts);
+  }, [data, fixtures, findLive, nowMs]);
+
+  const hostCountries = useMemo<MoreHostCountry[]>(() => {
+    const query = hostQuery.trim().toLowerCase();
+    const countryOrder = [
+      { key: "USA", label: "United States" },
+      { key: "Canada", label: "Canada" },
+      { key: "Mexico", label: "Mexico" },
+    ];
+    const matchesFilter = (match: MoreHostFixture) => {
+      if (hostFilter === "all") return true;
+      if (hostFilter === "knockout") return match.stage !== "Group Stage";
+      return match.status === hostFilter;
+    };
+    const matchesQuery = (city: MoreHostCity, match: MoreHostFixture) => {
+      if (!query) return true;
+      return [
+        city.city,
+        city.country,
+        city.stadiumName,
+        match.homeTeam,
+        match.awayTeam,
+        match.stage,
+      ].some(value => value.toLowerCase().includes(query));
+    };
+    return countryOrder.map(country => {
+      const cities = Object.entries(data.venues)
+        .filter(([, venue]) => venue.country === country.key)
+        .map(([venueId, venue]) => {
+          const detail = HOST_VENUE_DETAILS[venueId];
+          const allFixtures = hostFixtures.filter(match => match.venueId === venueId);
+          const cityBase: MoreHostCity = {
+            venueId,
+            city: venue.city,
+            country: venue.country,
+            stadiumName: venue.common,
+            capacity: venue.cap,
+            imageUrl: detail?.imageUrl || undefined,
+            timezone: detail?.timezone || "America/New_York",
+            fixtures: allFixtures,
+            matchingFixtures: [],
+            counts: {
+              total: allFixtures.length,
+              live: allFixtures.filter(match => match.status === "live").length,
+              upcoming: allFixtures.filter(match => match.status === "upcoming").length,
+              completed: allFixtures.filter(match => match.status === "completed").length,
+            },
+            nextMatch: allFixtures.find(match => match.status === "live" || match.status === "upcoming") || null,
+          };
+          const matchingFixtures = allFixtures.filter(match => matchesFilter(match) && matchesQuery(cityBase, match));
+          return { ...cityBase, matchingFixtures };
+        })
+        .sort((a, b) => a.city.localeCompare(b.city));
+      const matchingCities = cities.filter(city => city.matchingFixtures.length > 0 || (query && [city.city, city.country, city.stadiumName].some(value => value.toLowerCase().includes(query))));
+      const countSource = hostFilter === "all" && !query ? cities : matchingCities.map(city => ({ ...city, fixtures: city.matchingFixtures }));
+      return {
+        ...country,
+        cities,
+        matchingCities,
+        counts: {
+          cities: matchingCities.length,
+          stadiums: matchingCities.length,
+          total: countSource.reduce((sum, city) => sum + city.fixtures.length, 0),
+          live: countSource.reduce((sum, city) => sum + city.fixtures.filter(match => match.status === "live").length, 0),
+          upcoming: countSource.reduce((sum, city) => sum + city.fixtures.filter(match => match.status === "upcoming").length, 0),
+          completed: countSource.reduce((sum, city) => sum + city.fixtures.filter(match => match.status === "completed").length, 0),
+        },
+      };
+    });
+  }, [data.venues, hostFixtures, hostFilter, hostQuery]);
+
+  const selectedHostCity = useMemo(() => {
+    const fallback = hostCountries.flatMap(country => country.matchingCities)[0] || hostCountries[0]?.cities[0] || null;
+    return hostCountries.flatMap(country => country.cities).find(city => city.venueId === selectedCity) || fallback;
+  }, [hostCountries, selectedCity]);
 
   /* =============================================================
    * 4. Calendar milestones with date ranges
@@ -5313,6 +5486,7 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
    * RENDER
    * ============================================================= */
   return (
+    <>
     <main className="more-view" aria-label="More">
 
       {/* ── Hero: Tournament Pulse ──────────────────────────── */}
@@ -5381,21 +5555,173 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
       {/* ── Section 5: Host Cities ──────────────────────────── */}
       <section className="more-section">
         <h3 className="more-section__heading">Host Cities</h3>
-        <div className="more-cities-list">
-          {hostCities.map((c, i) => (
-            <div
-              key={c.city}
-              className="more-city-row"
-              style={{ animationDelay: `${i * 50}ms` }}
-            >
-              <span className="more-city-row__flag" role="img" aria-label={c.country}>{countryFlag(c.country)}</span>
-              <div className="more-city-row__info">
-                <b>{c.city}</b>
-                <small>{c.country} · {c.venues.join(", ")}</small>
-              </div>
-              <span className="more-city-row__badge">{c.matches} match{c.matches !== 1 ? "es" : ""}</span>
+        <div className="host-cities">
+          <div className="host-cities__toolbar">
+            <input
+              type="search"
+              className="host-cities__search"
+              placeholder="Search city, stadium, country, or team..."
+              value={hostQuery}
+              onChange={e => setHostQuery(e.target.value)}
+              aria-label="Search host cities"
+            />
+            <div className="host-cities__chips" role="group" aria-label="Filter host city fixtures">
+              {[
+                ["all", "All"],
+                ["live", "Live"],
+                ["upcoming", "Upcoming"],
+                ["completed", "Completed"],
+                ["knockout", "Knockout"],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`host-cities__chip${hostFilter === key ? " host-cities__chip--active" : ""}`}
+                  aria-pressed={hostFilter === key}
+                  onClick={() => setHostFilter(key as MoreHostFilter)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          ))}
+          </div>
+
+          <div className="host-cities__layout">
+            <div className="host-cities__accordions">
+              {hostCountries.map(country => {
+                const expanded = openCountry === country.key;
+                return (
+                  <article key={country.key} className={`host-country${expanded ? " host-country--open" : ""}`}>
+                    <button
+                      type="button"
+                      className="host-country__header"
+                      aria-expanded={expanded}
+                      onClick={() => setOpenCountry(expanded ? "" : country.key)}
+                    >
+                      <span className="host-country__flag">{countryFlag(country.key)}</span>
+                      <span className="host-country__title">
+                        <b>{country.label}</b>
+                        <small>{country.counts.cities} host cit{country.counts.cities === 1 ? "y" : "ies"} · {country.counts.stadiums} stadium{country.counts.stadiums === 1 ? "" : "s"} · {country.counts.total} matches</small>
+                      </span>
+                      <span className="host-country__counts">
+                        <span>{country.counts.live} live</span>
+                        <span>{country.counts.upcoming} upcoming</span>
+                        <span>{country.counts.completed} done</span>
+                      </span>
+                      <span className="host-country__chevron" aria-hidden="true">⌄</span>
+                    </button>
+
+                    {expanded && (
+                      <div className="host-country__body">
+                        {country.matchingCities.length > 0 ? country.matchingCities.map(city => {
+                          const cityOpen = openCity === city.venueId;
+                          const live = city.counts.live > 0;
+                          return (
+                            <article key={city.venueId} className={`host-city-card${cityOpen ? " host-city-card--open" : ""}${selectedHostCity?.venueId === city.venueId ? " host-city-card--selected" : ""}`}>
+                              <div className="host-city-card__summary">
+                                <button
+                                  type="button"
+                                  className="host-city-card__main"
+                                  aria-expanded={cityOpen}
+                                  onClick={() => {
+                                    setOpenCity(cityOpen ? null : city.venueId);
+                                    setSelectedCity(city.venueId);
+                                  }}
+                                >
+                                  <span className="host-city-card__thumb" aria-hidden="true">
+                                    {city.imageUrl ? <img src={city.imageUrl} alt="" loading="lazy" /> : <span>{city.city.slice(0, 2).toUpperCase()}</span>}
+                                  </span>
+                                  <span className="host-city-card__copy">
+                                    <b>{city.city}</b>
+                                    <small>{city.stadiumName}</small>
+                                  </span>
+                                  {live && <span className="host-city-card__live">Live</span>}
+                                  <span className="host-city-card__chevron" aria-hidden="true">⌄</span>
+                                </button>
+                                <button type="button" className="host-city-card__map" onClick={() => onVenueClick(city.venueId)}>
+                                  View map
+                                </button>
+                              </div>
+                              <div className="host-city-card__meta">
+                                <span>{fmtNum(city.capacity)} seats</span>
+                                <span>{city.counts.total} fixtures</span>
+                                <span>Next: {city.nextMatch ? `${city.nextMatch.homeTeam} vs ${city.nextMatch.awayTeam}` : "Complete"}</span>
+                              </div>
+
+                              {cityOpen && (
+                                <div className="host-fixture-list">
+                                  {city.matchingFixtures.length > 0 ? city.matchingFixtures.map(match => (
+                                    <button
+                                      key={match.key}
+                                      type="button"
+                                      className={`host-fixture host-fixture--${match.status}`}
+                                      onPointerUp={event => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        window.setTimeout(() => setHostMatchDetail({ match: match.sourceMatch, fixture: match.fixture }), 0);
+                                      }}
+                                      onKeyDown={event => {
+                                        if (event.key !== "Enter" && event.key !== " ") return;
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        window.setTimeout(() => setHostMatchDetail({ match: match.sourceMatch, fixture: match.fixture }), 0);
+                                      }}
+                                    >
+                                      <span className="host-fixture__date">{formatVenueLocalTime(match.ts, city.timezone)}</span>
+                                      <span className="host-fixture__stage">{stageShortLabel(match.stage)}</span>
+                                      <span className="host-fixture__teams">
+                                        <b>{data.flags[match.homeTeam] || "⚽"} {match.homeTeam}</b>
+                                        <small>vs</small>
+                                        <b>{data.flags[match.awayTeam] || "⚽"} {match.awayTeam}</b>
+                                      </span>
+                                      <span className="host-fixture__venue">{city.stadiumName}</span>
+                                      <span className="host-fixture__status">
+                                        {match.scoreLabel && <b>{match.scoreLabel}</b>}
+                                        <small>{match.statusLabel}</small>
+                                      </span>
+                                    </button>
+                                  )) : (
+                                    <div className="host-city-empty">
+                                      <b>No fixtures match this filter.</b>
+                                      <span>Try another status chip or search term for {city.city}.</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </article>
+                          );
+                        }) : (
+                          <div className="host-country-empty">
+                            <b>No host cities match this view.</b>
+                            <span>Try All fixtures or search for a different city, stadium, country, or team.</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+
+            {selectedHostCity && (
+              <aside className="host-city-preview" aria-label={`${selectedHostCity.city} preview`}>
+                <div className="host-city-preview__image">
+                  {selectedHostCity.imageUrl ? <img src={selectedHostCity.imageUrl} alt={`${selectedHostCity.stadiumName} stadium`} loading="lazy" /> : <span>{selectedHostCity.city.slice(0, 2).toUpperCase()}</span>}
+                </div>
+                <div className="host-city-preview__copy">
+                  <span>{countryFlag(selectedHostCity.country)} {selectedHostCity.country}</span>
+                  <h4>{selectedHostCity.city}</h4>
+                  <p>{selectedHostCity.stadiumName}</p>
+                </div>
+                <div className="host-city-preview__stats">
+                  <span><b>{fmtNum(selectedHostCity.capacity)}</b> seats</span>
+                  <span><b>{selectedHostCity.counts.total}</b> fixtures</span>
+                  <span><b>{selectedHostCity.counts.upcoming}</b> upcoming</span>
+                </div>
+                <button type="button" onClick={() => onVenueClick(selectedHostCity.venueId)}>Open on Map</button>
+              </aside>
+            )}
+          </div>
         </div>
       </section>
 
@@ -5485,6 +5811,29 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
       </section>
 
     </main>
+    {hostMatchDetail && (
+      <MatchDetailDrawer
+        match={hostMatchDetail.match}
+        initialFixture={hostMatchDetail.fixture}
+        fixtures={fixtures}
+        flags={data.flags}
+        venues={data.venues}
+        gcolor={data.gcolor}
+        allMatches={data.gs}
+        vName={(k) => data.venues[k]?.common || ""}
+        findLive={findLive}
+        onClose={() => setHostMatchDetail(null)}
+        onTeamClick={(team) => {
+          setHostMatchDetail(null);
+          onTeamClick(team);
+        }}
+        onPlayerClick={(player, team) => {
+          setHostMatchDetail(null);
+          onPlayerClick(player, team);
+        }}
+      />
+    )}
+    </>
   );
 }
 
@@ -7031,8 +7380,13 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const closedByPopRef = useRef(false);
+  const historyReadyRef = useRef(false);
   useEffect(() => {
+    historyReadyRef.current = false;
     window.history.pushState({ competMatchDrawer: true }, "");
+    queueMicrotask(() => {
+      historyReadyRef.current = true;
+    });
     const onPop = () => {
       closedByPopRef.current = true;
       onCloseRef.current();
@@ -7040,7 +7394,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     window.addEventListener("popstate", onPop);
     return () => {
       window.removeEventListener("popstate", onPop);
-      if (!closedByPopRef.current && window.history.state?.competMatchDrawer) window.history.back();
+      if (historyReadyRef.current && !closedByPopRef.current && window.history.state?.competMatchDrawer) window.history.back();
     };
   }, []);
 

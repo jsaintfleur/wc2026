@@ -2668,6 +2668,9 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   const panelHeadingRef = useRef<HTMLHeadingElement>(null);
   const canvasScrollRef = useRef<HTMLDivElement>(null);
   const lastRouteFitKeyRef = useRef("");
+  const explicitSelectionRef = useRef<string | null>(null);
+  const userFilterActionRef = useRef(false);
+  const routeFitIssuedRef = useRef(false);
 
   const mapFocusOffsets = (nextPanel: MapPanelState) => {
     const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
@@ -2683,6 +2686,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   };
 
   const selectVenue = (venueId: string) => {
+    explicitSelectionRef.current = venueId;
     /* Explicit marker intent beats the active venue filter: if a dimmed
        marker is tapped, clear the status/country filter so the selection and
        panel cannot be immediately snapped back to another venue. Team path
@@ -2708,6 +2712,21 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     setSvgZoom(1);
     canvasScrollRef.current?.scrollTo({ left: 0, top: 0, behavior: "smooth" });
     setFitRequest(req => ({ seq: (req?.seq || 0) + 1 }));
+  };
+
+  const setStatusFilterFromUser = (next: MapStatusFilter) => {
+    userFilterActionRef.current = true;
+    setStatusFilter(next);
+  };
+
+  const setCountryFilterFromUser = (next: MapCountryFilter | ((current: MapCountryFilter) => MapCountryFilter)) => {
+    userFilterActionRef.current = true;
+    setCountryFilter(next);
+  };
+
+  const setSelectedTeamFromUser = (next: string) => {
+    userFilterActionRef.current = true;
+    setSelectedTeam(next);
   };
 
   /* Persist the live map view when "remember last location" is on */
@@ -2886,6 +2905,8 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     live: venue.liveCount > 0,
     active: venue.venueId === activeVenueId,
     onTeamPath: selectedTeam !== "ALL" && teamJourney.some(match => match.venueId === venue.venueId),
+    nextStop: false,
+    hovered: false,
     labelLeft: MAP_LABEL_LEFT_VENUES.has(venue.venueId),
     muted: !filteredVenueIds.has(venue.venueId),
     matchesHosted: venue.matchesHosted,
@@ -2911,6 +2932,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
        churn from live polls/minute ticks that rebuild equivalent arrays. */
     if (lastRouteFitKeyRef.current === routeKey) return;
     lastRouteFitKeyRef.current = routeKey;
+    routeFitIssuedRef.current = true;
     setRouteFitRequest(req => ({ points: routeLatLngs, seq: (req?.seq || 0) + 1 }));
   }, [selectedTeam, routeLatLngs]);
 
@@ -2919,11 +2941,23 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
      "Mexico"), jump to the first venue that matches. A completely empty
      filter keeps the selection and shows an explicit empty state instead. */
   useEffect(() => {
-    if (filteredVenueIds.size === 0 || filteredVenueIds.has(activeVenueId)) return;
+    if (panelState === "closed") return;
+    if (explicitSelectionRef.current === activeVenueId) {
+      explicitSelectionRef.current = null;
+      return;
+    }
+    if (filteredVenueIds.size === 0 || filteredVenueIds.has(activeVenueId)) {
+      userFilterActionRef.current = false;
+      routeFitIssuedRef.current = false;
+      return;
+    }
     const first = venueModels.find(venue => filteredVenueIds.has(venue.venueId));
     if (first) {
       setActiveVenueId(first.venueId);
-      requestVenueMapFocus(first.venueId, panelState);
+      const shouldFocus = userFilterActionRef.current && !routeFitIssuedRef.current;
+      userFilterActionRef.current = false;
+      routeFitIssuedRef.current = false;
+      if (shouldFocus) requestVenueMapFocus(first.venueId, panelState);
     }
   }, [filteredVenueIds, activeVenueId, venueModels, panelState]);
 
@@ -3012,7 +3046,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
             ["completed", "Completed"],
             ["knockout", "Knockout"],
           ].map(([key, label]) => (
-            <button key={key} type="button" className="map-chip" aria-pressed={statusFilter === key} onClick={() => setStatusFilter(key as MapStatusFilter)}>
+            <button key={key} type="button" className="map-chip" aria-pressed={statusFilter === key} onClick={() => setStatusFilterFromUser(key as MapStatusFilter)}>
               {label}
             </button>
           ))}
@@ -3037,7 +3071,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
               type="button"
               className="map-chip map-chip--country"
               aria-pressed={countryFilter === key}
-              onClick={() => setCountryFilter(current => current === key ? "all" : key as MapCountryFilter)}
+              onClick={() => setCountryFilterFromUser(current => current === key ? "all" : key as MapCountryFilter)}
             >
               {label}
             </button>
@@ -3045,7 +3079,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
         </div>
         <label className="map-team-select">
           <span>Team path</span>
-          <select value={selectedTeam} onChange={event => setSelectedTeam(event.target.value)}>
+          <select value={selectedTeam} onChange={event => setSelectedTeamFromUser(event.target.value)}>
             <option value="ALL">All teams</option>
             {allTeams.map(team => <option key={team} value={team}>{team}</option>)}
           </select>
@@ -3162,7 +3196,8 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
           )}>
             <VenueMap
               markers={mapMarkers}
-              routePoints={routeLatLngs}
+              completedRoute={routeLatLngs}
+              upcomingRoute={[]}
               mapStyle={prefs.mapStyle}
               initialCenter={viewRef.current.center}
               initialZoom={viewRef.current.zoom}

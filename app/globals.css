@@ -1817,6 +1817,12 @@ body::after {
   line-height: 1.1;
   color: #fff;
 }
+.home-progress__stat b small {
+  color: var(--ink-soft);
+  font-size: .56em;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
 .home-progress__stat span {
   display: block;
   font-size: 10px;
@@ -9059,6 +9065,7 @@ button.settings-row:active,
 
 .home-next__digit,
 .home-progress__stat b,
+.home-progress__stat b small,
 .home-leader-card__stat,
 .stats-leader-card__value strong {
   font-variant-numeric: tabular-nums;

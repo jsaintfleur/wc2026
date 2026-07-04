@@ -1981,7 +1981,12 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
                 return (
                   <Fragment key={phase.key}>
                     {index > 0 && <div className={`home-checkpoint__rail ${prevComplete ? "home-checkpoint__rail--done" : ""}`} />}
-                    <button type="button" className="home-checkpoint__phase" onClick={() => onNavigate(phase.nav)}>
+                    <button
+                      type="button"
+                      className="home-checkpoint__phase"
+                      aria-label={`${phase.label}: ${phase.done} of ${phase.total} complete`}
+                      onClick={() => onNavigate(phase.nav)}
+                    >
                       <div className={`home-checkpoint__dot ${phase.trophy ? "home-checkpoint__dot--trophy " : ""}${complete ? "home-checkpoint__dot--done" : active ? "home-checkpoint__dot--active" : ""}`}>
                         {complete
                           ? (phase.trophy ? "🏆" : <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>)
@@ -2000,10 +2005,10 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
 
         <div className="home-progress__stats">
           <button type="button" className="home-progress__stat" onClick={() => onNavigate("schedule")}>
-            <b>{groupDone}</b><span>/{data.gs.length} Group</span>
+            <b>{groupDone}<small>/{data.gs.length}</small></b><span>Group matches</span>
           </button>
           <button type="button" className="home-progress__stat" onClick={() => onNavigate("bracket")}>
-            <b>{koDone}</b><span>/{data.ko.length} Knockout</span>
+            <b>{koDone}<small>/{data.ko.length}</small></b><span>Knockout matches</span>
           </button>
           <div className="home-progress__stat">
             <b>{leaders.totalGoals}</b><span>Goals</span>

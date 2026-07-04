@@ -2430,7 +2430,8 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
   );
 }
 
-type MapFilter = "all" | "today" | "live" | "upcoming" | "completed" | "knockout" | "usa" | "canada" | "mexico";
+type MapStatusFilter = "all" | "today" | "live" | "upcoming" | "completed" | "knockout";
+type MapCountryFilter = "all" | "usa" | "canada" | "mexico";
 
 type MapMatch = {
   key: string;
@@ -2457,7 +2458,7 @@ function stageShortLabel(stage: string): string {
   return stage;
 }
 
-function countryFilterKey(country: string): MapFilter {
+function countryFilterKey(country: string): MapCountryFilter {
   if (country === "USA") return "usa";
   if (country === "Canada") return "canada";
   return "mexico";
@@ -2632,7 +2633,8 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   const remembered = useMemo(() => (prefs.rememberMap ? loadRememberedMapState() : null), [prefs.rememberMap]);
 
   const [activeVenueId, setActiveVenueId] = useState(remembered?.venueId || "METLIFE");
-  const [filter, setFilter] = useState<MapFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<MapStatusFilter>("all");
+  const [countryFilter, setCountryFilter] = useState<MapCountryFilter>("all");
   const [selectedTeam, setSelectedTeam] = useState("ALL");
   const [showMapLegend, setShowMapLegend] = useState(false);
   /* Zoom for the SVG FALLBACK map only — the Leaflet map manages its own */
@@ -2674,7 +2676,10 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
        marker is tapped, clear the status/country filter so the selection and
        panel cannot be immediately snapped back to another venue. Team path
        context stays intact because the user may still be exploring that team. */
-    if (!filteredVenueIds.has(venueId)) setFilter("all");
+    if (!filteredVenueIds.has(venueId)) {
+      setStatusFilter("all");
+      setCountryFilter("all");
+    }
     setActiveVenueId(venueId);
     /* Opening from closed/collapsed lands on the half sheet; an already
        open panel keeps its current size. */
@@ -2807,22 +2812,22 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
 
   const matchPassesActiveFilter = useCallback((match: MapMatch, venue: Pick<VenueDetails, "timezone">) => {
     const status = matchStatus(match, nowMs);
-    if (filter === "today") return match.iso === venueTodayISO(venue.timezone, nowMs);
-    if (filter === "live") return status === "live";
-    if (filter === "upcoming") return status === "upcoming";
-    if (filter === "completed") return status === "completed";
-    if (filter === "knockout") return match.stage !== "Group Stage";
+    if (statusFilter === "today") return match.iso === venueTodayISO(venue.timezone, nowMs);
+    if (statusFilter === "live") return status === "live";
+    if (statusFilter === "upcoming") return status === "upcoming";
+    if (statusFilter === "completed") return status === "completed";
+    if (statusFilter === "knockout") return match.stage !== "Group Stage";
     return true;
-  }, [filter, nowMs]);
+  }, [statusFilter, nowMs]);
 
   const panelEmptyMessage = useMemo(() => {
-    if (filter === "today") return "No matches today at this venue.";
-    if (filter === "live") return "No live matches at this venue.";
-    if (filter === "upcoming") return "No upcoming matches at this venue.";
-    if (filter === "completed") return "No completed matches at this venue.";
-    if (filter === "knockout") return "No knockout matches at this venue.";
+    if (statusFilter === "today") return "No matches today at this venue.";
+    if (statusFilter === "live") return "No live matches at this venue.";
+    if (statusFilter === "upcoming") return "No upcoming matches at this venue.";
+    if (statusFilter === "completed") return "No completed matches at this venue.";
+    if (statusFilter === "knockout") return "No knockout matches at this venue.";
     return "No matches at this venue for the current selection.";
-  }, [filter]);
+  }, [statusFilter]);
 
   const filteredVenueIds = useMemo(() => {
     const ids = new Set<string>();
@@ -2831,13 +2836,11 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
         ? venue.matches
         : venue.matches.filter(match => [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon));
       const hasMatch = venueMatches.some(match => matchPassesActiveFilter(match, venue));
-      const countryMatch = filter === "usa" || filter === "canada" || filter === "mexico"
-        ? countryFilterKey(venue.country) === filter
-        : true;
+      const countryMatch = countryFilter === "all" || countryFilterKey(venue.country) === countryFilter;
       if (countryMatch && hasMatch) ids.add(venue.venueId);
     }
     return ids;
-  }, [venueModels, selectedTeam, selectedTeamCanon, filter, matchPassesActiveFilter]);
+  }, [venueModels, selectedTeam, selectedTeamCanon, countryFilter, matchPassesActiveFilter]);
 
   const panelMatches = useMemo(() => activeVenue.matches
     .filter(match => selectedTeam === "ALL" || [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon))
@@ -2988,7 +2991,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
       </section>
 
       <div className="map-toolbar">
-        <div className="map-filter-row" role="group" aria-label="Map filters">
+        <div className="map-filter-row map-filter-row--status" role="group" aria-label="Map status filters">
           {[
             ["all", "All venues"],
             ["today", "Today"],
@@ -2996,11 +2999,8 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
             ["upcoming", "Upcoming"],
             ["completed", "Completed"],
             ["knockout", "Knockout"],
-            ["usa", "USA"],
-            ["canada", "Canada"],
-            ["mexico", "Mexico"],
           ].map(([key, label]) => (
-            <button key={key} type="button" className="map-chip" aria-pressed={filter === key} onClick={() => setFilter(key as MapFilter)}>
+            <button key={key} type="button" className="map-chip" aria-pressed={statusFilter === key} onClick={() => setStatusFilter(key as MapStatusFilter)}>
               {label}
             </button>
           ))}
@@ -3013,6 +3013,23 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
           >
             ?
           </button>
+        </div>
+        <div className="map-filter-row map-filter-row--country" role="group" aria-label="Map country filters">
+          {[
+            ["usa", "USA"],
+            ["canada", "Canada"],
+            ["mexico", "Mexico"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              className="map-chip map-chip--country"
+              aria-pressed={countryFilter === key}
+              onClick={() => setCountryFilter(current => current === key ? "all" : key as MapCountryFilter)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <label className="map-team-select">
           <span>Team path</span>

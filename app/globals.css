@@ -8937,9 +8937,11 @@ button.settings-row:active,
 .map-hero__stats b, .map-panel__metrics b { color: #fff; font-family: var(--disp); font-size: 20px; }
 .map-toolbar { display: flex; align-items: center; gap: 12px; }
 .map-filter-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; flex: 1; padding: 2px 0; }
+.map-filter-row--country { flex: 0 0 auto; }
 .map-filter-row::-webkit-scrollbar { display: none; }
 .map-chip { appearance: none; flex: 0 0 auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 999px; padding: 9px 12px; color: var(--ink); background: rgba(255,255,255,0.045); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .map-chip[aria-pressed="true"] { border-color: color-mix(in srgb, var(--gold) 55%, transparent); color: #111; background: var(--gold); }
+.map-chip--country { color: var(--ink-soft); background: rgba(255,255,255,0.03); }
 .map-chip--legend { display: none; width: 34px; height: 34px; justify-content: center; padding: 0; font-family: var(--disp); font-weight: 800; }
 .map-team-select { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .map-team-select select { min-height: 38px; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 0 10px; color: var(--ink); background: rgba(255,255,255,0.06); }
@@ -9098,6 +9100,8 @@ button.settings-row:active,
     mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
   }
   .map-chip { padding: 8px 10px; font-size: 11.5px; }
+  .map-filter-row--country { flex: 1; padding-top: 0; }
+  .map-chip--country { padding: 7px 10px; }
   .map-chip--legend { display: inline-flex; align-items: center; }
   .map-legend { display: none; margin-top: -8px; padding: 10px 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; background: rgba(8,13,24,0.9); }
   .map-legend--open { display: flex; }

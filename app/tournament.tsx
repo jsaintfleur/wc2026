@@ -2442,6 +2442,8 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
   favs: Set<string>;
   toggleFav: (team: string) => void;
 }) {
+  const [search, setSearch] = useState("");
+
   /* -- build team data with records ------------------------------- */
   const teamsData = useMemo(() => {
     const groupEntries = Object.entries(data.groups);
@@ -2477,7 +2479,12 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
     return teams;
   }, [data, fixtures, findLive, nowMs]);
 
-  const sortedTeams = useMemo(() => [...teamsData].sort((a, b) => a.team.localeCompare(b.team)), [teamsData]);
+  const sortedTeams = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return teamsData
+      .filter(t => !q || t.team.toLowerCase().includes(q))
+      .sort((a, b) => a.team.localeCompare(b.team));
+  }, [teamsData, search]);
 
   return (
     <main className="teams-view" aria-label="Teams">
@@ -2486,6 +2493,17 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
         <h2>Teams</h2>
         <p>Browse squads, group records and tournament paths.</p>
       </section>
+
+      <div className="teams-view__controls">
+        <input
+          type="search"
+          className="teams-view__search"
+          placeholder="Search teams..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          aria-label="Search teams"
+        />
+      </div>
 
       {/* -- team grid --------------------------------------------- */}
       <div className="teams-view__grid">
@@ -2524,6 +2542,13 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
           </button>
         ))}
       </div>
+
+      {sortedTeams.length === 0 && (
+        <div className="teams-view__empty">
+          No teams match your search.
+          <button type="button" onClick={() => setSearch("")}>Clear search</button>
+        </div>
+      )}
     </main>
   );
 }

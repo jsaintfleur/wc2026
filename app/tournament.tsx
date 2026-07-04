@@ -3102,6 +3102,17 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
           {filteredVenueIds.size === 0 && (
             <p className="map-empty" role="status">No venues match this filter. Try a different filter or team.</p>
           )}
+          {activeVenue && panelState === "closed" && (
+            <button
+              type="button"
+              className="map-reopen-pill"
+              aria-label="Reopen venue details"
+              onClick={() => setPanelState("half")}
+            >
+              <span>{activeVenue.stadiumName}</span>
+              <b aria-hidden="true">▸</b>
+            </button>
+          )}
         </div>
 
         {/* aria-live lets screen readers hear panel updates triggered from

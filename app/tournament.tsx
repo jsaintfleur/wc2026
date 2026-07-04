@@ -4228,8 +4228,10 @@ function buildAnalyticsModel(
   return { teams, confederations, remainingByConfed, comparisonCards, matchups, strongestTeam, bestAttack, bestDefense, strongestConfed };
 }
 
-function isAnalyticsTab(value: string | null): value is AnalyticsTab {
-  return value === "teams" || value === "confederations" || value === "remaining" || value === "matchups";
+function normalizeAnalyticsTab(value: string | null): AnalyticsTab | null {
+  if (value === "confeds") return "confederations";
+  if (value === "teams" || value === "confederations" || value === "remaining" || value === "matchups") return value;
+  return null;
 }
 
 function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
@@ -4242,7 +4244,7 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
   const initialTab = useMemo<AnalyticsTab>(() => {
     if (typeof window === "undefined") return "teams";
     const tab = new URLSearchParams(window.location.search).get("tab");
-    return isAnalyticsTab(tab) ? tab : "teams";
+    return normalizeAnalyticsTab(tab) || "teams";
   }, []);
   const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTab>(initialTab);
   const [analyticsSort, setAnalyticsSort] = useState<AnalyticsSort>("overall");

@@ -2059,10 +2059,10 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
           <PitchLines />
           <div className="home-next__eyebrow">Next Match</div>
           <div className="home-next__countdown">
-            {countdown.d > 0 && <><span className="home-next__digit">{countdown.d}</span><span className="home-next__unit">d</span></>}
-            <span className="home-next__digit">{pad(countdown.h)}</span><span className="home-next__sep">:</span>
-            <span className="home-next__digit">{pad(countdown.m)}</span><span className="home-next__sep">:</span>
-            <span className="home-next__digit">{pad(countdown.s)}</span>
+            {countdown.d > 0 && <><span className="home-next__digit" suppressHydrationWarning>{countdown.d}</span><span className="home-next__unit">d</span></>}
+            <span className="home-next__digit" suppressHydrationWarning>{pad(countdown.h)}</span><span className="home-next__sep">:</span>
+            <span className="home-next__digit" suppressHydrationWarning>{pad(countdown.m)}</span><span className="home-next__sep">:</span>
+            <span className="home-next__digit" suppressHydrationWarning>{pad(countdown.s)}</span>
           </div>
           <div className="home-next__match">
             <span className="home-next__team"><span>{fl(nextMatch.home)}</span> {nextMatch.home}</span>

@@ -14,6 +14,8 @@ import { bucketScheduleItems } from "@/lib/schedule-buckets";
 import { buildTeamJourney, type JourneyMatchInput, type JourneyVenue } from "@/lib/journey";
 import { buildTeamRecords } from "@/lib/team-records";
 import { auditTournament } from "@/lib/integrity";
+import { claimKnockoutFixtureForSlot } from "@/lib/knockout-fixtures";
+import { KNOCKOUT_ROUND_MATCH_NUMBERS, knockoutMatchRange } from "@/lib/knockout-structure";
 import TriondaBall from "@/app/components/TriondaBall";
 import WorldCupTrophy from "@/app/components/WorldCupTrophy";
 
@@ -164,12 +166,12 @@ const KO_ROUNDS: {
 }[] = [
   // matchNumbers must be sequential (matching DB sort by matchNumber ASC)
   // since R32_SEEDS, KO_SOURCE_PAIRS, and pick() indices all use DB order
-  { key: "r32", dataRound: "Round of 32", label: "Round of 32", short: "R32", matchNumbers: [73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88] },
-  { key: "r16", dataRound: "Round of 16", label: "Round of 16", short: "R16", matchNumbers: [89, 90, 91, 92, 93, 94, 95, 96] },
-  { key: "qf", dataRound: "Quarter-final", label: "Quarterfinals", short: "QF", matchNumbers: [97, 98, 99, 100] },
-  { key: "sf", dataRound: "Semi-final", label: "Semifinals", short: "SF", matchNumbers: [101, 102] },
-  { key: "third", dataRound: "Third-place play-off", label: "Third Place", short: "3rd", matchNumbers: [103] },
-  { key: "final", dataRound: "Final", label: "Final", short: "Final", matchNumbers: [104] },
+  { key: "r32", dataRound: "Round of 32", label: "Round of 32", short: "R32", matchNumbers: [...KNOCKOUT_ROUND_MATCH_NUMBERS.r32] },
+  { key: "r16", dataRound: "Round of 16", label: "Round of 16", short: "R16", matchNumbers: [...KNOCKOUT_ROUND_MATCH_NUMBERS.r16] },
+  { key: "qf", dataRound: "Quarter-final", label: "Quarterfinals", short: "QF", matchNumbers: [...KNOCKOUT_ROUND_MATCH_NUMBERS.qf] },
+  { key: "sf", dataRound: "Semi-final", label: "Semifinals", short: "SF", matchNumbers: [...KNOCKOUT_ROUND_MATCH_NUMBERS.sf] },
+  { key: "third", dataRound: "Third-place play-off", label: "Third Place", short: "3rd", matchNumbers: [...KNOCKOUT_ROUND_MATCH_NUMBERS.third] },
+  { key: "final", dataRound: "Final", label: "Final", short: "Final", matchNumbers: [...KNOCKOUT_ROUND_MATCH_NUMBERS.final] },
 ];
 
 const R32_SEEDS = [
@@ -596,19 +598,50 @@ function buildKnockoutCards(
       const prefix = round === "third" ? "Loser" : "Winner";
       return `${prefix} M${sourceRound.matchNumbers[sourceIndex] || "TBD"}`;
     }
+    function unresolvedTeams(config: typeof KO_ROUNDS[number], index: number): [KnockoutParticipant, KnockoutParticipant] {
+      if (config.key === "r32") {
+        const [seedA, seedB] = R32_SEEDS[index] || ["TBD", "TBD"];
+        const teamAResolved = resolveGroupSeed(seedA, standingsByGroup);
+        let teamBResolved: KnockoutParticipant;
+        if (thirdSeedGroups(seedB).length && thirdSlots) {
+          const resolved = thirdSlots.get(index);
+          teamBResolved = resolved
+            ? { name: resolved.team, seed: `3rd Group ${resolved.group}` }
+            : { name: thirdSeedLabel(seedB), placeholder: true };
+        } else {
+          teamBResolved = resolveGroupSeed(seedB, standingsByGroup);
+        }
+        return [teamAResolved, teamBResolved];
+      }
+
+      const [sourceA, sourceB] = sourcePair(config.key, index);
+      const first = previousTeam(config.key, sourceA);
+      const second = previousTeam(config.key, sourceB);
+      return [
+        { name: first || sourceLabel(config.key, index, 0), placeholder: !first },
+        { name: second || sourceLabel(config.key, index, 1), placeholder: !second },
+      ];
+    }
 
     const all: KnockoutCardModel[] = [];
+    const claimedFixtureKeys = new Set<string>();
     for (const config of KO_ROUNDS) {
       const scheduled = data.ko.filter(match => match.round === config.dataRound);
       const roundCards = scheduled.map((match, index) => {
         const matchNo = config.matchNumbers[index] || Number(match.mr) || 0;
+        let teams = unresolvedTeams(config, index);
         const liveFixture = findLive({ ts: match.ts, v: match.v }, fixtures);
-        const fixture = liveFixture || fixtureFromMatchState(match);
+        const fixture = claimKnockoutFixtureForSlot({
+          directFixture: liveFixture || fixtureFromMatchState(match),
+          fixtures,
+          round: config.dataRound,
+          slotTeams: teams,
+          claimedFixtureKeys,
+        });
         const isLive = !!fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(match.ts, fixture.status, nowMs);
         const isDone = isCompletedKnockoutFixture(fixture);
         const winnerName = winnerFromFixture(fixture);
         const loserName = loserFromFixture(fixture);
-        let teams: [KnockoutParticipant, KnockoutParticipant];
 
         const hasMatchTeams = !!match.t1 && !!match.t2 && match.t1 !== "TBD" && match.t2 !== "TBD";
         const trustVendorTeams = fixture?.home && fixture?.away &&
@@ -627,27 +660,6 @@ function buildKnockoutCards(
           teams = [
             { name: home, winner: winnerName === home, loser: loserName === home },
             { name: away, winner: winnerName === away, loser: loserName === away },
-          ];
-        } else if (config.key === "r32") {
-          const [seedA, seedB] = R32_SEEDS[index] || ["TBD", "TBD"];
-          const teamAResolved = resolveGroupSeed(seedA, standingsByGroup);
-          let teamBResolved: KnockoutParticipant;
-          if (thirdSeedGroups(seedB).length && thirdSlots) {
-            const resolved = thirdSlots.get(index);
-            teamBResolved = resolved
-              ? { name: resolved.team, seed: `3rd Group ${resolved.group}` }
-              : { name: thirdSeedLabel(seedB), placeholder: true };
-          } else {
-            teamBResolved = resolveGroupSeed(seedB, standingsByGroup);
-          }
-          teams = [teamAResolved, teamBResolved];
-        } else {
-          const [sourceA, sourceB] = sourcePair(config.key, index);
-          const first = previousTeam(config.key, sourceA);
-          const second = previousTeam(config.key, sourceB);
-          teams = [
-            { name: first || sourceLabel(config.key, index, 0), placeholder: !first },
-            { name: second || sourceLabel(config.key, index, 1), placeholder: !second },
           ];
         }
 
@@ -748,8 +760,11 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
   const [team, setTeam] = useState("ALL");
   const [stage, setStage] = useState("ALL");
   const [query, setQuery] = useState("");
-  const [fixtures, setFixtures] = useState<LiveFixture[]>(() => getStartupLiveDataCache()?.fixtures || []);
-  const [leaderboardStats, setLeaderboardStats] = useState<ExternalLeaderStat[]>(() => getStartupLiveDataCache()?.leaderboardStats || []);
+  /* Start empty on both server and first client render so hydration is stable.
+     Persisted live data is still available as a fallback inside pollLive if the
+     first network refresh fails. */
+  const [fixtures, setFixtures] = useState<LiveFixture[]>([]);
+  const [leaderboardStats, setLeaderboardStats] = useState<ExternalLeaderStat[]>([]);
 
   /* Populate the global player-image index during render (useMemo, not
      useEffect) so avatars sourced from the index appear in the same pass —
@@ -768,7 +783,18 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
       key: mm.key, stage: mm.stage, ts: mm.ts, home: mm.home, away: mm.away,
       status: mm.status, gh: mm.gh, ga: mm.ga,
       penHome: mm.fixture?.penHome ?? null, penAway: mm.fixture?.penAway ?? null,
-    })));
+    })), {
+      rawFixtures: fixtures.map(fixture => ({
+        round: fixture.round,
+        home: fixture.home,
+        away: fixture.away,
+        status: fixture.status,
+        gh: fixture.gh,
+        ga: fixture.ga,
+        penHome: fixture.penHome,
+        penAway: fixture.penAway,
+      })),
+    });
     if (issues.length) {
       console.warn(`[integrity] ${issues.length} issue(s) detected:`);
       for (const issue of issues) console.warn(`[integrity] ${issue.level.toUpperCase()} ${issue.code}: ${issue.message}`);
@@ -779,7 +805,7 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
     (window as unknown as { __competAudit?: unknown }).__competAudit = { issues, matchCount: matches.length };
   }, [data, fixtures, findLive]);
   const [liveStatus, setLiveStatus] = useState<LiveStatus>("init");
-  const [liveTs, setLiveTs] = useState(() => getStartupLiveDataCache()?.ts || 0);
+  const [liveTs, setLiveTs] = useState(0);
   const [, setLiveStale] = useState(false);
   const [liveEnrichmentIssue, setLiveEnrichmentIssue] = useState("");
   const [animate, setAnimate] = useState(true);
@@ -5504,16 +5530,6 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const maxRoadZoom = 2.35;
   const clampRoadZoom = useCallback((value: number) => Math.min(maxRoadZoom, Math.max(minRoadZoom, value)), []);
 
-  const byRound = useMemo(() => {
-    const grouped = new Map<string, KnockoutMatch[]>();
-    for (const match of data.ko) {
-      const list = grouped.get(match.round) || [];
-      list.push(match);
-      grouped.set(match.round, list);
-    }
-    return grouped;
-  }, [data.ko]);
-
   function venueName(code: string) {
     return data.venues[code] || { common: "", city: "", country: "" };
   }
@@ -5523,49 +5539,9 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
     return `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`;
   }
 
-  const teamName = useCallback((name: string | undefined | null): string => {
-    if (!name) return "TBD";
-    const normalized = canon(name);
-    return normalized || name;
-  }, []);
-
-  const winnerFromFixture = useCallback((fixture: LiveFixture | null): string | null => {
-    return winnerNameFromKnockoutFixture(fixture, teamName);
-  }, [teamName]);
-
-  const loserFromFixture = useCallback((fixture: LiveFixture | null): string | null => {
-    return loserNameFromKnockoutFixture(fixture, teamName);
-  }, [teamName]);
-
-  const standingsByGroup = useMemo(() => {
-    const groupMap: Record<string, GroupStanding> = {};
-    for (const g of Object.keys(data.groups)) {
-      groupMap[g] = completedGroupStanding(g, data, fixtures, findLive, nowMs);
-    }
-    return groupMap;
-  }, [data, findLive, fixtures, nowMs]);
-
-  // Resolve third-place qualifiers into specific R32 slots using FIFA Annex C
-  const thirdPlaceSlots = useMemo(
-    () => resolveThirdPlaceSlots(standingsByGroup),
-    [standingsByGroup],
-  );
-
   const rounds = useMemo(() => {
-    const winners: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
-    const losers: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
-
     function sourcePair(round: KnockoutRoundKey, index: number): [number, number] {
       return KO_SOURCE_PAIRS[round]?.[index] || [index * 2, index * 2 + 1];
-    }
-
-    function previousWinner(round: KnockoutRoundKey, index: number): string | null {
-      if (round === "r16") return winners.r32?.[index] || null;
-      if (round === "qf") return winners.r16?.[index] || null;
-      if (round === "sf") return winners.qf?.[index] || null;
-      if (round === "final") return winners.sf?.[index] || null;
-      if (round === "third") return losers.sf?.[index] || null;
-      return null;
     }
 
     function sourceFor(round: KnockoutRoundKey, index: number): string {
@@ -5578,92 +5554,14 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
       return "L101 / L102";
     }
 
-    return KO_ROUNDS.map(config => {
-      const scheduled = byRound.get(config.dataRound) || [];
-      const cards: KnockoutCardModel[] = scheduled.map((match, index) => {
-        const matchNo = config.matchNumbers[index] || Number(match.mr) || 0;
-        const fixture = findLive({ ts: match.ts, v: match.v }, fixtures);
-        const isLive = !!fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(match.ts, fixture.status);
-        const isDone = isCompletedKnockoutFixture(fixture);
-        const winnerName = winnerFromFixture(fixture);
-        const loserName = loserFromFixture(fixture);
-        let teamA: KnockoutParticipant;
-        let teamB: KnockoutParticipant;
-
-        // For R16+ matches that haven't started, prefer the bracket advancement
-        // logic over vendor team assignments — the vendor may slot teams into
-        // R16 venues in a different order than the FIFA bracket tree.
-        const trustVendorTeams = fixture?.home && fixture?.away &&
-          (config.key === "r32" || isLive || isDone);
-
-        if (trustVendorTeams) {
-          const home = teamName(fixture!.home);
-          const away = teamName(fixture!.away);
-          teamA = { name: home, winner: winnerName === home, loser: loserName === home };
-          teamB = { name: away, winner: winnerName === away, loser: loserName === away };
-        } else if (config.key === "r32") {
-          const [seedA, seedB] = R32_SEEDS[index] || ["TBD", "TBD"];
-          teamA = resolveGroupSeed(seedA, standingsByGroup);
-          if (thirdSeedGroups(seedB).length && thirdPlaceSlots) {
-            const resolved = thirdPlaceSlots.get(index);
-            if (resolved) {
-              teamB = { name: resolved.team, seed: `3rd Group ${resolved.group}` };
-            } else {
-              teamB = { name: thirdSeedLabel(seedB), placeholder: true };
-            }
-          } else {
-            teamB = resolveGroupSeed(seedB, standingsByGroup);
-          }
-        } else {
-          const [sourceA, sourceB] = sourcePair(config.key, index);
-          const sourceLabel = sourceFor(config.key, index).split(" / ");
-          const first = previousWinner(config.key, sourceA);
-          const second = previousWinner(config.key, sourceB);
-          teamA = { name: first || "TBD", seed: first ? undefined : sourceLabel[0] };
-          teamB = { name: second || "TBD", seed: second ? undefined : sourceLabel[1] };
-        }
-
-        const sourceMatchNos: [number, number] | null = config.key !== "r32" && KO_SOURCE_PAIRS[config.key]
-          ? (() => {
-              const [a, b] = sourcePair(config.key, index);
-              const prevRoundKey: KnockoutRoundKey = config.key === "r16" ? "r32" : config.key === "qf" ? "r16" : config.key === "sf" ? "qf" : config.key === "final" ? "sf" : config.key === "third" ? "sf" : "r32";
-              const prevRound = KO_ROUNDS.find(r => r.key === prevRoundKey);
-              return prevRound ? [prevRound.matchNumbers[a], prevRound.matchNumbers[b]] as [number, number] : null;
-            })()
-          : null;
-
-        const nextMatchNo: number | null = (() => {
-          if (config.key === "final" || config.key === "third") return null;
-          const nextRoundKey: KnockoutRoundKey = config.key === "r32" ? "r16" : config.key === "r16" ? "qf" : config.key === "qf" ? "sf" : "final";
-          const nextPairs = KO_SOURCE_PAIRS[nextRoundKey];
-          if (!nextPairs) return null;
-          const nextIndex = nextPairs.findIndex(pair => pair.includes(index));
-          const nextRound = KO_ROUNDS.find(r => r.key === nextRoundKey);
-          return nextIndex >= 0 && nextRound ? nextRound.matchNumbers[nextIndex] : null;
-        })();
-
-        return {
-          key: `${config.key}-${matchNo}-${index}`,
-          round: config.key,
-          roundIndex: index,
-          match,
-          matchNo,
-          fixture,
-          teams: [teamA, teamB],
-          source: sourceFor(config.key, index),
-          isDone,
-          isLive,
-          winnerName,
-          loserName,
-          sourceMatchNos,
-          nextMatchNo,
-        };
-      });
-      winners[config.key] = cards.map(card => card.winnerName);
-      losers[config.key] = cards.map(card => card.loserName);
-      return { ...config, cards };
-    });
-  }, [byRound, findLive, fixtures, loserFromFixture, standingsByGroup, thirdPlaceSlots, teamName, winnerFromFixture]);
+    const cards = buildKnockoutCards(data, fixtures, findLive, nowMs);
+    return KO_ROUNDS.map(config => ({
+      ...config,
+      cards: cards
+        .filter(card => card.round === config.key)
+        .map(card => ({ ...card, source: sourceFor(card.round, card.roundIndex) })),
+    }));
+  }, [data, findLive, fixtures, nowMs]);
 
   const validationWarnings = useMemo(() => {
     const warnings: string[] = [];
@@ -5816,17 +5714,23 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
   const shouldDim = !!selectedPathKey;
   const roundMap = new Map(rounds.map(round => [round.key, round.cards]));
   const pick = (cards: KnockoutCardModel[], indices: number[]) => indices.map(i => cards[i]).filter(Boolean);
+  const roundDetail = (key: KnockoutRoundKey, cards: KnockoutCardModel[]) =>
+    `${knockoutMatchRange(KO_ROUNDS.find(round => round.key === key)?.matchNumbers || [])} · ${cards.filter(card => card.isDone).length}/${cards.length} played`;
+  const r32Cards = roundMap.get("r32") || [];
+  const r16Cards = roundMap.get("r16") || [];
+  const qfCards = roundMap.get("qf") || [];
+  const sfCards = roundMap.get("sf") || [];
   const leftRoad = [
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "SF101 half", cards: pick(roundMap.get("r32") || [], [2, 5, 0, 3, 11, 10, 9, 8]) },
-    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "M89-M94", cards: pick(roundMap.get("r16") || [], [0, 1, 4, 5]) },
-    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: pick(roundMap.get("qf") || [], [0, 1]) },
-    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: pick(roundMap.get("sf") || [], [0]) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: roundDetail("r32", r32Cards), cards: pick(r32Cards, [2, 5, 0, 3, 11, 10, 9, 8]) },
+    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: roundDetail("r16", r16Cards), cards: pick(r16Cards, [0, 1, 4, 5]) },
+    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: roundDetail("qf", qfCards), cards: pick(qfCards, [0, 1]) },
+    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: roundDetail("sf", sfCards), cards: pick(sfCards, [0]) },
   ];
   const rightRoad = [
-    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: "2 teams", cards: pick(roundMap.get("sf") || [], [1]) },
-    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: "4 teams", cards: pick(roundMap.get("qf") || [], [2, 3]) },
-    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: "M91-M96", cards: pick(roundMap.get("r16") || [], [2, 3, 6, 7]) },
-    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: "SF102 half", cards: pick(roundMap.get("r32") || [], [1, 4, 6, 7, 14, 13, 12, 15]) },
+    { key: "sf" as KnockoutRoundKey, label: "Semis", detail: roundDetail("sf", sfCards), cards: pick(sfCards, [1]) },
+    { key: "qf" as KnockoutRoundKey, label: "Quarters", detail: roundDetail("qf", qfCards), cards: pick(qfCards, [2, 3]) },
+    { key: "r16" as KnockoutRoundKey, label: "RD 16", detail: roundDetail("r16", r16Cards), cards: pick(r16Cards, [2, 3, 6, 7]) },
+    { key: "r32" as KnockoutRoundKey, label: "RD of 32", detail: roundDetail("r32", r32Cards), cards: pick(r32Cards, [1, 4, 6, 7, 14, 13, 12, 15]) },
   ];
   const finalCard = (roundMap.get("final") || [])[0];
   const thirdCard = (roundMap.get("third") || [])[0];
@@ -6257,7 +6161,8 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
             onClick={() => focusRound(round.key)}
           >
             <span>{round.label}</span>
-            <b>{round.cards.filter(card => card.isDone).length}/{round.cards.length}</b>
+            <small>{knockoutMatchRange(round.matchNumbers)}</small>
+            <b>{round.cards.filter(card => card.isDone).length}/{round.cards.length} played</b>
           </button>
         ))}
       </div>
@@ -6426,13 +6331,12 @@ function CountdownHero({ data, fixtures, findLive }: {
   for (const m of data.gs) {
     if (m.ts > now && (!nextGs || m.ts < nextGs.ts)) nextGs = m;
   }
-  let nextKo: KnockoutMatch | null = null;
-  for (const k of data.ko) {
-    if (k.ts > now && (!nextKo || k.ts < nextKo.ts)) nextKo = k;
-  }
+  const nextKo = buildKnockoutCards(data, fixtures, findLive, now)
+    .filter(card => card.match.ts > now && !card.isDone)
+    .sort((a, b) => a.match.ts - b.match.ts)[0] || null;
 
-  const useGs = nextGs && (!nextKo || nextGs.ts <= nextKo.ts);
-  const ts = useGs ? nextGs!.ts : nextKo?.ts;
+  const useGs = nextGs && (!nextKo || nextGs.ts <= nextKo.match.ts);
+  const ts = useGs ? nextGs!.ts : nextKo?.match.ts;
   if (!ts) return null;
 
   const diff = Math.max(0, ts - now);
@@ -6442,11 +6346,12 @@ function CountdownHero({ data, fixtures, findLive }: {
   const s = totalSec % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
 
-  const isoDate = useGs ? nextGs!.iso : nextKo!.iso;
+  const isoDate = useGs ? nextGs!.iso : nextKo!.match.iso;
   const d = parseISO(isoDate);
-  const etTime = useGs ? nextGs!.et : nextKo!.et;
-  const venCode = useGs ? nextGs!.v : nextKo!.v;
+  const etTime = useGs ? nextGs!.et : nextKo!.match.et;
+  const venCode = useGs ? nextGs!.v : nextKo!.match.v;
   const v = data.venues[venCode];
+  const koTeams = nextKo?.teams || null;
 
   return (
     <div className="cd-hero" role="button" tabIndex={0} onClick={jumpToNext} onKeyDown={handleKey} aria-label="Jump to next match">
@@ -6465,8 +6370,15 @@ function CountdownHero({ data, fixtures, findLive }: {
           <span className="cd-hero__vs">vs</span>
           <div className="cd-hero__side"><span className="cd-hero__flag">{fl(nextGs.t2)}</span><span className="cd-hero__name">{nextGs.t2}</span></div>
         </div>
-      ) : nextKo ? (
-        <div className="cd-hero__teams"><span className="cd-hero__round">{nextKo.round}</span></div>
+      ) : nextKo && koTeams ? (
+        <>
+          <div className="cd-hero__teams">
+            <div className="cd-hero__side"><span className="cd-hero__flag">{koTeams[0].placeholder ? "TBD" : fl(koTeams[0].name)}</span><span className="cd-hero__name">{koTeams[0].name}</span></div>
+            <span className="cd-hero__vs">vs</span>
+            <div className="cd-hero__side"><span className="cd-hero__flag">{koTeams[1].placeholder ? "TBD" : fl(koTeams[1].name)}</span><span className="cd-hero__name">{koTeams[1].name}</span></div>
+          </div>
+          <div className="cd-hero__round">{nextKo.match.round}</div>
+        </>
       ) : null}
       <div className="cd-hero__info">{DOW[d.getDay()]} {d.getDate()} {MON[d.getMonth()]} · {etTime}{v ? ` · ${v.common}` : ""}</div>
     </div>

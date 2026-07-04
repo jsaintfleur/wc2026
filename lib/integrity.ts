@@ -13,6 +13,7 @@ import {
   type RecordMatchInput,
   type TeamRecord,
 } from "./team-records";
+import { canon } from "./merge";
 
 export interface IntegrityIssue {
   level: "error" | "warn";
@@ -20,10 +21,39 @@ export interface IntegrityIssue {
   message: string;
 }
 
+export interface RawFixtureIntegrityInput {
+  round: string;
+  home: string;
+  away: string;
+  status: string;
+  gh: number | null;
+  ga: number | null;
+  penHome?: number | null;
+  penAway?: number | null;
+}
+
+export interface IntegrityOptions {
+  rawFixtures?: RawFixtureIntegrityInput[];
+}
+
+const DONE_STATUSES = new Set(["FT", "AET", "PEN", "PEN_LIVE", "WO", "AWD"]);
+
+function teamPairKey(home: string, away: string): string {
+  return [canon(home), canon(away)].sort().join("|");
+}
+
+function isCompletedRawKnockoutFixture(fixture: RawFixtureIntegrityInput): boolean {
+  if (knockoutRoundDepth(fixture.round) === 0 || !DONE_STATUSES.has(fixture.status)) return false;
+  if (fixture.gh == null || fixture.ga == null) return false;
+  return fixture.gh !== fixture.ga ||
+    (fixture.penHome != null && fixture.penAway != null && fixture.penHome !== fixture.penAway);
+}
+
 export function validateTournamentIntegrity(
   teams: string[],
   matches: RecordMatchInput[],
   records: Map<string, TeamRecord>,
+  options: IntegrityOptions = {},
 ): IntegrityIssue[] {
   const issues: IntegrityIssue[] = [];
   const push = (level: IntegrityIssue["level"], code: string, message: string) =>
@@ -67,6 +97,21 @@ export function validateTournamentIntegrity(
       if (knockoutRoundDepth(match.stage) > 0 && match.gh === match.ga && matchWinner(match) == null) {
         push("warn", "knockout-draw-unresolved", `Knockout match ${match.key} (${match.home} vs ${match.away}) is drawn with no penalty result.`);
       }
+    }
+  }
+
+  /* Raw-feed parity: every completed knockout fixture in the source feed
+     must attach to exactly one resolved completed knockout match. If this
+     fails, downstream records, journeys, map paths, and schedule cards all
+     drift because they share the resolved match list. */
+  const resolvedCompletedKnockoutPairs = new Set(matches
+    .filter(match => match.status === "completed" && knockoutRoundDepth(match.stage) > 0 && match.home !== "TBD" && match.away !== "TBD")
+    .map(match => `${knockoutRoundDepth(match.stage)}|${teamPairKey(match.home, match.away)}`));
+  for (const fixture of options.rawFixtures || []) {
+    if (!isCompletedRawKnockoutFixture(fixture)) continue;
+    const key = `${knockoutRoundDepth(fixture.round)}|${teamPairKey(fixture.home, fixture.away)}`;
+    if (!resolvedCompletedKnockoutPairs.has(key)) {
+      push("error", "unattached-knockout-fixture", `Completed knockout fixture ${canon(fixture.home)} vs ${canon(fixture.away)} (${fixture.round}) did not attach to the resolved bracket.`);
     }
   }
 
@@ -147,7 +192,8 @@ export function validateTournamentIntegrity(
 export function auditTournament(
   teams: string[],
   matches: RecordMatchInput[],
+  options: IntegrityOptions = {},
 ): { records: Map<string, TeamRecord>; issues: IntegrityIssue[] } {
   const records = buildTeamRecords(teams, matches);
-  return { records, issues: validateTournamentIntegrity(teams, matches, records) };
+  return { records, issues: validateTournamentIntegrity(teams, matches, records, options) };
 }

@@ -148,6 +148,23 @@ test("integrity: drawn knockout tie without pens is flagged", () => {
   assert.ok(issues.some(i => i.code === "knockout-draw-unresolved"));
 });
 
+test("integrity: completed raw knockout fixtures must attach to resolved bracket matches", () => {
+  const { issues } = auditTournament(TEAMS, [
+    m({ home: "Alpha", away: "Beta", stage: "Round of 32", gh: 2, ga: 0 }),
+  ], {
+    rawFixtures: [{
+      round: "Round of 32",
+      home: "Gamma",
+      away: "Delta",
+      status: "FT",
+      gh: 1,
+      ga: 0,
+    }],
+  });
+
+  assert.ok(issues.some(i => i.code === "unattached-knockout-fixture"));
+});
+
 test("matchWinner: regulation, pens, and undecided", () => {
   assert.equal(matchWinner(m({ home: "A", away: "B", gh: 2, ga: 1 })), "A");
   assert.equal(matchWinner(m({ home: "A", away: "B", gh: 1, ga: 1, penHome: 2, penAway: 4 })), "B");

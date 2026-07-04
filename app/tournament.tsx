@@ -1560,7 +1560,7 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
             onViewVenueMatches={openVenueSchedule}
           />
         ) : view === "analytics" ? (
-          <AnalyticsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} onMatchClick={openMatchDetail} />
+          <AnalyticsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} liveTs={liveTs} liveStatus={liveStatus} onTeamClick={setTeamDrawer} onMatchClick={openMatchDetail} />
         ) : view === "more" ? (
           <MoreView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} />
         ) : view === "settings" ? (
@@ -4332,11 +4332,13 @@ function normalizeAnalyticsTab(value: string | null): AnalyticsTab | null {
   return null;
 }
 
-function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchClick }: {
+function AnalyticsView({ data, fixtures, findLive, nowMs, liveTs, liveStatus, onTeamClick, onMatchClick }: {
   data: TournamentData;
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
+  liveTs: number;
+  liveStatus: LiveStatus;
   onTeamClick: (team: string) => void;
   onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
 }) {
@@ -4373,6 +4375,10 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchCl
   }, [analytics.teams, analyticsSort, aliveOnly]);
   const selectedAnalyticsTeam = analyticsTeam ? analytics.teams.find(team => team.team === analyticsTeam) || null : null;
   const mostRemaining = [...analytics.confederations].sort((a, b) => b.remaining - a.remaining)[0];
+  const analyticsSyncLabel = liveTs ? new Date(liveTs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "pending";
+  const analyticsDataNote = liveStatus === "paused" || liveStatus === "off" || liveStatus === "nofix"
+    ? `Live feed unavailable; using verified results. Last updated ${analyticsSyncLabel}.`
+    : `Last updated ${analyticsSyncLabel}.`;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -4460,6 +4466,7 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchCl
           <span className="analytics-kicker">Analytics Hub</span>
           <h3>Team strength, confederation power, and knockout survival.</h3>
           <p>Basic model: results/form 30%, goal difference 20%, attack 20%, defense 20%, knockout path difficulty 10%. Advanced metrics appear automatically when the live feed supplies them.</p>
+          <p className="analytics-data-note">{analyticsDataNote}</p>
           <button type="button" className="analytics-method-button" onClick={() => setModelSheetOpen(true)}>ⓘ How scores work</button>
         </div>
         <div className="analytics-hero__cards">

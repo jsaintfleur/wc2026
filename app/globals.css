@@ -9083,6 +9083,7 @@ button.settings-row:active,
   .host-map { min-width: calc(var(--map-zoom, 1) * 820px); min-height: calc(100svh - 176px); }
   .map-fit-control { top: 12px; right: 12px; width: 42px; height: 42px; }
   .map-controls { top: 60px; right: 12px; }
+  .map-empty { inset: 66px 14px auto; z-index: 6; max-width: calc(100% - 28px); }
   /* Bottom sheet: floats above the bottom nav, never part of page flow, so
      the map stays fully pannable behind/around it. Three sizes:
      collapsed (header pill) / half / expanded. */

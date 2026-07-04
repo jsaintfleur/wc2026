@@ -7565,6 +7565,11 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .analytics-score i span, .analytics-breakdown i span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--gold), #38bdf8); }
 .analytics-mini { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
 .analytics-mini em { border-radius: 999px; padding: 3px 7px; color: var(--ink-soft); background: rgba(255,255,255,0.045); font-style: normal; font-size: 10.5px; font-weight: 800; }
+.analytics-form-dots { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.analytics-dot { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid rgba(255,255,255,0.12); border-radius: 50%; color: #111; background: var(--gold); font-style: normal; font-size: 10px; font-weight: 900; }
+.analytics-dot--d { color: var(--ink); background: rgba(255,255,255,0.12); }
+.analytics-dot--l { color: #fecaca; background: rgba(244,63,94,0.16); }
+.analytics-form-dots em, .analytics-form-dots small { color: var(--muted); font-style: normal; font-size: 10.5px; font-weight: 900; }
 .analytics-confed-card, .analytics-survival-card, .analytics-matchup-card { border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 12px; background: rgba(255,255,255,0.042); }
 .analytics-confed-card header, .analytics-survival-card header, .analytics-matchup-card header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .analytics-confed-card header span, .analytics-survival-card header b { color: #fff; font-family: var(--disp); font-size: 22px; font-weight: 900; }
@@ -7637,7 +7642,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   .analytics-hero__cards, .analytics-comparison-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .analytics-confed-grid, .analytics-survival-board, .analytics-matchups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .analytics-team-row { grid-template-columns: 32px minmax(190px, 1fr) 112px 190px 230px; }
-  .analytics-score, .analytics-mini { grid-column: auto; }
+  .analytics-score, .analytics-mini, .analytics-form-dots { grid-column: auto; }
   .analytics-method-sheet { left: auto; right: 28px; bottom: 28px; width: min(440px, calc(100vw - 56px)); }
 }
 

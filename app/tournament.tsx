@@ -4493,10 +4493,12 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchCl
                   <b>{team.score}</b>
                   <i><span style={{ width: `${team.score}%` }} /></i>
                 </span>
-                <span className="analytics-mini">
-                  <em title={`Form: ${team.formString}, last 3`}>FORM {team.formString}</em>
-                  <em>{team.trend === "up" ? "↑" : team.trend === "down" ? "↓" : "→"} {team.trend}</em>
-                  {team.scoreDelta != null && <em>{team.scoreDelta >= 0 ? "+" : ""}{team.scoreDelta} since last match</em>}
+                <span className="analytics-form-dots" role="img" aria-label={`Form: ${team.formString}, last 3`}>
+                  {team.matches.slice(-5).map((match, formIndex) => (
+                    <i key={`${team.team}-${match.ts}-${formIndex}`} className={`analytics-dot analytics-dot--${match.result.toLowerCase()}`}>{match.result}</i>
+                  ))}
+                  {team.matches.length === 0 && <em>No results</em>}
+                  <small>{team.trend === "up" ? "↑" : team.trend === "down" ? "↓" : "→"}{team.scoreDelta != null ? ` ${team.scoreDelta >= 0 ? "+" : ""}${team.scoreDelta}` : ""}</small>
                 </span>
               </button>
             ))}

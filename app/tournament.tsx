@@ -3096,6 +3096,9 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
               autoFitIfEmpty={!!remembered}
               layoutKey={panelState}
               onSelect={selectVenue}
+              onBackgroundClick={() => {
+                if (panelState !== "closed") setPanelState("collapsed");
+              }}
               onViewChange={handleViewChange}
             />
           </MapErrorBoundary>

@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useMemo, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from "react-leaflet";
 import { divIcon, latLngBounds, type LeafletEvent, type Map as LeafletMap } from "leaflet";
 
 export interface VenueMapMarker {
@@ -66,6 +66,7 @@ interface VenueMapProps {
      panel collapse) so Leaflet re-measures its container. */
   layoutKey: string;
   onSelect: (venueId: string) => void;
+  onBackgroundClick?: () => void;
   /* Fired on moveend for "remember last viewed map location" persistence */
   onViewChange?: (center: [number, number], zoom: number) => void;
 }
@@ -188,9 +189,23 @@ function MapController({ markers, focusRequest, fitRequest, autoFitIfEmpty, layo
   return null;
 }
 
+function MapBackgroundClick({ onBackgroundClick }: { onBackgroundClick?: () => void }) {
+  useMapEvents({
+    click: event => {
+      if (!onBackgroundClick) return;
+      const target = event.originalEvent.target;
+      /* Marker clicks should keep selecting venues; only bare map clicks
+         collapse the sheet. Leaflet suppresses post-drag clicks for us. */
+      if (target instanceof Element && target.closest(".leaflet-marker-icon")) return;
+      onBackgroundClick();
+    },
+  });
+  return null;
+}
+
 export default function VenueMap({
   markers, routePoints, mapStyle, initialCenter, initialZoom,
-  focusRequest, fitRequest, autoFitIfEmpty, layoutKey, onSelect, onViewChange,
+  focusRequest, fitRequest, autoFitIfEmpty, layoutKey, onSelect, onBackgroundClick, onViewChange,
 }: VenueMapProps) {
   const tiles = TILE_STYLES[mapStyle] || TILE_STYLES.Dark;
 
@@ -257,6 +272,7 @@ export default function VenueMap({
         layoutKey={layoutKey}
         onViewChange={onViewChange}
       />
+      <MapBackgroundClick onBackgroundClick={onBackgroundClick} />
     </MapContainer>
   );
 }

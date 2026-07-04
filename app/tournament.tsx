@@ -2555,6 +2555,13 @@ function formatVenueLocalTime(ts: number, timezone: string): string {
   }).format(new Date(ts));
 }
 
+function formatVenueTimelineTime(ts: number, timezone: string, canonicalLocal: string): string {
+  const venueLocal = formatVenueLocalTime(ts, timezone);
+  const localTime = canonicalLocal.replace(/\s+[A-Z]{2,4}$/, "");
+  const venueTime = venueLocal.split(", ").pop()?.replace(/\s+[A-Z]{2,4}$/, "") || "";
+  return localTime && venueTime === localTime ? canonicalLocal : `${venueLocal} · ${canonicalLocal}`;
+}
+
 type MapViewProps = {
   data: TournamentData;
   fixtures: LiveFixture[];
@@ -3309,7 +3316,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
                     <span className="venue-timeline__dot" />
                     <span className="venue-timeline__stage">{stageShortLabel(match.stage)}</span>
                     <b>{match.homeTeam} vs {match.awayTeam}</b>
-                    <small>{formatVenueLocalTime(match.ts, activeVenue.timezone)} · {match.local}</small>
+                    <small>{formatVenueTimelineTime(match.ts, activeVenue.timezone, match.local)}</small>
                     <span className="venue-timeline__status">
                       {status === "live" && <span className="lv">LIVE {match.fixture?.elapsed ? `${match.fixture.elapsed}'` : ""}</span>}
                       {status === "completed" && <span className="ft">FT</span>}

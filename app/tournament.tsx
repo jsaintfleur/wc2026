@@ -4354,7 +4354,11 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchCl
   const drawerRef = useRef<HTMLElement | null>(null);
   const modelSheetRef = useRef<HTMLElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
-  const analytics = useMemo(() => buildAnalyticsModel(data, fixtures, findLive, nowMs), [data, fixtures, findLive, nowMs]);
+  /* The analytics model only needs wall-clock time to guard against stale
+     live statuses, so a five-minute bucket avoids rebuilding on every
+     countdown tick while keeping stale-live decisions fresh enough. */
+  const analyticsNowBucket = Math.floor(nowMs / (5 * 60_000)) * 5 * 60_000;
+  const analytics = useMemo(() => buildAnalyticsModel(data, fixtures, findLive, analyticsNowBucket), [data, fixtures, findLive, analyticsNowBucket]);
   const rankedAnalyticsTeams = useMemo(() => {
     const visible = aliveOnly ? analytics.teams.filter(team => team.alive) : analytics.teams;
     const sorters: Record<AnalyticsSort, (a: TeamAnalytics, b: TeamAnalytics) => number> = {

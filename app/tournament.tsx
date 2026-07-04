@@ -6551,8 +6551,8 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
               className={`ko-stage__tab${activeRound === round.key ? " ko-stage__tab--active" : ""}${roundPct === 100 ? " ko-stage__tab--complete" : ""}`}
               onClick={() => focusRound(round.key)}
             >
-              <span className="ko-stage__tab-label">{round.label}</span>
-              <small className="ko-stage__tab-range">{knockoutMatchRange(round.matchNumbers)}</small>
+              <span className="ko-stage__tab-label">{round.short === "Final" ? "Trophy Match" : round.short}</span>
+              <small className="ko-stage__tab-range">{round.label}</small>
               <span className="ko-stage__tab-meter" aria-hidden="true">
                 <i style={{ width: `${roundPct}%` }} />
               </span>

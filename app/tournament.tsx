@@ -4248,6 +4248,8 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
   const [analyticsSort, setAnalyticsSort] = useState<AnalyticsSort>("overall");
   const [aliveOnly, setAliveOnly] = useState(true);
   const [analyticsTeam, setAnalyticsTeam] = useState<string | null>(null);
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const analytics = useMemo(() => buildAnalyticsModel(data, fixtures, findLive, nowMs), [data, fixtures, findLive, nowMs]);
   const rankedAnalyticsTeams = useMemo(() => {
     const visible = aliveOnly ? analytics.teams.filter(team => team.alive) : analytics.teams;
@@ -4271,6 +4273,31 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
     url.searchParams.set("tab", analyticsTab);
     window.history.replaceState(window.history.state, "", url);
   }, [analyticsTab]);
+
+  useEffect(() => {
+    if (!selectedAnalyticsTeam || typeof window === "undefined") return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.body.style.overflow = "hidden";
+    requestAnimationFrame(() => drawerRef.current?.focus());
+    window.history.pushState({ competAnalyticsDrawer: true }, "");
+    let closedByPop = false;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAnalyticsTeam(null);
+    };
+    const onPop = () => {
+      closedByPop = true;
+      setAnalyticsTeam(null);
+    };
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("popstate", onPop);
+      previousFocusRef.current?.focus?.();
+      if (!closedByPop && window.history.state?.competAnalyticsDrawer) window.history.back();
+    };
+  }, [selectedAnalyticsTeam?.team]);
 
   return (
     <section className="analytics-hub analytics-hub--view" aria-label="Analytics Hub">
@@ -4431,7 +4458,8 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
       )}
 
       {selectedAnalyticsTeam && (
-        <aside className="analytics-drawer" aria-label={`${selectedAnalyticsTeam.team} analytics`}>
+        <aside ref={drawerRef} className="analytics-drawer" role="dialog" aria-modal="true" aria-label={`${selectedAnalyticsTeam.team} analytics`} tabIndex={-1}>
+          <button type="button" className="analytics-drawer__back" onClick={() => setAnalyticsTeam(null)}>‹ Back</button>
           <div>
             <span>{selectedAnalyticsTeam.confederation} · rank #{analytics.teams.findIndex(team => team.team === selectedAnalyticsTeam.team) + 1}</span>
             <h4>{data.flags[selectedAnalyticsTeam.team]} {selectedAnalyticsTeam.team}</h4>

@@ -9075,14 +9075,17 @@ button.settings-row:active,
 .venue-timeline__stage { color: var(--gold-bright); font-family: var(--disp); font-size: 11px; font-weight: 800; }
 .venue-timeline__item b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .venue-timeline__item small { grid-column: 3 / 4; color: var(--muted); font-size: 11px; }
-.venue-timeline__item em { grid-column: 4; grid-row: 1 / span 2; color: #fff; font-style: normal; font-size: 11px; font-weight: 800; }
+.venue-timeline__status { grid-column: 4; grid-row: 1 / span 2; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 58px; }
+.venue-timeline__status .lv, .venue-timeline__status .ft, .team-journey-stop__status .lv, .team-journey-stop__status .ft { margin-top: 0; }
+.venue-timeline__status strong, .team-journey-stop__status strong { color: #fff; font-family: var(--disp); font-size: 13px; font-weight: 800; white-space: nowrap; }
 .team-journey-panel { padding: 16px; }
 .team-journey-list { display: grid; gap: 8px; margin-top: 12px; }
 .team-journey-stop { display: grid; grid-template-columns: 30px minmax(0,1fr) auto; gap: 10px; align-items: center; }
 .team-journey-stop > span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: #111; background: var(--gold); font-family: var(--disp); font-weight: 900; }
 .team-journey-stop b, .team-journey-stop small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team-journey-stop small { color: var(--muted); font-size: 11px; }
-.team-journey-stop em { color: var(--gold-bright); font-style: normal; font-size: 11px; font-weight: 800; }
+.team-journey-stop__status { display: grid; justify-items: end; gap: 4px; min-width: 58px; }
+.team-journey-stop__status em { color: var(--gold-bright); font-style: normal; font-size: 11px; font-weight: 800; white-space: nowrap; }
 /* 768px matches the app-wide mobile/desktop boundary (see other views) —
    the previous 860px gave tablets desktop chrome with a mobile map sheet. */
 @media (max-width: 768px) {
@@ -9140,5 +9143,5 @@ button.settings-row:active,
   .map-panel__handle { display: block; }
   .map-panel__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .venue-timeline__item { grid-template-columns: 10px 38px minmax(0,1fr); }
-  .venue-timeline__item em { grid-column: 3; grid-row: auto; }
+  .venue-timeline__status { grid-column: 3; grid-row: auto; justify-content: flex-start; }
 }

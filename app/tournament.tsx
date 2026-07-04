@@ -3260,8 +3260,11 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
                     <span className="venue-timeline__stage">{stageShortLabel(match.stage)}</span>
                     <b>{match.homeTeam} vs {match.awayTeam}</b>
                     <small>{formatVenueLocalTime(match.ts, activeVenue.timezone)} · {match.local}</small>
-                    {status === "live" && <em>LIVE {match.fixture?.elapsed ? `${match.fixture.elapsed}'` : ""} {score}</em>}
-                    {status === "completed" && score && <em>{score}</em>}
+                    <span className="venue-timeline__status">
+                      {status === "live" && <span className="lv">LIVE {match.fixture?.elapsed ? `${match.fixture.elapsed}'` : ""}</span>}
+                      {status === "completed" && <span className="ft">FT</span>}
+                      {score && status !== "upcoming" && <strong>{score}</strong>}
+                    </span>
                   </button>
                 );
               })}
@@ -3292,7 +3295,12 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
                       <b>{venue?.city || match.venueId}</b>
                       <small>{match.stage} · {match.homeTeam} vs {match.awayTeam}{group.matches.length > 1 ? ` · ×${group.matches.length} matches` : ""}</small>
                     </div>
-                    <em>{status === "live" ? "LIVE" : score || formatVenueLocalTime(match.ts, venue?.timezone || "America/New_York")}</em>
+                    <span className="team-journey-stop__status">
+                      {status === "live" && <span className="lv">LIVE</span>}
+                      {status === "completed" && <span className="ft">FT</span>}
+                      {status === "upcoming" && <em>{formatVenueLocalTime(match.ts, venue?.timezone || "America/New_York")}</em>}
+                      {score && status !== "upcoming" && <strong>{score}</strong>}
+                    </span>
                   </button>
                 );
               })}

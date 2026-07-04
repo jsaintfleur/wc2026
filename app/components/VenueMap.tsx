@@ -24,6 +24,8 @@ export interface VenueMapMarker {
   longitude: number;
   live: boolean;
   active: boolean;
+  /* true when this venue is one of the selected team's route stops */
+  onTeamPath: boolean;
   /* true when the venue is excluded by the current filter — rendered dimmed */
   muted: boolean;
   matchesHosted: number;
@@ -217,7 +219,7 @@ export default function VenueMap({
     iconSize: [44, 44],
     iconAnchor: [22, 22],
     html:
-      `<span class="vm-marker${m.live ? " vm-marker--live" : ""}${m.active ? " vm-marker--active" : ""}${m.muted ? " vm-marker--muted" : ""}">` +
+      `<span class="vm-marker${m.live ? " vm-marker--live" : ""}${m.active ? " vm-marker--active" : ""}${m.onTeamPath ? " vm-marker--route" : ""}${m.muted ? " vm-marker--muted" : ""}">` +
       '<span class="vm-marker__hit"></span>' +
       (m.live ? '<span class="vm-marker__pulse"></span>' : "") +
       '<span class="vm-marker__dot"></span>' +

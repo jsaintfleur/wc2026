@@ -2858,12 +2858,13 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     longitude: venue.longitude,
     live: venue.liveCount > 0,
     active: venue.venueId === activeVenueId,
+    onTeamPath: selectedTeam !== "ALL" && teamJourney.some(match => match.venueId === venue.venueId),
     muted: !filteredVenueIds.has(venue.venueId),
     matchesHosted: venue.matchesHosted,
     liveCount: venue.liveCount,
     upcomingCount: venue.upcomingCount,
     completedCount: venue.completedCount,
-  })), [venueModels, filteredVenueIds, activeVenueId]);
+  })), [venueModels, filteredVenueIds, activeVenueId, selectedTeam, teamJourney]);
 
   /* Team travel path as geographic stops for the Leaflet polyline */
   const routeLatLngs = useMemo<[number, number][]>(() => teamJourney.map(match => {

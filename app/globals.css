@@ -3256,6 +3256,16 @@ body::after {
   animation: pulse 1.4s infinite;
 }
 
+/* Compact kickoff label on scheduled bracket cards ("Jul 5 · 8:00 PM") */
+.ko-road-card__kickoff {
+  color: var(--ink-soft) !important;
+  font-weight: 600;
+  font-size: 8.5px;
+  letter-spacing: .2px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .ko-road__hint {
   display: flex;
   align-items: center;
@@ -4185,6 +4195,47 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin-bottom: 12px;
+}
+
+/* Back button — top-left of the drawer header, mirrors the × close on the
+   right so there is always an obvious way out of match detail. */
+.md-drawer__back {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top));
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px 6px 8px;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 999px;
+  background: rgba(8,12,21,0.55);
+  color: var(--ink);
+  font-family: var(--disp);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  z-index: 2;
+}
+.md-drawer__back span { font-size: 16px; line-height: 1; }
+.md-drawer__back:hover { border-color: rgba(245,158,11,0.4); color: var(--gold-bright); }
+
+/* Kickoff date/time + venue meta lines under the round badge */
+.md-drawer__when {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: .2px;
+  font-variant-numeric: tabular-nums;
+}
+.md-drawer__where {
+  margin-top: 2px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: .2px;
 }
 .md-drawer__score-row {
   display: flex;

@@ -5478,7 +5478,19 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
 
   function renderRoadCard(card: KnockoutCardModel, tone: "left" | "right" | "center" = "left", style?: CSSProperties) {
     const cardIsSelected = selectedPathKeys.has(card.key);
-    const status = card.isLive ? (card.fixture?.elapsed ? `${card.fixture.elapsed}'` : "LIVE") : card.isDone ? "FT" : "";
+    /* Compact status/kickoff label from canonical match data:
+       live → "LIVE · 67'", finished → FT / AET / Pens, scheduled → the
+       kickoff in the viewer's timezone ("Jul 5 · 8:00 PM"). Scheduled
+       labels render only after mount (nowMs > 0) so the server-rendered
+       HTML never bakes in the server's timezone. */
+    const fx = card.fixture;
+    const status = card.isLive
+      ? (fx?.elapsed ? `LIVE · ${fx.elapsed}'` : "LIVE")
+      : card.isDone
+        ? (fx?.penHome != null && fx?.penAway != null ? "Pens" : fx?.status === "AET" ? "AET" : "FT")
+        : nowMs > 0
+          ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(card.match.ts)).replace(", ", " · ")
+          : "";
     const v = venueName(card.match.v);
     const opponents = potentialOpponents(card);
     return (
@@ -5500,7 +5512,7 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
       >
         <div className="ko-road-card__top">
           <span>M{card.matchNo}</span>
-          {status && <b className={card.isLive ? "ko-road-card__live-badge" : ""}>{status}</b>}
+          {status && <b className={card.isLive ? "ko-road-card__live-badge" : !card.isDone ? "ko-road-card__kickoff" : ""}>{status}</b>}
         </div>
         <div className="ko-road-card__teams">
           {card.teams.map((team, index) => renderRoadTeam(card, team, index))}
@@ -6426,6 +6438,38 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     };
   }, [onClose]);
 
+  /* Browser-back closes the drawer instead of leaving the app. A history
+     entry is pushed on open; popstate closes the drawer, and closing via
+     the Back/× buttons or Escape consumes that entry so the history stack
+     stays balanced. onClose lives in a ref so this runs once per open. */
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const closedByPopRef = useRef(false);
+  useEffect(() => {
+    window.history.pushState({ competMatchDrawer: true }, "");
+    const onPop = () => {
+      closedByPopRef.current = true;
+      onCloseRef.current();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      if (!closedByPopRef.current && window.history.state?.competMatchDrawer) window.history.back();
+    };
+  }, []);
+
+  /* Kickoff moment for the header meta lines — full ET date (the app's
+     reference clock) plus the viewer's local time when it differs. All
+     derived from the canonical match timestamp, never hardcoded. */
+  const kickoffDate = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric",
+  }).format(new Date(match.ts));
+  const viewerTime = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(match.ts));
+  const viewerDiffers = !match.et.startsWith(viewerTime);
+  const roundLabel = match.g === "KO"
+    ? (fixture?.round && !/group/i.test(fixture.round) ? fixture.round : "Knockout")
+    : `Group ${match.g}`;
+
   const homeGoals = fixture ? (fixture.events || []).filter(e => {
     if (e.type !== "Goal") return false;
     const isOG = e.detail === "Own Goal";
@@ -6451,8 +6495,18 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
   function renderScoreHeader() {
     return (
       <div className="md-drawer__header" style={{ borderTopColor: gcolor[match.g] || "#0A5C3E" }}>
+        <button className="md-drawer__back" onClick={onClose} aria-label="Back to previous view">
+          <span aria-hidden="true">‹</span> Back
+        </button>
         <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
-        <div className="md-drawer__badge">Group {match.g} · Match #{match.no}</div>
+        <div className="md-drawer__badge">{roundLabel} · Match #{match.no}</div>
+
+        {/* Kickoff moment + venue — always visible, upcoming or finished.
+            match.et already carries its "ET" suffix. */}
+        <div className="md-drawer__when">
+          {kickoffDate} · {match.et}{viewerDiffers ? ` · ${viewerTime} local` : ""}
+        </div>
+        {v.common && <div className="md-drawer__where">{v.common} · {v.city}, {v.country}</div>}
 
         <div className="md-drawer__score-row">
           <button className="md-drawer__team md-drawer__team--link" onClick={() => onTeamClick(match.t1)} aria-label={`View ${match.t1} profile`}>

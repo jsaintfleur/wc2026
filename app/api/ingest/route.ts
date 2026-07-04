@@ -52,7 +52,7 @@ function toJson(value: unknown): Prisma.InputJsonValue | undefined {
 
 async function fetchFixtures(key: string): Promise<VendorFixture[]> {
   const url = `https://v3.football.api-sports.io/fixtures?league=${LEAGUE}&season=${SEASON}`;
-  const r = await fetch(url, { headers: { "x-apisports-key": key }, cache: "no-store" });
+  const r = await fetch(url, { headers: { "x-apisports-key": key }, cache: "no-store", signal: AbortSignal.timeout(8000) });
   if (!r.ok) throw new Error(`upstream ${r.status}`);
   const body = await r.json().catch(() => ({}));
   return (body.response || []).map((f: Record<string, unknown>) => {

@@ -4,6 +4,19 @@ import { canon, canonPlayer, mergeFixtures, type VendorFixture as MergeVendorFix
 import { VERIFIED_RESULTS } from "@/lib/verified-results";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
+import {
+  assembleLiveFixtureBase,
+  cappedDetailCandidates,
+  freshSnapshot,
+  hasGoalAssistData,
+  parseRemainingQuota,
+  readThroughTtlCache,
+  slimFixturesForLiveList,
+  type LeaderboardStat,
+  type LiveSnapshot,
+  type TimedCache,
+  withVerifiedResults,
+} from "@/lib/live-fixtures";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -19,11 +32,21 @@ const WC26_URL = "https://worldcup26.ir/get/games";
 const WC26_STADIUMS_URL = "https://worldcup26.ir/get/stadiums";
 const ESPN_STATS_URL = "https://site.web.api.espn.com/apis/site/v2/sports/soccer/fifa.world/statistics?season=2026&limit=50";
 
-let LAST: { fixtures: unknown[]; ts: number } | null = null;
+// In-memory, per-serverless-instance snapshot cache. A cold instance still does
+// one full vendor fetch, then warm requests reuse the post-merge/post-slim
+// response. 20s is invisible to a 30s poller during match windows; 120s avoids
+// waste outside windows where scores do not change for hours.
+let LAST: LiveSnapshot | null = null;
 let STADIUM_CACHE: Record<string, string> | null = null;
 const DETAIL_CACHE = new Map<number, { data: VendorFixture; ts: number }>();
+let ESPN_LEADER_CACHE: TimedCache<LeaderboardStat[]> | null = null;
 const DETAIL_TTL = 30 * 60 * 1000;
 const DETAIL_BATCH_SIZE = 20;
+const ESPN_LEADER_TTL = 10 * 60 * 1000;
+const DETAIL_REQUEST_CAP = DETAIL_BATCH_SIZE;
+// Paid API-Football tier is ~7,500/day, so preserving the final 500 requests
+// leaves room for live match recovery and manual debugging. If the plan is
+// downgraded, raise this floor or disable detail enrichment.
 const DETAIL_QUOTA_FLOOR = 500;
 const LIVE_RESPONSE_HEADERS = {
   "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
@@ -48,48 +71,6 @@ function hasRichDetails(fixture: unknown): boolean {
     (Array.isArray(f.players) && f.players.length > 0) ||
     f.referee
   );
-}
-
-function sameFixture(a: unknown, b: unknown): boolean {
-  const left = a as { ts?: number; home?: string; away?: string };
-  const right = b as { ts?: number; home?: string; away?: string };
-  const lh = canon(left.home || "");
-  const la = canon(left.away || "");
-  const rh = canon(right.home || "");
-  const ra = canon(right.away || "");
-  const teamsMatch = (lh === rh && la === ra) || (lh === ra && la === rh);
-  if (!teamsMatch) return false;
-  // Each team pair plays at most once in the entire tournament, so matching
-  // by canonical team names alone is sufficient and safe.
-  return true;
-}
-
-function withVerifiedResults(fixtures: unknown[] = []): unknown[] {
-  // Verified results are manually confirmed and have richer data (full names, assists).
-  // They replace any matching fixture's core fields but preserve enrichment data
-  // (fixtureId, players, stats, lineups, referee) that the verified result lacks.
-  const merged: unknown[] = [];
-  for (const f of fixtures) {
-    const verifiedMatch = VERIFIED_RESULTS.find(v => sameFixture(f, v));
-    if (verifiedMatch) {
-      const original = f as Record<string, unknown>;
-      const verified = { ...verifiedMatch } as Record<string, unknown>;
-      // Carry over enrichment data from the original if the verified result lacks it
-      if (!verified.fixtureId && original.fixtureId) verified.fixtureId = original.fixtureId;
-      if (!verified.players && original.players) verified.players = original.players;
-      if (!verified.stats && original.stats) verified.stats = original.stats;
-      if (!verified.lineups && original.lineups) verified.lineups = original.lineups;
-      if (!verified.referee && original.referee) verified.referee = original.referee;
-      merged.push(verified);
-    } else {
-      merged.push(f);
-    }
-  }
-  // Add any verified results not covered by the fixture list
-  for (const v of VERIFIED_RESULTS) {
-    if (!merged.some(f => sameFixture(f, v))) merged.push(v);
-  }
-  return merged;
 }
 
 function inWindow(now: number): boolean {
@@ -130,34 +111,6 @@ function scoreNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
-}
-
-function hasGoalAssistData(events: MatchEvent[] | undefined): boolean {
-  return !!events?.some(ev => ev.type === "Goal" && ev.detail !== "Own Goal" && !!ev.assist);
-}
-
-function sameGoalEvent(left: MatchEvent, right: MatchEvent): boolean {
-  if (left.type !== "Goal" || right.type !== "Goal") return false;
-  const minuteClose = Math.abs((left.minute || 0) - (right.minute || 0)) <= 1;
-  if (!minuteClose) return false;
-  const leftPlayer = canonPlayer(left.player || "");
-  const rightPlayer = canonPlayer(right.player || "");
-  return !!leftPlayer && leftPlayer === rightPlayer;
-}
-
-function mergeAssistNames(targetEvents: MatchEvent[] | undefined, sourceEvents: MatchEvent[] | undefined): MatchEvent[] | undefined {
-  if (!targetEvents?.length || !sourceEvents?.length || hasGoalAssistData(targetEvents)) return targetEvents;
-  const withAssists = sourceEvents.filter(ev => ev.type === "Goal" && !!ev.assist);
-  if (!withAssists.length) return targetEvents;
-  let changed = false;
-  const merged = targetEvents.map(ev => {
-    if (ev.type !== "Goal" || ev.assist) return ev;
-    const source = withAssists.find(candidate => sameGoalEvent(ev, candidate));
-    if (!source?.assist) return ev;
-    changed = true;
-    return { ...ev, assist: source.assist };
-  });
-  return changed ? merged : targetEvents;
 }
 
 // Parse scorer strings like {"D. Bobadilla 7'(OG)","F. Balogun 31'","F. Balogun 45'+5'"}
@@ -376,30 +329,6 @@ type VendorFixture = {
   }>;
   players?: Array<{ team?: { name?: string }; players?: VendorPlayer[] }>;
 };
-type LeaderboardStat = {
-  name: string;
-  team: string;
-  imageUrl?: string | null;
-  headshotUrl?: string | null;
-  avatarUrl?: string | null;
-  goals?: number;
-  assists?: number;
-  matches?: number;
-};
-
-type SlimPlayerStat = {
-  name: string;
-  team: string;
-  minutes?: number | null;
-  goals?: number;
-  assists?: number;
-  yellowCards?: number;
-  redCards?: number;
-  imageUrl?: string | null;
-  headshotUrl?: string | null;
-  avatarUrl?: string | null;
-};
-
 function vendorEventType(type: string | undefined): MatchEvent["type"] {
   if (type === "Goal" || type === "Card" || type === "subst" || type === "Var") return type;
   if (/sub/i.test(type || "")) return "subst";
@@ -545,60 +474,14 @@ function normalizeVendorFixture(f: VendorFixture) {
   };
 }
 
-function slimPlayerProjection(players: unknown): SlimPlayerStat[] | undefined {
-  if (!Array.isArray(players) || players.length === 0) return undefined;
-  const slim = players
-    .map(player => {
-      const p = player as Partial<SlimPlayerStat> & { goals?: unknown; assists?: unknown; yellowCards?: unknown; redCards?: unknown; minutes?: unknown };
-      if (!p.name || !p.team) return null;
-      const out: SlimPlayerStat = { name: String(p.name), team: String(p.team) };
-      if (typeof p.minutes === "number") out.minutes = p.minutes;
-      if (typeof p.goals === "number" && p.goals > 0) out.goals = p.goals;
-      if (typeof p.assists === "number" && p.assists > 0) out.assists = p.assists;
-      if (typeof p.yellowCards === "number" && p.yellowCards > 0) out.yellowCards = p.yellowCards;
-      if (typeof p.redCards === "number" && p.redCards > 0) out.redCards = p.redCards;
-      if (typeof p.imageUrl === "string" && p.imageUrl) out.imageUrl = p.imageUrl;
-      if (typeof p.headshotUrl === "string" && p.headshotUrl) out.headshotUrl = p.headshotUrl;
-      if (typeof p.avatarUrl === "string" && p.avatarUrl) out.avatarUrl = p.avatarUrl;
-      return out;
-    })
-    .filter((player): player is SlimPlayerStat => !!player);
-  return slim.length ? slim : undefined;
-}
-
-function slimFixtureForLiveList(fixture: unknown): unknown {
-  const f = fixture as Record<string, unknown>;
-  const slim: Record<string, unknown> = {
-    ts: f.ts,
-    status: f.status,
-    elapsed: f.elapsed,
-    venue: f.venue,
-    round: f.round,
-    home: f.home,
-    away: f.away,
-    gh: f.gh,
-    ga: f.ga,
-  };
-  for (const key of ["penHome", "penAway", "assistDataMissing", "events", "referee", "fixtureId"] as const) {
-    if (f[key] !== undefined) slim[key] = f[key];
-  }
-  const players = slimPlayerProjection(f.players);
-  if (players) slim.players = players;
-  return slim;
-}
-
-function slimFixturesForLiveList(fixtures: unknown[]): unknown[] {
-  return fixtures.map(slimFixtureForLiveList);
-}
-
 async function fetchFixtures(key: string): Promise<FixtureResponse> {
   let url = `https://v3.football.api-sports.io/fixtures?league=${LEAGUE}&season=${SEASON}`;
-  let r = await fetch(url, { cache: "no-store", headers: { "x-apisports-key": key } });
+  let r = await fetch(url, { cache: "no-store", headers: { "x-apisports-key": key }, signal: AbortSignal.timeout(8000) });
   let body = await r.json().catch(() => ({}));
   if (r.ok && (!body.response || body.response.length === 0)) {
     const today = new Date().toISOString().slice(0, 10);
     url = `https://v3.football.api-sports.io/fixtures?date=${today}&league=${LEAGUE}`;
-    r = await fetch(url, { cache: "no-store", headers: { "x-apisports-key": key } });
+    r = await fetch(url, { cache: "no-store", headers: { "x-apisports-key": key }, signal: AbortSignal.timeout(8000) });
     body = await r.json().catch(() => ({}));
   }
   const quota = {
@@ -631,13 +514,14 @@ async function fetchFixtureDetail(key: string, fixtureId: number): Promise<Vendo
 }
 
 async function fetchEspnLeaderStats(): Promise<LeaderboardStat[]> {
-  try {
+  const now = Date.now();
+  const result = await readThroughTtlCache(ESPN_LEADER_CACHE, now, ESPN_LEADER_TTL, async () => {
     const res = await fetch(ESPN_STATS_URL, {
       cache: "no-store",
       headers: { Accept: "application/json", "User-Agent": "CompetTracker/1.0" },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error(`ESPN leaders returned ${res.status}`);
     const data = await res.json().catch(() => ({}));
     const leaders = new Map<string, LeaderboardStat>();
     const ensure = (name: string, team: string) => {
@@ -677,10 +561,11 @@ async function fetchEspnLeaderStats(): Promise<LeaderboardStat[]> {
       }
     }
 
-    return [...leaders.values()];
-  } catch {
-    return [];
-  }
+    const next = [...leaders.values()];
+    return next;
+  }, []);
+  ESPN_LEADER_CACHE = result.cache;
+  return result.data;
 }
 
 function needsFixtureDetail(fixture: unknown): boolean {
@@ -693,12 +578,15 @@ function needsFixtureDetail(fixture: unknown): boolean {
 }
 
 async function enrichWithFixtureDetails(key: string, fixtures: unknown[], remaining?: string | null): Promise<{ requested: number; enriched: number; skipped: boolean }> {
-  const quotaRemaining = remaining == null ? Number.POSITIVE_INFINITY : Number(remaining);
-  if (Number.isFinite(quotaRemaining) && quotaRemaining < DETAIL_QUOTA_FLOOR) {
+  const quotaRemaining = parseRemainingQuota(remaining);
+  if (quotaRemaining < DETAIL_QUOTA_FLOOR) {
     return { requested: 0, enriched: 0, skipped: true };
   }
 
-  const needsDetail = fixtures.filter(needsFixtureDetail);
+  const { selected: needsDetail, deferred } = cappedDetailCandidates(fixtures, needsFixtureDetail, DETAIL_REQUEST_CAP);
+  if (deferred > 0 && process.env.NODE_ENV !== "production") {
+    console.info(`[live] deferred ${deferred} fixture detail requests after cap ${DETAIL_REQUEST_CAP}`);
+  }
   let enriched = 0;
   for (let i = 0; i < needsDetail.length; i += DETAIL_BATCH_SIZE) {
     const batch = needsDetail.slice(i, i + DETAIL_BATCH_SIZE);
@@ -835,6 +723,13 @@ export async function GET(request: NextRequest) {
   }
   const active = inWindow(now);
   const activeMatches = activeWindowCount(now);
+  const snapshot = freshSnapshot(LAST, now, active);
+  if (snapshot && !debug) {
+    return NextResponse.json(
+      { ...snapshot.response, servedFrom: "snapshot" },
+      { headers: LIVE_RESPONSE_HEADERS }
+    );
+  }
 
   if (debug) {
     const [wc26, leaderboardStats] = await Promise.all([
@@ -905,41 +800,7 @@ export async function GET(request: NextRequest) {
     quota: apif?.quota,
   };
 
-  // Merge strategy: start with API-Football (richer data with stats/lineups),
-  // then fill in any missing matches from worldcup26.ir, then verified results.
-  // For matches where API-Football lacks events but wc26 has scorer data,
-  // back-fill the wc26 events so stats/scorers aren't lost.
-  let base: unknown[] = [];
-  if (apifFixtures.length > 0) {
-    base = [...apifFixtures];
-    for (const wf of wc26.fixtures) {
-      const idx = base.findIndex(f => sameFixture(f, wf));
-      if (idx === -1) {
-        base.push(wf);
-      } else {
-        const existing = base[idx] as { events?: unknown[]; gh?: unknown; ga?: unknown; penHome?: unknown; penAway?: unknown; status?: unknown; elapsed?: unknown };
-        const wc26Fix = wf as { events?: unknown[]; gh?: unknown; ga?: unknown; penHome?: unknown; penAway?: unknown; status?: unknown; elapsed?: unknown };
-        const target = base[idx] as Record<string, unknown>;
-        if (existing.gh == null && wc26Fix.gh != null) target.gh = wc26Fix.gh;
-        if (existing.ga == null && wc26Fix.ga != null) target.ga = wc26Fix.ga;
-        if (existing.penHome == null && wc26Fix.penHome != null) target.penHome = wc26Fix.penHome;
-        if (existing.penAway == null && wc26Fix.penAway != null) target.penAway = wc26Fix.penAway;
-        if (!existing.status && wc26Fix.status) target.status = wc26Fix.status;
-        if (existing.elapsed == null && wc26Fix.elapsed != null) target.elapsed = wc26Fix.elapsed;
-        const existingEvents = existing.events as MatchEvent[] | undefined;
-        const wc26Events = wc26Fix.events as MatchEvent[] | undefined;
-        const enrichedWc26Events = mergeAssistNames(wc26Events, existingEvents);
-        if ((!existingEvents || existingEvents.length === 0) && enrichedWc26Events && enrichedWc26Events.length > 0) {
-          target.events = enrichedWc26Events;
-          target.assistDataMissing = !hasGoalAssistData(enrichedWc26Events);
-        } else if (hasGoalAssistData(existingEvents)) {
-          target.assistDataMissing = false;
-        }
-      }
-    }
-  } else if (wc26.ok) {
-    base = wc26.fixtures;
-  }
+  const base = assembleLiveFixtureBase(apifFixtures, wc26.fixtures, wc26.ok);
 
   const detailEnrichment = apiFootballKey && base.length > 0
     ? await enrichWithFixtureDetails(apiFootballKey, base, apif?.quota?.remaining)
@@ -958,24 +819,29 @@ export async function GET(request: NextRequest) {
   }
 
   if (!active && !hasLiveData) {
-    return NextResponse.json(
-      { configured: !!apiFootballKey, active: false, ts: LAST ? LAST.ts : now, fixtures: listFixtures, enrichment, leaderboardStats },
-      { headers: LIVE_RESPONSE_HEADERS }
-    );
-  }
-
-  LAST = { fixtures: listFixtures, ts: now };
-
-  return NextResponse.json(
-    {
+    const response = {
       configured: !!apiFootballKey,
-      active,
+      active: false,
       ts: now,
       fixtures: listFixtures,
-      source: apifFixtures.length > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
+      source: "verified-only",
       enrichment,
       leaderboardStats,
-    },
-    { headers: LIVE_RESPONSE_HEADERS }
-  );
+    };
+    LAST = { response, ts: now };
+    return NextResponse.json({ ...response, servedFrom: "fresh" }, { headers: LIVE_RESPONSE_HEADERS });
+  }
+
+  const response = {
+    configured: !!apiFootballKey,
+    active,
+    ts: now,
+    fixtures: listFixtures,
+    source: apifFixtures.length > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
+    enrichment,
+    leaderboardStats,
+  };
+  LAST = { response, ts: now };
+
+  return NextResponse.json({ ...response, servedFrom: "fresh" }, { headers: LIVE_RESPONSE_HEADERS });
 }

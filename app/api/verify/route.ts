@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canon, canonPlayer, PLAYER_NORM } from "@/lib/merge";
 import { asciiFold } from "@/lib/stats";
+import { prisma } from "@/lib/db";
+import { assembleStoredLiveFixtures } from "@/lib/live-fixtures";
 
 // ESPN structured JSON APIs — free, no auth, real-time
 const ESPN_STATS_URL =
@@ -190,13 +192,14 @@ async function fetchEspnMatches(startDate: string, endDate: string): Promise<Esp
   return matches;
 }
 
-// Fetch our live API data and compute scorers
-async function fetchOurData(baseUrl: string) {
-  const res = await fetch(`${baseUrl}/api/live?bust=${Date.now()}`, {
-    next: { revalidate: 0 },
+// Read our stored match state directly. Verification should inspect what the
+// app has already accepted, not wake /api/live and spend vendor quota.
+async function fetchOurData() {
+  const rows = await prisma.match.findMany({
+    include: { homeTeam: true, awayTeam: true, venue: true, state: true },
+    orderBy: { matchNumber: "asc" },
   });
-  if (!res.ok) return { scorers: [], finished: 0, withEvents: 0, totalGoals: 0, unmapped: [], matchScores: [] };
-  const data = await res.json();
+  const fixtures = assembleStoredLiveFixtures(rows);
 
   const DONE = new Set(["FT", "AET", "PEN", "PEN_LIVE", "WO", "AWD"]);
   const scorerMap: Record<string, { name: string; team: string; goals: number; assists: number }> = {};
@@ -210,47 +213,50 @@ async function fetchOurData(baseUrl: string) {
   const looksGarbled = (name: string) =>
     /[A-Z][a-z]*[aeiouvk]{2,}[^aeiouy\s]|[bcdfghjklmnpqrstvwxyz]{4}/i.test(name);
 
-  for (const f of data.fixtures || []) {
-    if (!DONE.has(f.status)) continue;
+  for (const f of fixtures as Array<Record<string, unknown>>) {
+    if (!DONE.has(String(f.status || ""))) continue;
     finished++;
-    const gh = f.gh || 0;
-    const ga = f.ga || 0;
+    const gh = typeof f.gh === "number" ? f.gh : 0;
+    const ga = typeof f.ga === "number" ? f.ga : 0;
     totalGoals += gh + ga;
 
     matchScores.push({
-      home: f.homeTeam || f.home || "",
-      away: f.awayTeam || f.away || "",
+      home: String(f.home || ""),
+      away: String(f.away || ""),
       gh,
       ga,
-      date: f.date || "",
+      date: typeof f.ts === "number" ? new Date(f.ts).toISOString() : "",
     });
 
-    if (!f.events || f.events.length === 0) continue;
+    const events = Array.isArray(f.events) ? f.events as Array<Record<string, unknown>> : [];
+    if (events.length === 0) continue;
     withEvents++;
 
-    for (const ev of f.events) {
+    for (const ev of events) {
+      const detail = String(ev.detail || "");
       if (ev.type !== "Goal") continue;
-      if (/shootout/i.test(ev.detail || "")) continue;
-      if (ev.detail === "Own Goal") continue;
-      if (ev.detail === "Missed Penalty") continue;
+      if (/shootout/i.test(detail)) continue;
+      if (detail === "Own Goal") continue;
+      if (detail === "Missed Penalty") continue;
       if (!ev.player) continue;
 
-      const normalized = canonPlayer(ev.player);
-      const team = ev.team ? canon(ev.team) : ev.team;
+      const playerName = String(ev.player);
+      const normalized = canonPlayer(playerName);
+      const team = ev.team ? canon(String(ev.team)) : "";
       const key = `${normalized}|${team}`;
 
       if (!scorerMap[key]) scorerMap[key] = { name: normalized, team, goals: 0, assists: 0 };
       scorerMap[key].goals++;
 
       // Track garbled names not in PLAYER_NORM
-      if (normalized === ev.player && !knownNorms.has(ev.player) && looksGarbled(ev.player)) {
-        const existing = unmapped.find((u) => u.raw === ev.player);
+      if (normalized === playerName && !knownNorms.has(playerName) && looksGarbled(playerName)) {
+        const existing = unmapped.find((u) => u.raw === playerName);
         if (existing) existing.goals++;
-        else unmapped.push({ raw: ev.player, team, goals: 1 });
+        else unmapped.push({ raw: playerName, team, goals: 1 });
       }
 
       // Count assists from events
-      if (ev.assist && ev.assist !== ev.player) {
+      if (typeof ev.assist === "string" && ev.assist !== playerName) {
         const assistNorm = canonPlayer(ev.assist);
         const assistKey = `${assistNorm}|${team}`;
         if (!scorerMap[assistKey]) scorerMap[assistKey] = { name: assistNorm, team, goals: 0, assists: 0 };
@@ -303,12 +309,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const baseUrl = request.nextUrl.origin;
-
     // Fetch ESPN top scorers + our data in parallel
     const [espnResult, ourData] = await Promise.all([
       fetchEspnScorers(),
-      fetchOurData(baseUrl),
+      fetchOurData(),
     ]);
     const espnScorers = espnResult.scorers;
     const espnError = espnResult.error;

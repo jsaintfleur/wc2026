@@ -522,6 +522,142 @@ function isMock(): boolean {
   return window.location.search.indexOf("mock") > -1;
 }
 
+
+/* Resolves every knockout card — teams filled from live fixtures when they
+ * exist, otherwise from bracket progression (group standings seed the R32
+ * slots; winner/loser chains fill later rounds). Shared by the schedule
+ * view, the knockout view, and the map, so a tie whose fixture the vendor
+ * has not published yet still shows its resolved participants everywhere.
+ */
+function buildKnockoutCards(
+  data: TournamentData,
+  fixtures: LiveFixture[],
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null,
+  nowMs: number,
+): KnockoutCardModel[] {
+  const standingsByGroup: Record<string, GroupStanding> = {};
+  for (const g of Object.keys(data.groups)) standingsByGroup[g] = completedGroupStanding(g, data, fixtures, findLive, nowMs);
+  const thirdSlots = resolveThirdPlaceSlots(standingsByGroup);
+    const winners: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
+    const losers: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
+
+    function teamName(name: string | undefined | null): string {
+      if (!name) return "TBD";
+      return canon(name) || name;
+    }
+    function winnerFromFixture(fixture: LiveFixture | null): string | null {
+      return winnerNameFromKnockoutFixture(fixture, teamName);
+    }
+    function loserFromFixture(fixture: LiveFixture | null): string | null {
+      return loserNameFromKnockoutFixture(fixture, teamName);
+    }
+    function sourcePair(round: KnockoutRoundKey, index: number): [number, number] {
+      return KO_SOURCE_PAIRS[round]?.[index] || [index * 2, index * 2 + 1];
+    }
+    function previousTeam(round: KnockoutRoundKey, index: number): string | null {
+      if (round === "r16") return winners.r32?.[index] || null;
+      if (round === "qf") return winners.r16?.[index] || null;
+      if (round === "sf") return winners.qf?.[index] || null;
+      if (round === "final") return winners.sf?.[index] || null;
+      if (round === "third") return losers.sf?.[index] || null;
+      return null;
+    }
+    function sourceLabel(round: KnockoutRoundKey, index: number, side: number): string {
+      if (round === "r32") return ordinalSeedLabel(R32_SEEDS[index]?.[side] || "TBD");
+      const [a, b] = sourcePair(round, index);
+      const sourceIndex = side === 0 ? a : b;
+      const sourceRound = round === "r16" ? KO_ROUNDS[0] : round === "qf" ? KO_ROUNDS[1] : round === "sf" ? KO_ROUNDS[2] : KO_ROUNDS[3];
+      const prefix = round === "third" ? "Loser" : "Winner";
+      return `${prefix} M${sourceRound.matchNumbers[sourceIndex] || "TBD"}`;
+    }
+
+    const all: KnockoutCardModel[] = [];
+    for (const config of KO_ROUNDS) {
+      const scheduled = data.ko.filter(match => match.round === config.dataRound);
+      const roundCards = scheduled.map((match, index) => {
+        const matchNo = config.matchNumbers[index] || Number(match.mr) || 0;
+        const fixture = findLive({ ts: match.ts, v: match.v }, fixtures);
+        const isLive = !!fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(match.ts, fixture.status, nowMs);
+        const isDone = isCompletedKnockoutFixture(fixture);
+        const winnerName = winnerFromFixture(fixture);
+        const loserName = loserFromFixture(fixture);
+        let teams: [KnockoutParticipant, KnockoutParticipant];
+
+        if (fixture?.home && fixture?.away) {
+          const home = teamName(fixture.home);
+          const away = teamName(fixture.away);
+          teams = [
+            { name: home, winner: winnerName === home, loser: loserName === home },
+            { name: away, winner: winnerName === away, loser: loserName === away },
+          ];
+        } else if (config.key === "r32") {
+          const [seedA, seedB] = R32_SEEDS[index] || ["TBD", "TBD"];
+          const teamAResolved = resolveGroupSeed(seedA, standingsByGroup);
+          let teamBResolved: KnockoutParticipant;
+          if (thirdSeedGroups(seedB).length && thirdSlots) {
+            const resolved = thirdSlots.get(index);
+            teamBResolved = resolved
+              ? { name: resolved.team, seed: `3rd Group ${resolved.group}` }
+              : { name: thirdSeedLabel(seedB), placeholder: true };
+          } else {
+            teamBResolved = resolveGroupSeed(seedB, standingsByGroup);
+          }
+          teams = [teamAResolved, teamBResolved];
+        } else {
+          const [sourceA, sourceB] = sourcePair(config.key, index);
+          const first = previousTeam(config.key, sourceA);
+          const second = previousTeam(config.key, sourceB);
+          teams = [
+            { name: first || sourceLabel(config.key, index, 0), placeholder: !first },
+            { name: second || sourceLabel(config.key, index, 1), placeholder: !second },
+          ];
+        }
+
+        // Compute bracket path links: which two matches feed this slot,
+        // and which match in the next round this slot feeds into.
+        const sourceMatchNos: [number, number] | null = config.key !== "r32" && KO_SOURCE_PAIRS[config.key]
+          ? (() => {
+              const [a, b] = sourcePair(config.key, index);
+              const prevRoundKey: KnockoutRoundKey = config.key === "r16" ? "r32" : config.key === "qf" ? "r16" : config.key === "sf" ? "qf" : config.key === "final" ? "sf" : config.key === "third" ? "sf" : "r32";
+              const prevRound = KO_ROUNDS.find(r => r.key === prevRoundKey);
+              return prevRound ? [prevRound.matchNumbers[a], prevRound.matchNumbers[b]] as [number, number] : null;
+            })()
+          : null;
+
+        const nextMatchNo: number | null = (() => {
+          if (config.key === "final" || config.key === "third") return null;
+          const nextRoundKey: KnockoutRoundKey = config.key === "r32" ? "r16" : config.key === "r16" ? "qf" : config.key === "qf" ? "sf" : "final";
+          const nextPairs = KO_SOURCE_PAIRS[nextRoundKey];
+          if (!nextPairs) return null;
+          const nextIndex = nextPairs.findIndex(pair => pair.includes(index));
+          const nextRound = KO_ROUNDS.find(r => r.key === nextRoundKey);
+          return nextIndex >= 0 && nextRound ? nextRound.matchNumbers[nextIndex] : null;
+        })();
+
+        return {
+          key: `${config.key}-schedule-${matchNo}-${index}`,
+          round: config.key,
+          roundIndex: index,
+          match,
+          matchNo,
+          fixture,
+          teams,
+          source: config.label,
+          isDone,
+          isLive,
+          winnerName,
+          loserName,
+          sourceMatchNos,
+          nextMatchNo,
+        };
+      });
+      winners[config.key] = roundCards.map(card => card.winnerName);
+      losers[config.key] = roundCards.map(card => card.loserName);
+      all.push(...roundCards);
+    }
+    return all;
+}
+
 export default function Tournament({ data, initialView = "home" }: { data: TournamentData; initialView?: string }) {
   const fl = (t: string) => data.flags[t] || "⚽";
   const ven = (k: string) => data.venues[k] || { common: "", fifa: "", city: "", country: "", cap: 0 };
@@ -856,129 +992,7 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
     return completedGroupStanding(g, data, fixtures, findLive, nowMs);
   }
 
-  function buildKnockoutScheduleCards(): KnockoutCardModel[] {
-    const standingsByGroup: Record<string, GroupStanding> = {};
-    for (const g of Object.keys(data.groups)) standingsByGroup[g] = standings(g);
-    const thirdSlots = resolveThirdPlaceSlots(standingsByGroup);
-    const winners: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
-    const losers: Partial<Record<KnockoutRoundKey, (string | null)[]>> = {};
-
-    function teamName(name: string | undefined | null): string {
-      if (!name) return "TBD";
-      return canon(name) || name;
-    }
-    function winnerFromFixture(fixture: LiveFixture | null): string | null {
-      return winnerNameFromKnockoutFixture(fixture, teamName);
-    }
-    function loserFromFixture(fixture: LiveFixture | null): string | null {
-      return loserNameFromKnockoutFixture(fixture, teamName);
-    }
-    function sourcePair(round: KnockoutRoundKey, index: number): [number, number] {
-      return KO_SOURCE_PAIRS[round]?.[index] || [index * 2, index * 2 + 1];
-    }
-    function previousTeam(round: KnockoutRoundKey, index: number): string | null {
-      if (round === "r16") return winners.r32?.[index] || null;
-      if (round === "qf") return winners.r16?.[index] || null;
-      if (round === "sf") return winners.qf?.[index] || null;
-      if (round === "final") return winners.sf?.[index] || null;
-      if (round === "third") return losers.sf?.[index] || null;
-      return null;
-    }
-    function sourceLabel(round: KnockoutRoundKey, index: number, side: number): string {
-      if (round === "r32") return ordinalSeedLabel(R32_SEEDS[index]?.[side] || "TBD");
-      const [a, b] = sourcePair(round, index);
-      const sourceIndex = side === 0 ? a : b;
-      const sourceRound = round === "r16" ? KO_ROUNDS[0] : round === "qf" ? KO_ROUNDS[1] : round === "sf" ? KO_ROUNDS[2] : KO_ROUNDS[3];
-      const prefix = round === "third" ? "Loser" : "Winner";
-      return `${prefix} M${sourceRound.matchNumbers[sourceIndex] || "TBD"}`;
-    }
-
-    const all: KnockoutCardModel[] = [];
-    for (const config of KO_ROUNDS) {
-      const scheduled = data.ko.filter(match => match.round === config.dataRound);
-      const roundCards = scheduled.map((match, index) => {
-        const matchNo = config.matchNumbers[index] || Number(match.mr) || 0;
-        const fixture = findLive({ ts: match.ts, v: match.v }, fixtures);
-        const isLive = !!fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(match.ts, fixture.status, nowMs);
-        const isDone = isCompletedKnockoutFixture(fixture);
-        const winnerName = winnerFromFixture(fixture);
-        const loserName = loserFromFixture(fixture);
-        let teams: [KnockoutParticipant, KnockoutParticipant];
-
-        if (fixture?.home && fixture?.away) {
-          const home = teamName(fixture.home);
-          const away = teamName(fixture.away);
-          teams = [
-            { name: home, winner: winnerName === home, loser: loserName === home },
-            { name: away, winner: winnerName === away, loser: loserName === away },
-          ];
-        } else if (config.key === "r32") {
-          const [seedA, seedB] = R32_SEEDS[index] || ["TBD", "TBD"];
-          const teamAResolved = resolveGroupSeed(seedA, standingsByGroup);
-          let teamBResolved: KnockoutParticipant;
-          if (thirdSeedGroups(seedB).length && thirdSlots) {
-            const resolved = thirdSlots.get(index);
-            teamBResolved = resolved
-              ? { name: resolved.team, seed: `3rd Group ${resolved.group}` }
-              : { name: thirdSeedLabel(seedB), placeholder: true };
-          } else {
-            teamBResolved = resolveGroupSeed(seedB, standingsByGroup);
-          }
-          teams = [teamAResolved, teamBResolved];
-        } else {
-          const [sourceA, sourceB] = sourcePair(config.key, index);
-          const first = previousTeam(config.key, sourceA);
-          const second = previousTeam(config.key, sourceB);
-          teams = [
-            { name: first || sourceLabel(config.key, index, 0), placeholder: !first },
-            { name: second || sourceLabel(config.key, index, 1), placeholder: !second },
-          ];
-        }
-
-        // Compute bracket path links: which two matches feed this slot,
-        // and which match in the next round this slot feeds into.
-        const sourceMatchNos: [number, number] | null = config.key !== "r32" && KO_SOURCE_PAIRS[config.key]
-          ? (() => {
-              const [a, b] = sourcePair(config.key, index);
-              const prevRoundKey: KnockoutRoundKey = config.key === "r16" ? "r32" : config.key === "qf" ? "r16" : config.key === "sf" ? "qf" : config.key === "final" ? "sf" : config.key === "third" ? "sf" : "r32";
-              const prevRound = KO_ROUNDS.find(r => r.key === prevRoundKey);
-              return prevRound ? [prevRound.matchNumbers[a], prevRound.matchNumbers[b]] as [number, number] : null;
-            })()
-          : null;
-
-        const nextMatchNo: number | null = (() => {
-          if (config.key === "final" || config.key === "third") return null;
-          const nextRoundKey: KnockoutRoundKey = config.key === "r32" ? "r16" : config.key === "r16" ? "qf" : config.key === "qf" ? "sf" : "final";
-          const nextPairs = KO_SOURCE_PAIRS[nextRoundKey];
-          if (!nextPairs) return null;
-          const nextIndex = nextPairs.findIndex(pair => pair.includes(index));
-          const nextRound = KO_ROUNDS.find(r => r.key === nextRoundKey);
-          return nextIndex >= 0 && nextRound ? nextRound.matchNumbers[nextIndex] : null;
-        })();
-
-        return {
-          key: `${config.key}-schedule-${matchNo}-${index}`,
-          round: config.key,
-          roundIndex: index,
-          match,
-          matchNo,
-          fixture,
-          teams,
-          source: config.label,
-          isDone,
-          isLive,
-          winnerName,
-          loserName,
-          sourceMatchNos,
-          nextMatchNo,
-        };
-      });
-      winners[config.key] = roundCards.map(card => card.winnerName);
-      losers[config.key] = roundCards.map(card => card.loserName);
-      all.push(...roundCards);
-    }
-    return all;
-  }
+  const buildKnockoutScheduleCards = () => buildKnockoutCards(data, fixtures, findLive, nowMs);
 
   function knockoutCardToMatch(card: KnockoutCardModel): GroupStageMatch {
     const [teamA, teamB] = card.teams;
@@ -2795,41 +2809,47 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
       };
     });
 
-    const knockoutMatches = data.ko.map((m, index): MapMatch => {
-      const fixture = findLive({ ts: m.ts, v: m.v }, fixtures);
-      // Synthetic numbering: 73+ by chronological order. FIFA's official
-      // in-round slot numbers are not strictly chronological — replace with
-      // a real `no` field on each ko entry once official numbering is
-      // confirmed rather than trusting this derivation.
-      const no = index + 73;
+    /* Knockout matches resolve through the shared bracket builder, not just
+       live fixtures — so a tie whose fixture the vendor has not published
+       yet (a group winner's first R32 game, an alive team's next round)
+       still carries its resolved participants. This is what keeps upcoming
+       journey legs and Alive/Eliminated status correct for every team.
+       It also replaces the synthetic index+73 numbering with the bracket's
+       real match numbers. */
+    const knockoutMatches = buildKnockoutCards(data, fixtures, findLive, nowMs).map((card): MapMatch => {
+      const [teamA, teamB] = card.teams;
+      const t1 = teamA.placeholder ? "TBD" : teamA.name;
+      const t2 = teamB.placeholder ? "TBD" : teamB.name;
       return {
-        key: `ko-${no}`,
-        no,
-        venueId: m.v,
-        ts: m.ts,
-        iso: m.iso,
-        local: m.local,
-        et: m.et,
-        stage: m.round,
-        homeTeam: fixture?.home ? canon(fixture.home) : "TBD",
-        awayTeam: fixture?.away ? canon(fixture.away) : "TBD",
-        fixture,
+        key: `ko-${card.matchNo}`,
+        no: card.matchNo,
+        venueId: card.match.v,
+        ts: card.match.ts,
+        iso: card.match.iso,
+        local: card.match.local,
+        et: card.match.et,
+        stage: card.match.round,
+        homeTeam: t1,
+        awayTeam: t2,
+        fixture: card.fixture,
         sourceMatch: {
-          no,
-          iso: m.iso,
-          local: m.local,
-          et: m.et,
-          g: "",
-          t1: fixture?.home ? canon(fixture.home) : "TBD",
-          t2: fixture?.away ? canon(fixture.away) : "TBD",
-          v: m.v,
-          ts: m.ts,
+          no: card.matchNo,
+          iso: card.match.iso,
+          local: card.match.local,
+          et: card.match.et,
+          g: "KO",
+          t1,
+          t2,
+          v: card.match.v,
+          ts: card.match.ts,
         },
       };
     });
 
     return [...groupMatches, ...knockoutMatches].sort((a, b) => a.ts - b.ts);
-  }, [data.gs, data.ko, fixtures, findLive]);
+  // nowMs is minute-granular here (MapView's memo comparator) — the bracket
+  // builder needs it for staleness checks, so this recomputes at most 1/min.
+  }, [data, fixtures, findLive, nowMs]);
 
   const venueModels = useMemo(() => Object.entries(data.venues).map(([venueId, venue]) => {
     const detail = HOST_VENUE_DETAILS[venueId] || {

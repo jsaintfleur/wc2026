@@ -26,6 +26,10 @@ export interface VenueMapMarker {
   active: boolean;
   /* true when this venue is one of the selected team's route stops */
   onTeamPath: boolean;
+  /* true for an alive team's next destination — gets a pulsing highlight */
+  nextStop: boolean;
+  /* true while the matching journey-timeline stop is hovered (desktop) */
+  hovered: boolean;
   /* true for dense northeast venues whose city labels read better leftward */
   labelLeft: boolean;
   /* true when the venue is excluded by the current filter — rendered dimmed */
@@ -61,8 +65,11 @@ export interface VenueRouteFitRequest {
 
 interface VenueMapProps {
   markers: VenueMapMarker[];
-  /* Team travel path as [lat, lng] stops, in match order */
-  routePoints: [number, number][];
+  /* Curved team travel path, split where the team currently is: the
+     completed portion draws solid, the upcoming portion dashed. Both are
+     pre-interpolated arc points from lib/journey's buildArcPath. */
+  completedRoute: [number, number][];
+  upcomingRoute: [number, number][];
   mapStyle: "Light" | "Dark" | "Terrain";
   initialCenter: [number, number];
   initialZoom: number;
@@ -98,6 +105,8 @@ const TILE_STYLES: Record<VenueMapProps["mapStyle"], { url: string; attribution:
   },
 };
 
+const markerIconCache = new Map<string, ReturnType<typeof divIcon>>();
+
 function markerAriaLabel(m: VenueMapMarker): string {
   return `${m.stadiumName}, ${m.city}, ${m.country}. ` +
     `${m.matchesHosted} matches: ${m.liveCount} live, ${m.upcomingCount} upcoming, ${m.completedCount} completed.` +
@@ -109,6 +118,26 @@ function validVenuePoints(markers: VenueMapMarker[]): [number, number][] {
   return markers
     .filter(m => Number.isFinite(m.latitude) && Number.isFinite(m.longitude) && !(m.latitude === 0 && m.longitude === 0))
     .map(m => [m.latitude, m.longitude] as [number, number]);
+}
+
+function venueMarkerIcon(m: VenueMapMarker) {
+  const key = `${m.live}|${m.active}|${m.muted}|${m.onTeamPath}|${m.nextStop}|${m.hovered}|${m.labelLeft}|${m.city}`;
+  const cached = markerIconCache.get(key);
+  if (cached) return cached;
+  const icon = divIcon({
+    className: "vm-marker-wrap",
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+    html:
+      `<span class="vm-marker${m.live ? " vm-marker--live" : ""}${m.active ? " vm-marker--active" : ""}${m.onTeamPath ? " vm-marker--route" : ""}${m.nextStop ? " vm-marker--next" : ""}${m.hovered ? " vm-marker--hover" : ""}${m.muted ? " vm-marker--muted" : ""}">` +
+      '<span class="vm-marker__hit"></span>' +
+      (m.live || m.nextStop ? '<span class="vm-marker__pulse"></span>' : "") +
+      '<span class="vm-marker__dot"></span>' +
+      `<span class="vm-marker__label${m.labelLeft ? " vm-marker__label--left" : ""}">${m.city.replace(/</g, "&lt;")}</span>` +
+      "</span>",
+  });
+  markerIconCache.set(key, icon);
+  return icon;
 }
 
 function fitMapToVenues(map: LeafletMap, markers: VenueMapMarker[], animate: boolean) {
@@ -144,6 +173,8 @@ function MapController({ markers, focusRequest, fitRequest, routeFitRequest, aut
   const handledFitSeqRef = useRef(0);
   const handledRouteFitSeqRef = useRef(0);
   const checkedEmptyRestoreRef = useRef(false);
+  const markersRef = useRef(markers);
+  markersRef.current = markers;
 
   /* Re-measure when the surrounding layout (sheet/panel) changes size —
      otherwise Leaflet keeps rendering into the stale viewport box. */
@@ -188,16 +219,18 @@ function MapController({ markers, focusRequest, fitRequest, routeFitRequest, aut
      to the continental view once. This guards users from being stranded over
      empty map tiles after a device-size or saved-state change. */
   useEffect(() => {
-    if (!autoFitIfEmpty || checkedEmptyRestoreRef.current || markers.length === 0) return;
-    checkedEmptyRestoreRef.current = true;
+    if (!autoFitIfEmpty || checkedEmptyRestoreRef.current) return;
     const id = window.setTimeout(() => {
+      checkedEmptyRestoreRef.current = true;
+      const latestMarkers = markersRef.current;
+      if (latestMarkers.length === 0) return;
       map.invalidateSize();
       const bounds = map.getBounds();
-      const visibleVenueCount = validVenuePoints(markers).filter(point => bounds.contains(point)).length;
-      if (visibleVenueCount === 0) fitMapToVenues(map, markers, false);
+      const visibleVenueCount = validVenuePoints(latestMarkers).filter(point => bounds.contains(point)).length;
+      if (visibleVenueCount === 0) fitMapToVenues(map, latestMarkers, false);
     }, 260);
     return () => window.clearTimeout(id);
-  }, [autoFitIfEmpty, map, markers]);
+  }, [autoFitIfEmpty, map]);
 
   useEffect(() => {
     if (!onViewChange) return;
@@ -227,7 +260,7 @@ function MapBackgroundClick({ onBackgroundClick }: { onBackgroundClick?: () => v
 }
 
 export default function VenueMap({
-  markers, routePoints, mapStyle, initialCenter, initialZoom,
+  markers, completedRoute, upcomingRoute, mapStyle, initialCenter, initialZoom,
   focusRequest, fitRequest, routeFitRequest, autoFitIfEmpty, layoutKey, onSelect, onBackgroundClick, onViewChange,
 }: VenueMapProps) {
   const tiles = TILE_STYLES[mapStyle] || TILE_STYLES.Dark;
@@ -236,18 +269,7 @@ export default function VenueMap({
   /* divIcon per marker state — CSS-styled dot + city label + live pulse.
      Custom icons avoid Leaflet's bundler-hostile default marker images and
      keep the app's visual language. */
-  const icons = useMemo(() => markers.map(m => divIcon({
-    className: "vm-marker-wrap",
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
-    html:
-      `<span class="vm-marker${m.live ? " vm-marker--live" : ""}${m.active ? " vm-marker--active" : ""}${m.onTeamPath ? " vm-marker--route" : ""}${m.muted ? " vm-marker--muted" : ""}">` +
-      '<span class="vm-marker__hit"></span>' +
-      (m.live ? '<span class="vm-marker__pulse"></span>' : "") +
-      '<span class="vm-marker__dot"></span>' +
-      `<span class="vm-marker__label${m.labelLeft ? " vm-marker__label--left" : ""}">${m.city.replace(/</g, "&lt;")}</span>` +
-      "</span>",
-  })), [markers]);
+  const icons = useMemo(() => markers.map(venueMarkerIcon), [markers]);
 
   /* Leaflet marker DOM can survive prop changes, so labels set only in the
      add event go stale as live counts and filter state change. Keep the
@@ -277,10 +299,21 @@ export default function VenueMap({
     >
       <ZoomControl position="bottomright" />
       <TileLayer key={mapStyle} url={tiles.url} attribution={tiles.attribution} />
-      {routePoints.length > 1 && (
+      {/* Team travel route — solid where the team has been, dashed toward
+          where they're going. Non-interactive so taps on the line never
+          bubble into the map's background-collapse handler. */}
+      {completedRoute.length > 1 && (
         <Polyline
-          positions={routePoints}
-          pathOptions={{ color: "#fbbf24", weight: 3, opacity: 0.85, dashArray: "1 8", lineCap: "round" }}
+          positions={completedRoute}
+          interactive={false}
+          pathOptions={{ color: "#fbbf24", weight: 3, opacity: 0.9, lineCap: "round", bubblingMouseEvents: false }}
+        />
+      )}
+      {upcomingRoute.length > 1 && (
+        <Polyline
+          positions={upcomingRoute}
+          interactive={false}
+          pathOptions={{ color: "#fde68a", weight: 2.5, opacity: 0.75, dashArray: "2 9", lineCap: "round", bubblingMouseEvents: false }}
         />
       )}
       {markers.map((m, i) => (
@@ -289,7 +322,7 @@ export default function VenueMap({
           position={[m.latitude, m.longitude]}
           icon={icons[i]}
           keyboard
-          zIndexOffset={m.active ? 1000 : m.live ? 500 : 0}
+          zIndexOffset={m.active ? 1000 : m.nextStop ? 800 : m.live ? 500 : 0}
           eventHandlers={{
             click: () => onSelect(m.venueId),
             /* Leaflet renders the icon as a focusable element when

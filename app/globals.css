@@ -1402,6 +1402,9 @@ body::after {
   text-align: center;
   font: inherit;
   cursor: pointer;
+  /* Anchors the <PitchLines> field-art layer behind the card content */
+  position: relative;
+  overflow: hidden;
   background:
     radial-gradient(circle at 50% 0%, rgba(239,68,68,0.18), transparent 60%),
     rgba(8, 12, 21, 0.92);
@@ -1513,42 +1516,25 @@ body::after {
     inset 0 1px 0 rgba(255,255,255,0.08);
 }
 
-/* Soccer field lines overlay — center circle, halfway line, penalty arcs, touchline */
-.home-dash__next::before {
-  content: "";
+/* Soccer-pitch line art — rendered by the shared <PitchLines> SVG component
+   (tournament.tsx), which replaced the old CSS-gradient field lines that
+   clipped and drifted out of alignment at desktop widths. */
+.pitch-lines {
   position: absolute;
   inset: 8px;
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
   pointer-events: none;
   z-index: 0;
-  /* Touchline border */
-  border: 1.5px solid rgba(255,255,255,0.13);
-  border-radius: 4px;
-  /* Center circle + halfway line */
-  background:
-    radial-gradient(circle at 50% 50%, transparent 54px, rgba(255,255,255,0.13) 54px, rgba(255,255,255,0.13) 56px, transparent 56px),
-    linear-gradient(90deg, transparent calc(50% - 0.75px), rgba(255,255,255,0.13) calc(50% - 0.75px), rgba(255,255,255,0.13) calc(50% + 0.75px), transparent calc(50% + 0.75px));
 }
 
-/* Penalty boxes drawn as separate pseudo-element */
-.home-dash__next::after {
-  content: "";
-  position: absolute;
-  inset: 8px;
-  pointer-events: none;
-  z-index: 0;
-  /* Left penalty box */
-  background:
-    linear-gradient(0deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) 8px 20% / calc(18% - 8px) 1.5px no-repeat,
-    linear-gradient(0deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) 8px 80% / calc(18% - 8px) 1.5px no-repeat,
-    linear-gradient(90deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) 18% 20% / 1.5px 60% no-repeat,
-    /* Right penalty box */
-    linear-gradient(0deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) calc(82% + 0px) 20% / calc(18% - 8px) 1.5px no-repeat,
-    linear-gradient(0deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) calc(82% + 0px) 80% / calc(18% - 8px) 1.5px no-repeat,
-    linear-gradient(90deg, rgba(255,255,255,0.10) 1.5px, transparent 1.5px) 82% 20% / 1.5px 60% no-repeat;
-}
-
-/* Keep content above the field lines */
-.home-dash__next > * { position: relative; z-index: 1; }
+/* Keep content above the field lines — the pitch itself must stay
+   absolutely positioned (the > * lift would otherwise pull it into flow
+   and stretch the card to the SVG's intrinsic size). */
+.home-dash__next > *,
+.home-live-card > * { position: relative; z-index: 1; }
+.home-dash__next > .pitch-lines,
+.home-live-card > .pitch-lines { position: absolute; z-index: 0; }
 
 .home-next__eyebrow {
   color: var(--gold-bright);
@@ -1682,12 +1668,14 @@ body::after {
 }
 
 /* ── Checkpoint tracker ── */
+/* Seven steps (Groups + six knockout rounds) share the row, so each phase
+   stays compact and the rails absorb the leftover width. */
 .home-checkpoint {
   display: flex;
   align-items: flex-start;
   justify-content: center;
   gap: 0;
-  padding: 18px 8px 14px;
+  padding: 18px 4px 14px;
   margin-bottom: 14px;
 }
 .home-checkpoint__phase {
@@ -1700,14 +1688,14 @@ body::after {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  min-width: 72px;
+  gap: 5px;
+  min-width: 40px;
   padding: 0;
   position: relative;
 }
 .home-checkpoint__dot {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2.5px solid rgba(255,255,255,0.12);
   display: flex;
@@ -1744,12 +1732,13 @@ body::after {
 }
 .home-checkpoint__label {
   font-family: var(--disp);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .4px;
+  letter-spacing: .3px;
   color: var(--muted);
   transition: color .3s;
+  white-space: nowrap;
 }
 .home-checkpoint__label--active {
   color: var(--gold-bright);
@@ -1762,7 +1751,7 @@ body::after {
   letter-spacing: .2px;
 }
 .home-checkpoint__mini-bar {
-  width: 48px;
+  width: 40px;
   height: 3px;
   border-radius: 2px;
   background: rgba(255,255,255,0.08);
@@ -1780,12 +1769,22 @@ body::after {
   height: 2.5px;
   background: rgba(255,255,255,0.08);
   border-radius: 2px;
-  margin-top: 15px;
-  min-width: 24px;
+  margin-top: 13px;
+  min-width: 8px;
   transition: background .4s;
 }
 .home-checkpoint__rail--done {
   background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+}
+/* Narrow phones: seven steps still fit by shrinking dots and hiding the
+   per-step counts (the header keeps the overall total). */
+@media (max-width: 430px) {
+  .home-checkpoint__phase { min-width: 34px; }
+  .home-checkpoint__dot { width: 24px; height: 24px; }
+  .home-checkpoint__dot--trophy { font-size: 12px; }
+  .home-checkpoint__rail { margin-top: 11px; min-width: 5px; }
+  .home-checkpoint__label { font-size: 9px; letter-spacing: .2px; }
+  .home-checkpoint__sub { font-size: 9px; }
 }
 
 .home-progress__stats {
@@ -5359,27 +5358,18 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   box-shadow: 0 18px 54px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.06);
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
+/* Side color glows only — the field markings themselves come from the
+   shared <PitchLines> SVG (the old gradient halfway-line and bottom
+   half-circle are superseded by it). */
 .cd-hero::before {
   content: "";
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(90deg, rgba(34,197,94,0.18), transparent 26%, transparent 74%, rgba(56,189,248,0.16)),
-    linear-gradient(0deg, transparent 48%, rgba(255,255,255,0.06) 49%, rgba(255,255,255,0.06) 51%, transparent 52%);
+  background: linear-gradient(90deg, rgba(34,197,94,0.18), transparent 26%, transparent 74%, rgba(56,189,248,0.16));
   pointer-events: none;
 }
-.cd-hero::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -58px;
-  width: 150px;
-  height: 150px;
-  border: 2px solid rgba(255,255,255,0.08);
-  border-radius: 50%;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
+.cd-hero > * { position: relative; z-index: 1; }
+.cd-hero > .pitch-lines { position: absolute; z-index: 0; }
 .cd-hero:hover {
   transform: translateY(-2px);
   border-color: rgba(34,197,94,0.28);

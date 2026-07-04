@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, memo, useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Component, Fragment, memo, useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import type { VenueFocusRequest, VenueMapMarker } from "@/app/components/VenueMap";
 import { HOST_VENUE_DETAILS, MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type PlayerMatchStat, type TeamLineup, type VenueDetails } from "@/lib/data";
@@ -1650,6 +1650,55 @@ type KnockoutCardModel = {
   nextMatchNo: number | null;
 };
 
+/* Decorative soccer-pitch line art behind the hero cards. A real SVG (not
+   CSS gradient hacks) so the markings stay symmetric and the center circle
+   stays round at every card size — preserveAspectRatio "slice" crops the
+   pitch edges on narrow cards instead of distorting the geometry. */
+function PitchLines() {
+  return (
+    <svg className="pitch-lines" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <g fill="none" stroke="rgba(255,255,255,0.11)" strokeWidth="2">
+        {/* Touchline */}
+        <rect x="10" y="10" width="980" height="540" rx="8" />
+        {/* Halfway line + center circle */}
+        <line x1="500" y1="10" x2="500" y2="550" />
+        <circle cx="500" cy="280" r="80" />
+        {/* Penalty areas */}
+        <rect x="10" y="140" width="150" height="280" />
+        <rect x="840" y="140" width="150" height="280" />
+        {/* Six-yard boxes */}
+        <rect x="10" y="210" width="55" height="140" />
+        <rect x="935" y="210" width="55" height="140" />
+        {/* Penalty arcs */}
+        <path d="M160 212.5 A84 84 0 0 1 160 347.5" />
+        <path d="M840 347.5 A84 84 0 0 1 840 212.5" />
+        {/* Corner arcs */}
+        <path d="M10 24 A14 14 0 0 0 24 10" />
+        <path d="M976 10 A14 14 0 0 0 990 24" />
+        <path d="M990 536 A14 14 0 0 0 976 550" />
+        <path d="M24 550 A14 14 0 0 0 10 536" />
+      </g>
+      <g fill="rgba(255,255,255,0.15)">
+        {/* Center + penalty spots */}
+        <circle cx="500" cy="280" r="3.5" />
+        <circle cx="110" cy="280" r="3.5" />
+        <circle cx="890" cy="280" r="3.5" />
+      </g>
+    </svg>
+  );
+}
+
+/* Every knockout round gets its own checkpoint on the home progress
+   tracker — matched against the round labels in lib/data.ts. */
+const KO_ROUND_STEPS: { key: string; label: string; matches: (round: string) => boolean }[] = [
+  { key: "r32", label: "R32", matches: r => r.startsWith("Round of 32") },
+  { key: "r16", label: "R16", matches: r => r.startsWith("Round of 16") },
+  { key: "qf", label: "QF", matches: r => r.toLowerCase().startsWith("quarter") },
+  { key: "sf", label: "SF", matches: r => r.toLowerCase().startsWith("semi") },
+  { key: "third", label: "3rd", matches: r => /third/i.test(r) },
+  { key: "final", label: "Final", matches: r => r.trim() === "Final" },
+];
+
 function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNavigate, onPlayerClick, onMatchClick }: {
   data: TournamentData;
   fixtures: LiveFixture[];
@@ -1672,6 +1721,14 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
     const f = findLive({ ts: m.ts, v: m.v }, fixtures);
     return isCompletedKnockoutFixture(f);
   }).length, [data.ko, fixtures, findLive]);
+
+  /* Per-round knockout completion — one checkpoint per round so no round
+     is lumped into a generic "Knockout" phase. */
+  const koRounds = useMemo(() => KO_ROUND_STEPS.map(step => {
+    const roundMatches = data.ko.filter(m => step.matches(m.round));
+    const done = roundMatches.filter(m => isCompletedKnockoutFixture(findLive({ ts: m.ts, v: m.v }, fixtures))).length;
+    return { key: step.key, label: step.label, done, total: roundMatches.length };
+  }), [data.ko, fixtures, findLive]);
 
   const totalMatches = data.gs.length + data.ko.length;
   const totalDone = groupDone + koDone;
@@ -1838,6 +1895,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
               className="home-live-card"
               onClick={() => type === "gs" ? onMatchClick(match as GroupStageMatch, fixture) : onNavigate("schedule")}
             >
+              <PitchLines />
               <div className="home-live-card__badge">
                 <span className="home-live-card__pulse" />
                 {fixture.status === "HT" ? "HT" : `${fixture.elapsed || ""}'`}
@@ -1859,6 +1917,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
         </section>
       ) : nextMatch && countdown ? (
         <section className="home-dash__next" aria-label="Next match countdown">
+          <PitchLines />
           <div className="home-next__eyebrow">Next Match</div>
           <div className="home-next__countdown">
             {countdown.d > 0 && <><span className="home-next__digit">{countdown.d}</span><span className="home-next__unit">d</span></>}
@@ -1888,66 +1947,47 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
           <span className="home-progress__count">{totalDone}/{totalMatches}</span>
         </div>
 
-        {/* Checkpoint tracker — three major phases with connecting rail */}
+        {/* Checkpoint tracker — every tournament round is its own step:
+            Groups → R32 → R16 → QF → SF → 3rd Place → Final */}
         {(() => {
-          // Phase completion: group stage is done at 72, KO rounds before final = 31,
-          // final itself is match 32
-          const gsComplete = groupDone >= data.gs.length;
-          const gsActive = !gsComplete;
-          const gsPct = data.gs.length > 0 ? Math.min(100, Math.round((groupDone / data.gs.length) * 100)) : 0;
-
-          // KO phase = R32 (16) + R16 (8) + QF (4) + SF (2) = 30 matches
-          const koPhaseTotal = 30;
-          const koPhaseComplete = koDone >= koPhaseTotal;
-          const koPhaseActive = gsComplete && !koPhaseComplete;
-          const koPhaseDone = Math.min(koDone, koPhaseTotal);
-          const koPct = koPhaseTotal > 0 ? Math.min(100, Math.round((koPhaseDone / koPhaseTotal) * 100)) : 0;
-
-          // Final phase = third-place + final = 2 matches
-          const finalPhaseTotal = 2;
-          const finalPhaseDone = Math.max(0, koDone - koPhaseTotal);
-          const finalComplete = finalPhaseDone >= finalPhaseTotal;
-          const finalActive = koPhaseComplete && !finalComplete;
-          const finalPct = finalPhaseTotal > 0 ? Math.min(100, Math.round((finalPhaseDone / finalPhaseTotal) * 100)) : 0;
-
+          const phases = [
+            { key: "groups", label: "Groups", done: groupDone, total: data.gs.length, nav: "schedule" as ViewType, trophy: false },
+            ...koRounds.map(round => ({
+              key: round.key,
+              label: round.label,
+              done: round.done,
+              total: round.total,
+              nav: "bracket" as ViewType,
+              trophy: round.key === "final",
+            })),
+          ];
+          /* The active step is the first incomplete one; everything before
+             it is complete, everything after is upcoming. */
+          const firstIncomplete = phases.findIndex(phase => phase.total > 0 && phase.done < phase.total);
           return (
-          <div className="home-checkpoint">
-            {/* ── Group Stage checkpoint ── */}
-            <button type="button" className="home-checkpoint__phase" onClick={() => onNavigate("schedule")}>
-              <div className={`home-checkpoint__dot ${gsComplete ? "home-checkpoint__dot--done" : gsActive ? "home-checkpoint__dot--active" : ""}`}>
-                {gsComplete ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> : <span className="home-checkpoint__dot-inner" />}
-              </div>
-              <span className={`home-checkpoint__label ${gsActive ? "home-checkpoint__label--active" : ""}`}>Groups</span>
-              <span className="home-checkpoint__sub">{groupDone}/{data.gs.length}</span>
-              {gsActive && <div className="home-checkpoint__mini-bar"><div className="home-checkpoint__mini-fill" style={{ width: `${gsPct}%` }} /></div>}
-            </button>
-
-            {/* ── Connector 1 ── */}
-            <div className={`home-checkpoint__rail ${gsComplete ? "home-checkpoint__rail--done" : ""}`} />
-
-            {/* ── Knockout checkpoint ── */}
-            <button type="button" className="home-checkpoint__phase" onClick={() => onNavigate("bracket")}>
-              <div className={`home-checkpoint__dot ${koPhaseComplete ? "home-checkpoint__dot--done" : koPhaseActive ? "home-checkpoint__dot--active" : ""}`}>
-                {koPhaseComplete ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> : <span className="home-checkpoint__dot-inner" />}
-              </div>
-              <span className={`home-checkpoint__label ${koPhaseActive ? "home-checkpoint__label--active" : ""}`}>Knockout</span>
-              <span className="home-checkpoint__sub">{koPhaseDone}/{koPhaseTotal}</span>
-              {koPhaseActive && <div className="home-checkpoint__mini-bar"><div className="home-checkpoint__mini-fill" style={{ width: `${koPct}%` }} /></div>}
-            </button>
-
-            {/* ── Connector 2 ── */}
-            <div className={`home-checkpoint__rail ${koPhaseComplete ? "home-checkpoint__rail--done" : ""}`} />
-
-            {/* ── Final checkpoint ── */}
-            <button type="button" className="home-checkpoint__phase" onClick={() => onNavigate("bracket")}>
-              <div className={`home-checkpoint__dot home-checkpoint__dot--trophy ${finalComplete ? "home-checkpoint__dot--done" : finalActive ? "home-checkpoint__dot--active" : ""}`}>
-                {finalComplete ? "🏆" : <span className="home-checkpoint__dot-inner" />}
-              </div>
-              <span className={`home-checkpoint__label ${finalActive ? "home-checkpoint__label--active" : ""}`}>Final</span>
-              <span className="home-checkpoint__sub">{finalPhaseDone}/{finalPhaseTotal}</span>
-              {finalActive && <div className="home-checkpoint__mini-bar"><div className="home-checkpoint__mini-fill" style={{ width: `${finalPct}%` }} /></div>}
-            </button>
-          </div>
+            <div className="home-checkpoint">
+              {phases.map((phase, index) => {
+                const complete = phase.total > 0 && phase.done >= phase.total;
+                const active = index === firstIncomplete;
+                const pct = phase.total > 0 ? Math.min(100, Math.round((phase.done / phase.total) * 100)) : 0;
+                const prevComplete = index > 0 && phases[index - 1].total > 0 && phases[index - 1].done >= phases[index - 1].total;
+                return (
+                  <Fragment key={phase.key}>
+                    {index > 0 && <div className={`home-checkpoint__rail ${prevComplete ? "home-checkpoint__rail--done" : ""}`} />}
+                    <button type="button" className="home-checkpoint__phase" onClick={() => onNavigate(phase.nav)}>
+                      <div className={`home-checkpoint__dot ${phase.trophy ? "home-checkpoint__dot--trophy " : ""}${complete ? "home-checkpoint__dot--done" : active ? "home-checkpoint__dot--active" : ""}`}>
+                        {complete
+                          ? (phase.trophy ? "🏆" : <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>)
+                          : <span className="home-checkpoint__dot-inner" />}
+                      </div>
+                      <span className={`home-checkpoint__label ${active ? "home-checkpoint__label--active" : ""}`}>{phase.label}</span>
+                      <span className="home-checkpoint__sub">{phase.done}/{phase.total}</span>
+                      {active && <div className="home-checkpoint__mini-bar"><div className="home-checkpoint__mini-fill" style={{ width: `${pct}%` }} /></div>}
+                    </button>
+                  </Fragment>
+                );
+              })}
+            </div>
           );
         })()}
 
@@ -4873,6 +4913,7 @@ function CountdownHero({ data, fixtures, findLive }: {
     const elapsed = fixture.status === "HT" ? "Half Time" : `${fixture.elapsed || ""}'`;
     return (
       <div className="cd-hero cd-hero--live">
+        <PitchLines />
         <div className="cd-hero__label"><span className="cd-hero__pulse" />{liveMatches.length > 1 ? `${liveMatches.length} MATCHES LIVE` : "LIVE NOW"}</div>
         <div className="cd-hero__teams">
           <div className="cd-hero__side"><span className="cd-hero__flag">{fl(match.t1)}</span><span className="cd-hero__name">{match.t1}</span></div>
@@ -4912,6 +4953,7 @@ function CountdownHero({ data, fixtures, findLive }: {
 
   return (
     <div className="cd-hero" role="button" tabIndex={0} onClick={jumpToNext} onKeyDown={handleKey} aria-label="Jump to next match">
+      <PitchLines />
       <div className="cd-hero__label">NEXT MATCH <span className="cd-hero__tap" aria-hidden="true">↘</span></div>
       <div className="cd-hero__countdown" suppressHydrationWarning>
         <span className="cd-hero__digit" suppressHydrationWarning>{mounted ? pad(h) : "--"}</span>

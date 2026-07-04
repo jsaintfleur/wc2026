@@ -45,8 +45,8 @@ function isStaleStatus(ts: number, status: string, now = Date.now()): boolean {
   return now - ts > STALE_LIVE_THRESHOLD;
 }
 
-type ViewType = "home" | "schedule" | "groups" | "bracket" | "teams" | "map" | "more" | "settings" | "stats" | "venues" | "about";
-const VIEW_TYPES = ["home","schedule","groups","bracket","teams","map","more","settings","stats","venues","about"] as const;
+type ViewType = "home" | "schedule" | "groups" | "bracket" | "teams" | "map" | "analytics" | "more" | "settings" | "stats" | "venues" | "about";
+const VIEW_TYPES = ["home","schedule","groups","bracket","teams","map","analytics","more","settings","stats","venues","about"] as const;
 function isViewType(value: string | null | undefined): value is ViewType {
   return !!value && (VIEW_TYPES as readonly string[]).includes(value);
 }
@@ -1338,6 +1338,7 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
     if (view === "schedule") return renderSchedule(animate);
     if (view === "groups") return renderGroups(animate);
     if (view === "venues") return renderVenues(animate);
+    if (view === "analytics") return "";
     if (view === "stats") return ""; // stats rendered as React, not HTML string
     if (view === "bracket") return ""; // bracket rendered as React bracket
     return renderAbout();
@@ -1385,6 +1386,7 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
     bracket: <AppIcon name="bracket" />,
     teams: <AppIcon name="teams" />,
     map: <AppIcon name="map" />,
+    analytics: <AppIcon name="stats" />,
     more: <AppIcon name="more" />,
     settings: <AppIcon name="settings" />,
     stats: <AppIcon name="stats" />,
@@ -1420,10 +1422,10 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
           <div className="hero__pitch-lines" aria-hidden="true" />
           <div className="hero__context">
             <h1 className="hero__context-title">
-              {view === "schedule" ? "Schedule" : view === "groups" ? "Groups" : view === "teams" ? "Teams" : view === "settings" ? "Settings" : view === "stats" ? "Statistics" : view === "more" ? "More" : view === "venues" ? "Venues" : view === "about" ? "About" : "COMPET 2026"}
+              {view === "schedule" ? "Schedule" : view === "groups" ? "Groups" : view === "teams" ? "Teams" : view === "analytics" ? "Analytics" : view === "settings" ? "Settings" : view === "stats" ? "Statistics" : view === "more" ? "More" : view === "venues" ? "Venues" : view === "about" ? "About" : "COMPET 2026"}
             </h1>
             <p className="hero__context-sub">
-              {view === "schedule" ? `${data.gs.length + data.ko.length} matches · Group stage & knockout` : view === "groups" ? `${Object.keys(data.groups).length} groups · 48 teams` : view === "teams" ? "48 nations competing" : view === "settings" ? "Personalize tournament, alerts, map, data, and display" : view === "stats" ? "Goals, assists & cards" : view === "more" ? "Venues, about & more" : ""}
+              {view === "schedule" ? `${data.gs.length + data.ko.length} matches · Group stage & knockout` : view === "groups" ? `${Object.keys(data.groups).length} groups · 48 teams` : view === "teams" ? "48 nations competing" : view === "analytics" ? "Team strength, confederation power & knockout survival" : view === "settings" ? "Personalize tournament, alerts, map, data, and display" : view === "stats" ? "Goals, assists & cards" : view === "more" ? "Venues, about & more" : ""}
             </p>
           </div>
         </section>
@@ -1544,6 +1546,7 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
             liveStatus={liveStatus}
             liveEnrichmentIssue={liveEnrichmentIssue}
             onRefresh={pollLive}
+            onNavigate={handleTab}
           />
         ) : view === "teams" ? (
           <TeamsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} favs={favs} toggleFav={toggleFav} />
@@ -1556,8 +1559,10 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
             onMatchClick={openMatchDetail}
             onViewVenueMatches={openVenueSchedule}
           />
+        ) : view === "analytics" ? (
+          <AnalyticsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} />
         ) : view === "more" ? (
-          <MoreView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
+          <MoreView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} />
         ) : view === "settings" ? (
           <SettingsView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} liveTs={liveTs} liveStatus={liveStatus} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
         ) : (
@@ -3791,7 +3796,7 @@ function SettingsView({ data, fixtures, leaderboardStats, liveTs, liveStatus, on
 }
 
 type Confederation = "UEFA" | "CONMEBOL" | "CONCACAF" | "CAF" | "AFC" | "OFC";
-type AnalyticsTab = "teams" | "confeds" | "remaining" | "matchups";
+type AnalyticsTab = "teams" | "confederations" | "remaining" | "matchups";
 type AnalyticsSort = "overall" | "attack" | "defense" | "form" | "goals" | "confederation";
 
 const CONFEDERATIONS: Confederation[] = ["UEFA", "CONMEBOL", "CONCACAF", "CAF", "AFC", "OFC"];
@@ -4223,19 +4228,262 @@ function buildAnalyticsModel(
   return { teams, confederations, remainingByConfed, comparisonCards, matchups, strongestTeam, bestAttack, bestDefense, strongestConfed };
 }
 
+function isAnalyticsTab(value: string | null): value is AnalyticsTab {
+  return value === "teams" || value === "confederations" || value === "remaining" || value === "matchups";
+}
+
+function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
+  data: TournamentData;
+  fixtures: LiveFixture[];
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
+  nowMs: number;
+  onTeamClick: (team: string) => void;
+}) {
+  const initialTab = useMemo<AnalyticsTab>(() => {
+    if (typeof window === "undefined") return "teams";
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    return isAnalyticsTab(tab) ? tab : "teams";
+  }, []);
+  const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTab>(initialTab);
+  const [analyticsSort, setAnalyticsSort] = useState<AnalyticsSort>("overall");
+  const [aliveOnly, setAliveOnly] = useState(true);
+  const [analyticsTeam, setAnalyticsTeam] = useState<string | null>(null);
+  const analytics = useMemo(() => buildAnalyticsModel(data, fixtures, findLive, nowMs), [data, fixtures, findLive, nowMs]);
+  const rankedAnalyticsTeams = useMemo(() => {
+    const visible = aliveOnly ? analytics.teams.filter(team => team.alive) : analytics.teams;
+    const sorters: Record<AnalyticsSort, (a: TeamAnalytics, b: TeamAnalytics) => number> = {
+      overall: (a, b) => b.score - a.score,
+      attack: (a, b) => b.attack - a.attack,
+      defense: (a, b) => b.defense - a.defense,
+      form: (a, b) => b.form - a.form,
+      goals: (a, b) => b.goalsFor - a.goalsFor,
+      confederation: (a, b) => a.confederation.localeCompare(b.confederation) || b.score - a.score,
+    };
+    return [...visible].sort((a, b) => sorters[analyticsSort](a, b) || a.team.localeCompare(b.team));
+  }, [analytics.teams, analyticsSort, aliveOnly]);
+  const selectedAnalyticsTeam = analyticsTeam ? analytics.teams.find(team => team.team === analyticsTeam) || null : null;
+  const mostRemaining = [...analytics.confederations].sort((a, b) => b.remaining - a.remaining)[0];
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", "analytics");
+    url.searchParams.set("tab", analyticsTab);
+    window.history.replaceState(window.history.state, "", url);
+  }, [analyticsTab]);
+
+  return (
+    <section className="analytics-hub analytics-hub--view" aria-label="Analytics Hub">
+      <div className="analytics-hero">
+        <div>
+          <span className="analytics-kicker">Analytics Hub</span>
+          <h3>Team strength, confederation power, and knockout survival.</h3>
+          <p>Basic model: results/form 30%, goal difference 20%, attack 20%, defense 20%, knockout path difficulty 10%. Advanced metrics appear automatically when the live feed supplies them.</p>
+        </div>
+        <div className="analytics-hero__cards">
+          <button type="button" onClick={() => setAnalyticsTeam(analytics.strongestTeam.team)}>
+            <small>Strongest Team</small><b>{data.flags[analytics.strongestTeam.team]} {analytics.strongestTeam.team}</b><span>{analytics.strongestTeam.score}/100</span>
+          </button>
+          <button type="button" onClick={() => setAnalyticsTeam(analytics.bestAttack.team)}>
+            <small>Best Attack</small><b>{data.flags[analytics.bestAttack.team]} {analytics.bestAttack.team}</b><span>{analytics.bestAttack.attack}/100</span>
+          </button>
+          <button type="button" onClick={() => setAnalyticsTeam(analytics.bestDefense.team)}>
+            <small>Best Defense</small><b>{data.flags[analytics.bestDefense.team]} {analytics.bestDefense.team}</b><span>{analytics.bestDefense.defense}/100</span>
+          </button>
+          <button type="button" onClick={() => setAnalyticsTab("confederations")}>
+            <small>Strongest Confederation</small><b>{analytics.strongestConfed.confederation}</b><span>{analytics.strongestConfed.avgStrength}/100 avg</span>
+          </button>
+          <button type="button" onClick={() => setAnalyticsTab("remaining")}>
+            <small>Most Teams Remaining</small><b>{mostRemaining.confederation}</b><span>{mostRemaining.remaining} alive</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="analytics-tabs" role="tablist" aria-label="Analytics Hub sections">
+        {[
+          ["teams", "Teams"],
+          ["confederations", "Confederations"],
+          ["remaining", "Remaining"],
+          ["matchups", "Matchups"],
+        ].map(([key, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={analyticsTab === key} onClick={() => setAnalyticsTab(key as AnalyticsTab)}>{label}</button>
+        ))}
+      </div>
+
+      {analyticsTab === "teams" && (
+        <div className="analytics-panel">
+          <div className="analytics-controls">
+            <button type="button" className="analytics-toggle" aria-pressed={aliveOnly} onClick={() => setAliveOnly(v => !v)}>Alive teams only</button>
+            <label>
+              <span>Sort</span>
+              <select value={analyticsSort} onChange={event => setAnalyticsSort(event.target.value as AnalyticsSort)}>
+                <option value="overall">Overall</option>
+                <option value="attack">Attack</option>
+                <option value="defense">Defense</option>
+                <option value="form">Form</option>
+                <option value="goals">Goals</option>
+                <option value="confederation">Confederation</option>
+              </select>
+            </label>
+          </div>
+          <div className="analytics-ranking">
+            {rankedAnalyticsTeams.map((team, index) => (
+              <button key={team.team} type="button" className="analytics-team-row" onClick={() => setAnalyticsTeam(team.team)}>
+                <span className="analytics-rank">{index + 1}</span>
+                <span className="analytics-team-row__name">
+                  <b>{data.flags[team.team]} {team.team}</b>
+                  <small>{team.confederation} · {team.wins}-{team.draws}-{team.losses} · GD {team.goalDiff > 0 ? "+" : ""}{team.goalDiff}</small>
+                </span>
+                <span className={`analytics-tier analytics-tier--${team.tier.toLowerCase().replace(/\s/g, "-")}`}>{team.tier}</span>
+                <span className="analytics-score" role="img" aria-label={`Strength ${team.score} of 100`}>
+                  <b>{team.score}</b>
+                  <i><span style={{ width: `${team.score}%` }} /></i>
+                </span>
+                <span className="analytics-mini">
+                  <em>ATT {team.attack}</em><em>DEF {team.defense}</em><em>FORM {team.form}</em>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analyticsTab === "confederations" && (
+        <div className="analytics-panel">
+          <div className="analytics-confed-grid">
+            {analytics.confederations.map(confed => (
+              <article key={confed.confederation} className="analytics-confed-card">
+                <header><span>{confed.confederation}</span><b>{confed.avgStrength}</b></header>
+                <div className="analytics-confed-card__stats">
+                  <span><b>{confed.qualified}</b><small>qualified</small></span>
+                  <span><b>{confed.remaining}</b><small>remaining</small></span>
+                  <span><b>{confed.eliminated}</b><small>eliminated</small></span>
+                  <span><b>{confed.winPct}%</b><small>win rate</small></span>
+                  <span><b>{confed.pointsPerMatch}</b><small>pts/match</small></span>
+                  <span><b>{confed.goalDiff > 0 ? "+" : ""}{confed.goalDiff}</b><small>goal diff</small></span>
+                </div>
+                <p>KO {confed.knockoutTeams} · QF {confed.quarterfinalists} · SF {confed.semifinalists} · Finalists {confed.finalists}</p>
+                <small>Best: {confed.bestTeam?.team || "Pending"} · Biggest disappointment: {confed.disappointment?.team || "Pending"} · Survival {confed.survivalRate}%</small>
+              </article>
+            ))}
+          </div>
+          <div className="analytics-comparison-grid">
+            {analytics.comparisonCards.map(card => (
+              <article key={card.label} className="analytics-compare-card">
+                <span>{card.label}</span><b>{card.value}</b><small>{card.detail}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analyticsTab === "remaining" && (
+        <div className="analytics-panel">
+          <div className="analytics-survival-board">
+            {CONFEDERATIONS.map(confed => {
+              const teams = analytics.remainingByConfed[confed];
+              return (
+                <article key={confed} className="analytics-survival-card">
+                  <header><b>{confed}</b><span>{teams.length} alive</span></header>
+                  {teams.length === 0 ? (
+                    <p>No teams remaining. Tournament performance summary is still shown in Confederations.</p>
+                  ) : (
+                    <div className="analytics-team-chips">
+                      {teams.map(team => (
+                        <button key={team.team} type="button" onClick={() => setAnalyticsTeam(team.team)}>
+                          <b>{data.flags[team.team]} {team.team}</b>
+                          <small>{team.currentRound} · vs {team.nextOpponent} · {team.nextMatchDate}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {analyticsTab === "matchups" && (
+        <div className="analytics-panel">
+          {analytics.matchups.length === 0 ? (
+            <p className="analytics-empty">No confirmed upcoming knockout matchups yet. The model will populate this board as the bracket resolves.</p>
+          ) : (
+            <div className="analytics-matchups">
+              {analytics.matchups.map(matchup => (
+                <article key={matchup.key} className="analytics-matchup-card">
+                  <header><span>{matchup.stage} · {matchup.date}</span><b>{matchup.difficulty}</b></header>
+                  <div className="analytics-matchup-card__teams">
+                    <button type="button" onClick={() => setAnalyticsTeam(matchup.home.team)}>{data.flags[matchup.home.team]} {matchup.home.team}<small>{matchup.home.score} strength · {matchup.home.confederation}</small></button>
+                    <strong>vs</strong>
+                    <button type="button" onClick={() => setAnalyticsTeam(matchup.away.team)}>{data.flags[matchup.away.team]} {matchup.away.team}<small>{matchup.away.score} strength · {matchup.away.confederation}</small></button>
+                  </div>
+                  <div className="analytics-matchup-bars">
+                    <span>Attack vs defense <b>{matchup.home.attack} / {matchup.away.defense}</b></span>
+                    <span>Return pressure <b>{matchup.away.attack} / {matchup.home.defense}</b></span>
+                    <span>Upset potential <b>{matchup.upsetPotential}%</b></span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedAnalyticsTeam && (
+        <aside className="analytics-drawer" aria-label={`${selectedAnalyticsTeam.team} analytics`}>
+          <div>
+            <span>{selectedAnalyticsTeam.confederation} · rank #{analytics.teams.findIndex(team => team.team === selectedAnalyticsTeam.team) + 1}</span>
+            <h4>{data.flags[selectedAnalyticsTeam.team]} {selectedAnalyticsTeam.team}</h4>
+            <p>{selectedAnalyticsTeam.pathStatus}</p>
+          </div>
+          <button type="button" className="analytics-drawer__close" aria-label="Close team analytics" onClick={() => setAnalyticsTeam(null)}>×</button>
+          <div className="analytics-breakdown">
+            {[
+              ["Overall", selectedAnalyticsTeam.score],
+              ["Attack", selectedAnalyticsTeam.attack],
+              ["Defense", selectedAnalyticsTeam.defense],
+              ["Form", selectedAnalyticsTeam.form],
+              ["Path", selectedAnalyticsTeam.pathDifficulty],
+            ].map(([label, value]) => (
+              <span key={label as string}><b>{label}</b><i><span style={{ width: `${value}%` }} /></i><em>{value}</em></span>
+            ))}
+          </div>
+          <div className="analytics-drawer__grid">
+            <span><b>{selectedAnalyticsTeam.goalsFor}</b><small>goals for</small></span>
+            <span><b>{selectedAnalyticsTeam.goalsAgainst}</b><small>against</small></span>
+            <span><b>{selectedAnalyticsTeam.cleanSheets}</b><small>clean sheets</small></span>
+            <span><b>{selectedAnalyticsTeam.nextOpponent}</b><small>next opponent</small></span>
+          </div>
+          <button type="button" className="analytics-drawer__team-link" onClick={() => onTeamClick(selectedAnalyticsTeam.team)}>Open team profile</button>
+          <div className="analytics-form-strip">
+            {selectedAnalyticsTeam.matches.length === 0 ? <span>No completed matches yet.</span> : selectedAnalyticsTeam.matches.slice(-5).map(match => (
+              <span key={`${match.label}-${match.opponent}-${match.ts}`} className={`analytics-form analytics-form--${match.result.toLowerCase()}`}>
+                <b>{match.result}</b><small>{match.gf}-{match.ga} vs {match.opponent}</small>
+              </span>
+            ))}
+          </div>
+          <p className="analytics-drawer__note">Ranking among {selectedAnalyticsTeam.confederation}: #{analytics.teams.filter(team => team.confederation === selectedAnalyticsTeam.confederation).findIndex(team => team.team === selectedAnalyticsTeam.team) + 1}. Model is basic until shots, possession, xG, and xGA coverage is complete.</p>
+        </aside>
+      )}
+
+      <p className="analytics-disclaimer">Strength scores are unofficial model estimates derived from tournament results. FIFA is the source of record for standings and results.</p>
+    </section>
+  );
+}
+
 /* ---------------------------------------------------------------
  * MoreView — comprehensive tournament dashboard
  * Sections: Hero, Progress, Quick Access, Stadiums, Host Cities,
  *           Calendar Timeline, History, App Settings
  * --------------------------------------------------------------- */
-function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigate, onTeamClick }: {
+function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigate }: {
   data: TournamentData;
   fixtures: LiveFixture[];
   leaderboardStats: ExternalLeaderStat[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
   onNavigate: (view: ViewType) => void;
-  onTeamClick: (team: string) => void;
 }) {
 
   const countryFlag = (country: string) => {
@@ -4245,10 +4493,6 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
 
   /* -- helper: format large numbers with commas ---------------- */
   const fmtNum = (n: number) => n.toLocaleString("en-US");
-  const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTab>("teams");
-  const [analyticsSort, setAnalyticsSort] = useState<AnalyticsSort>("overall");
-  const [aliveOnly, setAliveOnly] = useState(true);
-  const [analyticsTeam, setAnalyticsTeam] = useState<string | null>(null);
 
   /* =============================================================
    * 1. Tournament progress calculations
@@ -4382,20 +4626,6 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
    * 5. History and records
    * ============================================================= */
   const tournamentStats = useMemo(() => buildTournamentStats(data, fixtures, { players: leaderboardStats }), [data, fixtures, leaderboardStats]);
-  const analytics = useMemo(() => buildAnalyticsModel(data, fixtures, findLive, nowMs), [data, fixtures, findLive, nowMs]);
-  const rankedAnalyticsTeams = useMemo(() => {
-    const visible = aliveOnly ? analytics.teams.filter(team => team.alive) : analytics.teams;
-    const sorters: Record<AnalyticsSort, (a: TeamAnalytics, b: TeamAnalytics) => number> = {
-      overall: (a, b) => b.score - a.score,
-      attack: (a, b) => b.attack - a.attack,
-      defense: (a, b) => b.defense - a.defense,
-      form: (a, b) => b.form - a.form,
-      goals: (a, b) => b.goalsFor - a.goalsFor,
-      confederation: (a, b) => a.confederation.localeCompare(b.confederation) || b.score - a.score,
-    };
-    return [...visible].sort((a, b) => sorters[analyticsSort](a, b) || a.team.localeCompare(b.team));
-  }, [analytics.teams, analyticsSort, aliveOnly]);
-  const selectedAnalyticsTeam = analyticsTeam ? analytics.teams.find(team => team.team === analyticsTeam) || null : null;
   const formatLeaderTie = (leaders: PlayerLeader[], value: (leader: PlayerLeader) => number, label: string) => {
     const topValue = leaders[0] ? value(leaders[0]) : 0;
     if (!topValue) return "Pending live data";
@@ -4475,199 +4705,13 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
         </div>
       </section>
 
-      <section className="analytics-hub" aria-label="Analytics Hub">
-        <div className="analytics-hero">
-          <div>
-            <span className="analytics-kicker">Analytics Hub</span>
-            <h3>Team strength, confederation power, and knockout survival.</h3>
-            <p>Basic model: results/form 30%, goal difference 20%, attack 20%, defense 20%, knockout path difficulty 10%. Advanced metrics appear automatically when the live feed supplies them.</p>
-          </div>
-          <div className="analytics-hero__cards">
-            <button type="button" onClick={() => setAnalyticsTeam(analytics.strongestTeam.team)}>
-              <small>Strongest Team</small><b>{data.flags[analytics.strongestTeam.team]} {analytics.strongestTeam.team}</b><span>{analytics.strongestTeam.score}/100</span>
-            </button>
-            <button type="button" onClick={() => setAnalyticsTeam(analytics.bestAttack.team)}>
-              <small>Best Attack</small><b>{data.flags[analytics.bestAttack.team]} {analytics.bestAttack.team}</b><span>{analytics.bestAttack.attack}/100</span>
-            </button>
-            <button type="button" onClick={() => setAnalyticsTeam(analytics.bestDefense.team)}>
-              <small>Best Defense</small><b>{data.flags[analytics.bestDefense.team]} {analytics.bestDefense.team}</b><span>{analytics.bestDefense.defense}/100</span>
-            </button>
-            <div>
-              <small>Strongest Confederation</small><b>{analytics.strongestConfed.confederation}</b><span>{analytics.strongestConfed.avgStrength}/100 avg</span>
-            </div>
-            <div>
-              <small>Most Teams Remaining</small><b>{[...analytics.confederations].sort((a, b) => b.remaining - a.remaining)[0].confederation}</b><span>{[...analytics.confederations].sort((a, b) => b.remaining - a.remaining)[0].remaining} alive</span>
-            </div>
-          </div>
+      <section className="analytics-entry-card" aria-label="Analytics Hub">
+        <div>
+          <span className="analytics-kicker">Analytics Hub</span>
+          <h3>Team strength, confederation power, and knockout survival.</h3>
+          <p>Open the full model for rankings, remaining-team survival, and matchup comparisons.</p>
         </div>
-
-        <div className="analytics-tabs" role="tablist" aria-label="Analytics Hub sections">
-          {[
-            ["teams", "Teams"],
-            ["confeds", "Confederations"],
-            ["remaining", "Remaining"],
-            ["matchups", "Matchups"],
-          ].map(([key, label]) => (
-            <button key={key} type="button" role="tab" aria-selected={analyticsTab === key} onClick={() => setAnalyticsTab(key as AnalyticsTab)}>{label}</button>
-          ))}
-        </div>
-
-        {analyticsTab === "teams" && (
-          <div className="analytics-panel">
-            <div className="analytics-controls">
-              <button type="button" className="analytics-toggle" aria-pressed={aliveOnly} onClick={() => setAliveOnly(v => !v)}>Alive teams only</button>
-              <label>
-                <span>Sort</span>
-                <select value={analyticsSort} onChange={event => setAnalyticsSort(event.target.value as AnalyticsSort)}>
-                  <option value="overall">Overall</option>
-                  <option value="attack">Attack</option>
-                  <option value="defense">Defense</option>
-                  <option value="form">Form</option>
-                  <option value="goals">Goals</option>
-                  <option value="confederation">Confederation</option>
-                </select>
-              </label>
-            </div>
-            <div className="analytics-ranking">
-              {rankedAnalyticsTeams.map((team, index) => (
-                <button key={team.team} type="button" className="analytics-team-row" onClick={() => setAnalyticsTeam(team.team)}>
-                  <span className="analytics-rank">{index + 1}</span>
-                  <span className="analytics-team-row__name">
-                    <b>{data.flags[team.team]} {team.team}</b>
-                    <small>{team.confederation} · {team.wins}-{team.draws}-{team.losses} · GD {team.goalDiff > 0 ? "+" : ""}{team.goalDiff}</small>
-                  </span>
-                  <span className={`analytics-tier analytics-tier--${team.tier.toLowerCase().replace(/\s/g, "-")}`}>{team.tier}</span>
-                  <span className="analytics-score">
-                    <b>{team.score}</b>
-                    <i><span style={{ width: `${team.score}%` }} /></i>
-                  </span>
-                  <span className="analytics-mini">
-                    <em>ATT {team.attack}</em><em>DEF {team.defense}</em><em>FORM {team.form}</em>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {analyticsTab === "confeds" && (
-          <div className="analytics-panel">
-            <div className="analytics-confed-grid">
-              {analytics.confederations.map(confed => (
-                <article key={confed.confederation} className="analytics-confed-card">
-                  <header><span>{confed.confederation}</span><b>{confed.avgStrength}</b></header>
-                  <div className="analytics-confed-card__stats">
-                    <span><b>{confed.qualified}</b><small>qualified</small></span>
-                    <span><b>{confed.remaining}</b><small>remaining</small></span>
-                    <span><b>{confed.eliminated}</b><small>eliminated</small></span>
-                    <span><b>{confed.winPct}%</b><small>win rate</small></span>
-                    <span><b>{confed.pointsPerMatch}</b><small>pts/match</small></span>
-                    <span><b>{confed.goalDiff > 0 ? "+" : ""}{confed.goalDiff}</b><small>goal diff</small></span>
-                  </div>
-                  <p>KO {confed.knockoutTeams} · QF {confed.quarterfinalists} · SF {confed.semifinalists} · Finalists {confed.finalists}</p>
-                  <small>Best: {confed.bestTeam?.team || "Pending"} · Biggest disappointment: {confed.disappointment?.team || "Pending"} · Survival {confed.survivalRate}%</small>
-                </article>
-              ))}
-            </div>
-            <div className="analytics-comparison-grid">
-              {analytics.comparisonCards.map(card => (
-                <article key={card.label} className="analytics-compare-card">
-                  <span>{card.label}</span><b>{card.value}</b><small>{card.detail}</small>
-                </article>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {analyticsTab === "remaining" && (
-          <div className="analytics-panel">
-            <div className="analytics-survival-board">
-              {CONFEDERATIONS.map(confed => {
-                const teams = analytics.remainingByConfed[confed];
-                return (
-                  <article key={confed} className="analytics-survival-card">
-                    <header><b>{confed}</b><span>{teams.length} alive</span></header>
-                    {teams.length === 0 ? (
-                      <p>No teams remaining. Tournament performance summary is still shown in Confederations.</p>
-                    ) : (
-                      <div className="analytics-team-chips">
-                        {teams.map(team => (
-                          <button key={team.team} type="button" onClick={() => setAnalyticsTeam(team.team)}>
-                            <b>{data.flags[team.team]} {team.team}</b>
-                            <small>{team.currentRound} · vs {team.nextOpponent} · {team.nextMatchDate}</small>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {analyticsTab === "matchups" && (
-          <div className="analytics-panel">
-            {analytics.matchups.length === 0 ? (
-              <p className="analytics-empty">No confirmed upcoming knockout matchups yet. The model will populate this board as the bracket resolves.</p>
-            ) : (
-              <div className="analytics-matchups">
-                {analytics.matchups.map(matchup => (
-                  <article key={matchup.key} className="analytics-matchup-card">
-                    <header><span>{matchup.stage} · {matchup.date}</span><b>{matchup.difficulty}</b></header>
-                    <div className="analytics-matchup-card__teams">
-                      <button type="button" onClick={() => setAnalyticsTeam(matchup.home.team)}>{data.flags[matchup.home.team]} {matchup.home.team}<small>{matchup.home.score} strength · {matchup.home.confederation}</small></button>
-                      <strong>vs</strong>
-                      <button type="button" onClick={() => setAnalyticsTeam(matchup.away.team)}>{data.flags[matchup.away.team]} {matchup.away.team}<small>{matchup.away.score} strength · {matchup.away.confederation}</small></button>
-                    </div>
-                    <div className="analytics-matchup-bars">
-                      <span>Attack vs defense <b>{matchup.home.attack} / {matchup.away.defense}</b></span>
-                      <span>Return pressure <b>{matchup.away.attack} / {matchup.home.defense}</b></span>
-                      <span>Upset potential <b>{matchup.upsetPotential}%</b></span>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {selectedAnalyticsTeam && (
-          <aside className="analytics-drawer" aria-label={`${selectedAnalyticsTeam.team} analytics`}>
-            <div>
-              <span>{selectedAnalyticsTeam.confederation} · rank #{analytics.teams.findIndex(team => team.team === selectedAnalyticsTeam.team) + 1}</span>
-              <h4>{data.flags[selectedAnalyticsTeam.team]} {selectedAnalyticsTeam.team}</h4>
-              <p>{selectedAnalyticsTeam.pathStatus}</p>
-            </div>
-            <button type="button" className="analytics-drawer__close" aria-label="Close team analytics" onClick={() => setAnalyticsTeam(null)}>×</button>
-            <div className="analytics-breakdown">
-              {[
-                ["Overall", selectedAnalyticsTeam.score],
-                ["Attack", selectedAnalyticsTeam.attack],
-                ["Defense", selectedAnalyticsTeam.defense],
-                ["Form", selectedAnalyticsTeam.form],
-                ["Path", selectedAnalyticsTeam.pathDifficulty],
-              ].map(([label, value]) => (
-                <span key={label as string}><b>{label}</b><i><span style={{ width: `${value}%` }} /></i><em>{value}</em></span>
-              ))}
-            </div>
-            <div className="analytics-drawer__grid">
-              <span><b>{selectedAnalyticsTeam.goalsFor}</b><small>goals for</small></span>
-              <span><b>{selectedAnalyticsTeam.goalsAgainst}</b><small>against</small></span>
-              <span><b>{selectedAnalyticsTeam.cleanSheets}</b><small>clean sheets</small></span>
-              <span><b>{selectedAnalyticsTeam.nextOpponent}</b><small>next opponent</small></span>
-            </div>
-            <button type="button" className="analytics-drawer__team-link" onClick={() => onTeamClick(selectedAnalyticsTeam.team)}>Open team profile</button>
-            <div className="analytics-form-strip">
-              {selectedAnalyticsTeam.matches.length === 0 ? <span>No completed matches yet.</span> : selectedAnalyticsTeam.matches.slice(-5).map(match => (
-                <span key={`${match.label}-${match.opponent}-${match.ts}`} className={`analytics-form analytics-form--${match.result.toLowerCase()}`}>
-                  <b>{match.result}</b><small>{match.gf}-{match.ga} vs {match.opponent}</small>
-                </span>
-              ))}
-            </div>
-            <p className="analytics-drawer__note">Ranking among {selectedAnalyticsTeam.confederation}: #{analytics.teams.filter(team => team.confederation === selectedAnalyticsTeam.confederation).findIndex(team => team.team === selectedAnalyticsTeam.team) + 1}. Model is basic until shots, possession, xG, and xGA coverage is complete.</p>
-          </aside>
-        )}
+        <button type="button" onClick={() => onNavigate("analytics")}>Open Analytics</button>
       </section>
 
       {/* ── Section 4: Stadiums ─────────────────────────────── */}
@@ -7203,13 +7247,14 @@ function StatsLeaderboard({ categories, active, onActive, fl, matchesWithAssistD
 }
 
 /** Stats view — tournament dashboard with visualizations */
-function StatsView({ fl, computeLeaders, liveTs, liveStatus, liveEnrichmentIssue, onRefresh }: {
+function StatsView({ fl, computeLeaders, liveTs, liveStatus, liveEnrichmentIssue, onRefresh, onNavigate }: {
   fl: (t: string) => string;
   computeLeaders: () => TournamentStats;
   liveTs: number;
   liveStatus: LiveStatus;
   liveEnrichmentIssue: string;
   onRefresh: () => void;
+  onNavigate: (view: ViewType) => void;
 }) {
   const [activeTab, setActiveTab] = useState<StatTabKey>("goals");
   const stats = useMemo(() => { try { return computeLeaders(); } catch { return null; } }, [computeLeaders]);
@@ -7283,6 +7328,7 @@ function StatsView({ fl, computeLeaders, liveTs, liveStatus, liveEnrichmentIssue
           <div className="stats-sync">
             <span>{syncLabel} · {syncedAt}</span>
             <button type="button" onClick={onRefresh}>Refresh</button>
+            <button type="button" onClick={() => onNavigate("analytics")}>Analytics</button>
           </div>
         </div>
         <WorldCupTrophy id="st" className="stats-hero-panel__trophy" />

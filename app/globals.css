@@ -7432,6 +7432,36 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 
 /* ── Analytics Hub ------------------------------------------------ */
 .analytics-hub { display: grid; gap: 14px; margin: 14px 0; }
+.analytics-hub--view { margin-top: 0; }
+.analytics-entry-card {
+  display: grid;
+  gap: 13px;
+  align-items: center;
+  margin: 14px 0;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(251,191,36,0.14), transparent 36%),
+    linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)),
+    rgba(8, 13, 24, 0.94);
+  box-shadow: 0 18px 50px rgba(0,0,0,0.24);
+}
+.analytics-entry-card h3 { margin: 4px 0 6px; color: #fff; font-family: var(--disp); font-size: 25px; line-height: 1; text-transform: uppercase; }
+.analytics-entry-card p { margin: 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.45; }
+.analytics-entry-card button {
+  width: max-content;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  border-radius: 999px;
+  padding: 10px 14px;
+  color: #111;
+  background: var(--gold);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
 .analytics-hero,
 .analytics-panel,
 .analytics-drawer {
@@ -7565,8 +7595,10 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .analytics-form--d { border-color: rgba(245,158,11,0.28); }
 .analytics-form--l { border-color: rgba(244,63,94,0.28); }
 .analytics-drawer__note { margin-bottom: 0 !important; }
+.analytics-disclaimer { margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
 
 @media (min-width: 900px) {
+  .analytics-entry-card { grid-template-columns: minmax(0, 1fr) auto; }
   .analytics-hero { grid-template-columns: minmax(0, .9fr) minmax(0, 1.2fr); align-items: stretch; }
   .analytics-hero__cards, .analytics-comparison-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .analytics-confed-grid, .analytics-survival-board, .analytics-matchups { grid-template-columns: repeat(2, minmax(0, 1fr)); }

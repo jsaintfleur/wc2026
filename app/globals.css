@@ -8949,7 +8949,10 @@ button.settings-row:active,
    the scroll shell gains scrollable extent — a CSS transform would visually
    grow the map without letting users pan to the clipped edges. */
 .host-map { display: block; width: calc(var(--map-zoom, 1) * 100%); min-width: calc(var(--map-zoom, 1) * 720px); height: auto; min-height: 640px; transition: width .18s ease, min-width .18s ease; }
-.map-controls { position: absolute; z-index: 3; top: 14px; right: 14px; display: grid; gap: 6px; }
+.map-controls { position: absolute; z-index: 3; top: 62px; right: 14px; display: grid; gap: 6px; }
+.map-fit-control { position: absolute; z-index: 5; top: 14px; right: 14px; display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid rgba(255,255,255,0.16); border-radius: 14px; color: #fff; background: rgba(8,13,24,0.84); box-shadow: 0 10px 24px rgba(0,0,0,0.35); font-family: var(--disp); font-size: 22px; line-height: 1; cursor: pointer; touch-action: manipulation; transition: transform .15s ease, border-color .15s ease, background .15s ease; }
+.map-fit-control:hover { border-color: rgba(245,158,11,0.4); background: rgba(20,28,44,0.96); transform: translateY(-1px); }
+.map-fit-control:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
 
 /* ── Leaflet map (the real interactive map) ─────────────────────
    The SVG .host-map styles below remain only for the error fallback. */
@@ -9078,6 +9081,8 @@ button.settings-row:active,
   .map-canvas-card { min-height: calc(100svh - 176px); border-radius: 20px; }
   .venue-leaflet, .venue-map-loading { min-height: calc(100svh - 176px); }
   .host-map { min-width: calc(var(--map-zoom, 1) * 820px); min-height: calc(100svh - 176px); }
+  .map-fit-control { top: 12px; right: 12px; width: 42px; height: 42px; }
+  .map-controls { top: 60px; right: 12px; }
   /* Bottom sheet: floats above the bottom nav, never part of page flow, so
      the map stays fully pannable behind/around it. Three sizes:
      collapsed (header pill) / half / expanded. */

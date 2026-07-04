@@ -2,7 +2,7 @@
 
 import { Component, Fragment, memo, useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import type { VenueFocusRequest, VenueMapMarker } from "@/app/components/VenueMap";
+import type { VenueFitRequest, VenueFocusRequest, VenueMapMarker } from "@/app/components/VenueMap";
 import { HOST_VENUE_DETAILS, MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type PlayerMatchStat, type TeamLineup, type VenueDetails } from "@/lib/data";
 import { nrm, canon, canonPlayer } from "@/lib/merge";
 import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type TournamentStats } from "@/lib/stats";
@@ -2640,6 +2640,8 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   const [panelState, setPanelState] = useState<MapPanelState>("half");
   /* One-shot auto-pan request consumed by the Leaflet map */
   const [focusRequest, setFocusRequest] = useState<VenueFocusRequest | null>(null);
+  /* One-shot "show every venue" request consumed by the Leaflet map */
+  const [fitRequest, setFitRequest] = useState<VenueFitRequest | null>(null);
   /* Live view (center/zoom) mirrored from Leaflet's moveend for persistence */
   const viewRef = useRef<{ center: [number, number]; zoom: number }>({
     center: remembered?.center || MAP_DEFAULT_CENTER,
@@ -2664,6 +2666,14 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     const offsetX = isMobile ? 0 : 180;
     setFocusRequest(req => ({ venueId, offsetX, offsetY, seq: (req?.seq || 0) + 1 }));
     window.requestAnimationFrame(() => panelHeadingRef.current?.focus());
+  };
+
+  const showAllVenues = () => {
+    /* Leaflet fits geographic bounds; the SVG error fallback resets to its
+       full-country scale and scroll origin so all markers are recoverable. */
+    setSvgZoom(1);
+    canvasScrollRef.current?.scrollTo({ left: 0, top: 0, behavior: "smooth" });
+    setFitRequest(req => ({ seq: (req?.seq || 0) + 1 }));
   };
 
   /* Persist the live map view when "remember last location" is on */
@@ -2940,6 +2950,15 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
 
       <section className={`map-shell map-shell--panel-${panelState}`}>
         <div className="map-canvas-card">
+          <button
+            type="button"
+            className="map-fit-control"
+            aria-label="Show all venues"
+            title="Show all venues"
+            onClick={showAllVenues}
+          >
+            ⤢
+          </button>
           {/* Real interactive map (tiles, pan, pinch-zoom). The legacy SVG
               map below is ONLY the error fallback if the Leaflet chunk
               fails to load. */}
@@ -3034,6 +3053,8 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
               initialCenter={viewRef.current.center}
               initialZoom={viewRef.current.zoom}
               focusRequest={focusRequest}
+              fitRequest={fitRequest}
+              autoFitIfEmpty={!!remembered}
               layoutKey={panelState}
               onSelect={selectVenue}
               onViewChange={handleViewChange}

@@ -11,9 +11,9 @@
  * with its required attribution.
  */
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
-import { divIcon, type LeafletEvent } from "leaflet";
+import { divIcon, latLngBounds, type LeafletEvent, type Map as LeafletMap } from "leaflet";
 
 export interface VenueMapMarker {
   venueId: string;
@@ -43,6 +43,12 @@ export interface VenueFocusRequest {
   seq: number;
 }
 
+/* A one-shot "show every venue" request. The parent owns the counter so the
+   same button can be pressed repeatedly without depending on object identity. */
+export interface VenueFitRequest {
+  seq: number;
+}
+
 interface VenueMapProps {
   markers: VenueMapMarker[];
   /* Team travel path as [lat, lng] stops, in match order */
@@ -51,6 +57,11 @@ interface VenueMapProps {
   initialCenter: [number, number];
   initialZoom: number;
   focusRequest: VenueFocusRequest | null;
+  fitRequest: VenueFitRequest | null;
+  /* Restored views can point to an old ocean/empty tile area after settings
+     changes or viewport changes; when true, the controller checks once and
+     recovers to all venues if no marker is visible. */
+  autoFitIfEmpty: boolean;
   /* Changes whenever the surrounding layout changes size (sheet state,
      panel collapse) so Leaflet re-measures its container. */
   layoutKey: string;
@@ -85,14 +96,39 @@ function markerAriaLabel(m: VenueMapMarker): string {
     (m.live ? " Live now." : "");
 }
 
+function validVenuePoints(markers: VenueMapMarker[]): [number, number][] {
+  return markers
+    .filter(m => Number.isFinite(m.latitude) && Number.isFinite(m.longitude) && !(m.latitude === 0 && m.longitude === 0))
+    .map(m => [m.latitude, m.longitude] as [number, number]);
+}
+
+function fitMapToVenues(map: LeafletMap, markers: VenueMapMarker[], animate: boolean) {
+  const points = validVenuePoints(markers);
+  if (points.length === 0) return;
+  if (points.length === 1) {
+    map.flyTo(points[0], Math.max(map.getZoom(), 5), { duration: animate ? 0.45 : 0 });
+    return;
+  }
+  map.fitBounds(latLngBounds(points), {
+    animate,
+    duration: animate ? 0.55 : undefined,
+    maxZoom: 5,
+    padding: [46, 46],
+  });
+}
+
 /* Imperative map behaviors that need the Leaflet instance */
-function MapController({ markers, focusRequest, layoutKey, onViewChange }: {
+function MapController({ markers, focusRequest, fitRequest, autoFitIfEmpty, layoutKey, onViewChange }: {
   markers: VenueMapMarker[];
   focusRequest: VenueFocusRequest | null;
+  fitRequest: VenueFitRequest | null;
+  autoFitIfEmpty: boolean;
   layoutKey: string;
   onViewChange?: (center: [number, number], zoom: number) => void;
 }) {
   const map = useMap();
+  const handledFitSeqRef = useRef(0);
+  const checkedEmptyRestoreRef = useRef(false);
 
   /* Re-measure when the surrounding layout (sheet/panel) changes size —
      otherwise Leaflet keeps rendering into the stale viewport box. */
@@ -116,6 +152,29 @@ function MapController({ markers, focusRequest, layoutKey, onViewChange }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRequest?.seq]);
 
+  /* Fit every host venue on explicit request. `handledFitSeqRef` prevents a
+     marker array refresh from replaying the same one-shot request. */
+  useEffect(() => {
+    if (!fitRequest || handledFitSeqRef.current === fitRequest.seq) return;
+    handledFitSeqRef.current = fitRequest.seq;
+    fitMapToVenues(map, markers, true);
+  }, [fitRequest, map, markers]);
+
+  /* If a remembered/restored viewport opens with zero venues visible, recover
+     to the continental view once. This guards users from being stranded over
+     empty map tiles after a device-size or saved-state change. */
+  useEffect(() => {
+    if (!autoFitIfEmpty || checkedEmptyRestoreRef.current || markers.length === 0) return;
+    checkedEmptyRestoreRef.current = true;
+    const id = window.setTimeout(() => {
+      map.invalidateSize();
+      const bounds = map.getBounds();
+      const visibleVenueCount = validVenuePoints(markers).filter(point => bounds.contains(point)).length;
+      if (visibleVenueCount === 0) fitMapToVenues(map, markers, false);
+    }, 260);
+    return () => window.clearTimeout(id);
+  }, [autoFitIfEmpty, map, markers]);
+
   useEffect(() => {
     if (!onViewChange) return;
     const handler = () => {
@@ -131,7 +190,7 @@ function MapController({ markers, focusRequest, layoutKey, onViewChange }: {
 
 export default function VenueMap({
   markers, routePoints, mapStyle, initialCenter, initialZoom,
-  focusRequest, layoutKey, onSelect, onViewChange,
+  focusRequest, fitRequest, autoFitIfEmpty, layoutKey, onSelect, onViewChange,
 }: VenueMapProps) {
   const tiles = TILE_STYLES[mapStyle] || TILE_STYLES.Dark;
 
@@ -190,6 +249,8 @@ export default function VenueMap({
       <MapController
         markers={markers}
         focusRequest={focusRequest}
+        fitRequest={fitRequest}
+        autoFitIfEmpty={autoFitIfEmpty}
         layoutKey={layoutKey}
         onViewChange={onViewChange}
       />

@@ -743,7 +743,14 @@ function buildKnockoutCards(
     return all;
 }
 
-export default function Tournament({ data, initialView = "home" }: { data: TournamentData; initialView?: string }) {
+type InitialLiveData = {
+  fixtures: LiveFixture[];
+  leaderboardStats: ExternalLeaderStat[];
+  ts: number;
+  active: boolean;
+} | null;
+
+export default function Tournament({ data, initialView = "home", initialLiveData = null }: { data: TournamentData; initialView?: string; initialLiveData?: InitialLiveData }) {
   const fl = (t: string) => data.flags[t] || "⚽";
   const ven = (k: string) => data.venues[k] || { common: "", fifa: "", city: "", country: "", cap: 0 };
   const vName = (k: string) => (data.venues[k] || { common: "" }).common || "";
@@ -795,11 +802,8 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
   const [team, setTeam] = useState("ALL");
   const [stage, setStage] = useState("ALL");
   const [query, setQuery] = useState("");
-  /* Start empty on both server and first client render so hydration is stable.
-     Persisted live data is still available as a fallback inside pollLive if the
-     first network refresh fails. */
-  const [fixtures, setFixtures] = useState<LiveFixture[]>([]);
-  const [leaderboardStats, setLeaderboardStats] = useState<ExternalLeaderStat[]>([]);
+  const [fixtures, setFixtures] = useState<LiveFixture[]>(() => initialLiveData?.fixtures || []);
+  const [leaderboardStats, setLeaderboardStats] = useState<ExternalLeaderStat[]>(() => initialLiveData?.leaderboardStats || []);
 
   /* Populate the global player-image index during render (useMemo, not
      useEffect) so avatars sourced from the index appear in the same pass —
@@ -840,8 +844,8 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
     /* Expose for inspection in dev tooling/tests */
     (window as unknown as { __competAudit?: unknown }).__competAudit = { issues, matchCount: matches.length };
   }, [data, fixtures, findLive]);
-  const [liveStatus, setLiveStatus] = useState<LiveStatus>("init");
-  const [liveTs, setLiveTs] = useState(0);
+  const [liveStatus, setLiveStatus] = useState<LiveStatus>(() => initialLiveData ? (initialLiveData.active ? "active" : "idle") : "init");
+  const [liveTs, setLiveTs] = useState(() => initialLiveData?.ts || 0);
   const [, setLiveStale] = useState(false);
   const [liveEnrichmentIssue, setLiveEnrichmentIssue] = useState("");
   const [animate, setAnimate] = useState(true);
@@ -6684,15 +6688,39 @@ function CountdownHero({ data, fixtures, findLive }: {
     const f = findLive(m, fixtures);
     if (f && LIVE_STATUSES.has(f.status)) liveMatches.push({ match: m, fixture: f });
   }
+  const liveKoCards = buildKnockoutCards(data, fixtures, findLive, now)
+    .filter(card => card.isLive && card.fixture);
 
-  if (liveMatches.length > 0) {
+  if (liveMatches.length > 0 || liveKoCards.length > 0) {
+    if (!liveMatches.length && liveKoCards.length > 0) {
+      const card = liveKoCards[0];
+      const fixture = card.fixture!;
+      const v = data.venues[card.match.v];
+      const elapsed = fixture.status === "HT" ? "Half Time" : (fixture.elapsed ? `${fixture.elapsed}'` : "LIVE");
+      const home = card.teams[0]?.name || fixture.home;
+      const away = card.teams[1]?.name || fixture.away;
+      const liveCount = liveMatches.length + liveKoCards.length;
+      return (
+        <div className="cd-hero cd-hero--live">
+          <PitchLines />
+          <div className="cd-hero__label"><span className="cd-hero__pulse" />{liveCount > 1 ? `${liveCount} MATCHES LIVE` : "LIVE NOW"}</div>
+          <div className="cd-hero__teams">
+            <div className="cd-hero__side"><span className="cd-hero__flag">{fl(home)}</span><span className="cd-hero__name">{home}</span></div>
+            <div className="cd-hero__score-live">{fixture.gh ?? 0} – {fixture.ga ?? 0}</div>
+            <div className="cd-hero__side"><span className="cd-hero__flag">{fl(away)}</span><span className="cd-hero__name">{away}</span></div>
+          </div>
+          <div className="cd-hero__info">{elapsed}{v ? ` · ${v.common}, ${v.city}` : ""}</div>
+        </div>
+      );
+    }
     const { match, fixture } = liveMatches[0];
     const v = data.venues[match.v];
-    const elapsed = fixture.status === "HT" ? "Half Time" : `${fixture.elapsed || ""}'`;
+    const elapsed = fixture.status === "HT" ? "Half Time" : (fixture.elapsed ? `${fixture.elapsed}'` : "LIVE");
+    const liveCount = liveMatches.length + liveKoCards.length;
     return (
       <div className="cd-hero cd-hero--live">
         <PitchLines />
-        <div className="cd-hero__label"><span className="cd-hero__pulse" />{liveMatches.length > 1 ? `${liveMatches.length} MATCHES LIVE` : "LIVE NOW"}</div>
+        <div className="cd-hero__label"><span className="cd-hero__pulse" />{liveCount > 1 ? `${liveCount} MATCHES LIVE` : "LIVE NOW"}</div>
         <div className="cd-hero__teams">
           <div className="cd-hero__side"><span className="cd-hero__flag">{fl(match.t1)}</span><span className="cd-hero__name">{match.t1}</span></div>
           <div className="cd-hero__score-live">{fixture.gh ?? 0} – {fixture.ga ?? 0}</div>

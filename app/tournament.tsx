@@ -2653,6 +2653,19 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   const panelHeadingRef = useRef<HTMLHeadingElement>(null);
   const canvasScrollRef = useRef<HTMLDivElement>(null);
 
+  const mapFocusOffsets = (nextPanel: MapPanelState) => {
+    const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
+    return {
+      offsetY: isMobile ? Math.round(window.innerHeight * (nextPanel === "expanded" ? 0.3 : 0.2)) : 0,
+      offsetX: isMobile ? 0 : 180,
+    };
+  };
+
+  const requestVenueMapFocus = (venueId: string, nextPanel: MapPanelState) => {
+    const { offsetX, offsetY } = mapFocusOffsets(nextPanel);
+    setFocusRequest(req => ({ venueId, offsetX, offsetY, seq: (req?.seq || 0) + 1 }));
+  };
+
   const selectVenue = (venueId: string) => {
     /* Explicit marker intent beats the active venue filter: if a dimmed
        marker is tapped, clear the status/country filter so the selection and
@@ -2666,10 +2679,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     setPanelState(nextPanel);
     /* Auto-pan so the marker stays visible above the sheet (mobile) or
        left of the side panel (desktop). */
-    const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
-    const offsetY = isMobile ? Math.round(window.innerHeight * (nextPanel === "expanded" ? 0.3 : 0.2)) : 0;
-    const offsetX = isMobile ? 0 : 180;
-    setFocusRequest(req => ({ venueId, offsetX, offsetY, seq: (req?.seq || 0) + 1 }));
+    requestVenueMapFocus(venueId, nextPanel);
     window.requestAnimationFrame(() => panelHeadingRef.current?.focus());
   };
 
@@ -2869,7 +2879,10 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     autoCenteredRef.current = true;
     if (prefs.mapCenter === "Current live venue") {
       const liveVenue = venueModels.find(venue => venue.liveCount > 0);
-      if (liveVenue) setActiveVenueId(liveVenue.venueId);
+      if (liveVenue) {
+        setActiveVenueId(liveVenue.venueId);
+        requestVenueMapFocus(liveVenue.venueId, panelState);
+      }
       return;
     }
     if (prefs.mapCenter === "Favorite team") {
@@ -2878,7 +2891,10 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
         [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(teamCanon));
       // Center on the team's next match, falling back to their latest one
       const target = teamMatches.find(match => match.ts > nowMs) || teamMatches[teamMatches.length - 1];
-      if (target) setActiveVenueId(target.venueId);
+      if (target) {
+        setActiveVenueId(target.venueId);
+        requestVenueMapFocus(target.venueId, panelState);
+      }
       return;
     }
     if (prefs.mapCenter === "User location" && typeof navigator !== "undefined" && navigator.permissions && navigator.geolocation) {
@@ -2893,7 +2909,10 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
             const d = (venue.latitude - latitude) ** 2 + (venue.longitude - longitude) ** 2;
             if (!nearest || d < nearest.d) nearest = { venueId: venue.venueId, d };
           }
-          if (nearest) setActiveVenueId(nearest.venueId);
+          if (nearest) {
+            setActiveVenueId(nearest.venueId);
+            requestVenueMapFocus(nearest.venueId, panelState);
+          }
         }, () => { /* keep default on error */ });
       }).catch(() => { /* permissions API unavailable — keep default */ });
     }

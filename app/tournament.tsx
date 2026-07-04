@@ -2663,6 +2663,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
      content that just changed instead of staying lost among the markers. */
   const panelHeadingRef = useRef<HTMLHeadingElement>(null);
   const canvasScrollRef = useRef<HTMLDivElement>(null);
+  const lastRouteFitKeyRef = useRef("");
 
   const mapFocusOffsets = (nextPanel: MapPanelState) => {
     const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
@@ -2899,6 +2900,11 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
      map to that path once so the user immediately sees what changed. */
   useEffect(() => {
     if (selectedTeam === "ALL" || routeLatLngs.length < 2) return;
+    const routeKey = `${selectedTeam}|${routeLatLngs.map(point => point.join(",")).join(";")}`;
+    /* Route fits on team change or route resolution, never on data-identity
+       churn from live polls/minute ticks that rebuild equivalent arrays. */
+    if (lastRouteFitKeyRef.current === routeKey) return;
+    lastRouteFitKeyRef.current = routeKey;
     setRouteFitRequest(req => ({ points: routeLatLngs, seq: (req?.seq || 0) + 1 }));
   }, [selectedTeam, routeLatLngs]);
 

@@ -9079,7 +9079,9 @@ button.settings-row:active,
   .map-hero__eyebrow { display: inline; margin-right: 8px; font-size: 10px; }
   .map-hero h2 { display: inline; margin: 0; font-size: 22px; vertical-align: middle; }
   .map-hero p { display: none; }
-  .map-toolbar { flex-direction: column; align-items: stretch; }
+  .map-toolbar { position: relative; z-index: 2; flex-direction: column; align-items: stretch; margin: 0 -14px; padding: 6px 14px 8px; background: #070a11; }
+  .map-filter-row { gap: 6px; padding-right: 18px; }
+  .map-chip { padding: 8px 10px; font-size: 11.5px; }
   .map-hero__stats { min-width: 0; }
   .map-shell { display: block; }
   /* Map fills the viewport area above the bottom nav */

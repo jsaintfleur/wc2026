@@ -63,7 +63,7 @@ interface VenueMapProps {
   markers: VenueMapMarker[];
   /* Team travel path as [lat, lng] stops, in match order */
   routePoints: [number, number][];
-  mapStyle: "Light" | "Dark" | "Satellite" | "Terrain";
+  mapStyle: "Light" | "Dark" | "Terrain";
   initialCenter: [number, number];
   initialZoom: number;
   focusRequest: VenueFocusRequest | null;
@@ -91,10 +91,6 @@ const TILE_STYLES: Record<VenueMapProps["mapStyle"], { url: string; attribution:
   Light: {
     url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-  },
-  Satellite: {
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics",
   },
   Terrain: {
     url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",

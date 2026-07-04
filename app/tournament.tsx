@@ -3331,7 +3331,7 @@ type SettingsModel = {
   liveRefresh: "Auto" | "15 sec" | "30 sec" | "60 sec" | "Manual";
   scoreDisplay: "Goals only" | "Goals + Assists" | "Detailed stats";
   timeline: "Expanded" | "Collapsed";
-  mapStyle: "Light" | "Dark" | "Satellite" | "Terrain";
+  mapStyle: "Light" | "Dark" | "Terrain";
   mapCenter: "Favorite team" | "Current live venue" | "User location";
   rememberMap: boolean;
   theme: "Light" | "Dark" | "System";
@@ -3457,7 +3457,7 @@ const DEFAULT_SETTINGS: SettingsModel = {
 };
 
 function mergeSettings(raw: Partial<SettingsModel>): SettingsModel {
-  return {
+  const merged = {
     ...DEFAULT_SETTINGS,
     ...raw,
     notifications: { ...DEFAULT_SETTINGS.notifications, ...(raw.notifications || {}) },
@@ -3465,6 +3465,10 @@ function mergeSettings(raw: Partial<SettingsModel>): SettingsModel {
     stats: { ...DEFAULT_SETTINGS.stats, ...(raw.stats || {}) },
     downloads: { ...DEFAULT_SETTINGS.downloads, ...(raw.downloads || {}) },
   };
+  // Retired options saved by older builds (e.g. the removed "Satellite"
+  // map style) fall back to the default rather than leaking through.
+  if (!["Light", "Dark", "Terrain"].includes(merged.mapStyle)) merged.mapStyle = DEFAULT_SETTINGS.mapStyle;
+  return merged;
 }
 
 function SettingsView({ data, fixtures, leaderboardStats, liveTs, liveStatus, onNavigate, onTeamClick }: {
@@ -3618,8 +3622,8 @@ function SettingsView({ data, fixtures, leaderboardStats, liveTs, liveStatus, on
       </Row>,
     ] },
     { title: "Map", icon: "map", rows: [
-      <Row key="map-style" icon="map" title="Default Map Style" subtitle="Sets the visual style for the host city map." tags={["light dark satellite terrain"]}>
-        <SegmentControl value={settings.mapStyle} options={["Light", "Dark", "Satellite", "Terrain"] as const} label="Map style" onChange={value => update("mapStyle", value)} />
+      <Row key="map-style" icon="map" title="Default Map Style" subtitle="Sets the visual style for the host city map." tags={["light dark terrain"]}>
+        <SegmentControl value={settings.mapStyle} options={["Light", "Dark", "Terrain"] as const} label="Map style" onChange={value => update("mapStyle", value)} />
       </Row>,
       <Row key="map-center" icon="venue" title="Automatically Center On" subtitle={settings.mapCenter === "User location" ? "Uses your location only if permission is already granted." : "Choose the map context that should take priority when opening Map."} tags={["favorite team live venue user location"]}>
         <SelectControl value={settings.mapCenter} options={["Favorite team", "Current live venue", "User location"] as const} label="Automatically center map" onChange={value => update("mapCenter", value)} />

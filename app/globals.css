@@ -1665,32 +1665,82 @@ body::after {
 
 /* -- Tournament progress bar -------------------------------------- */
 .home-dash__progress {
-  padding: 16px 18px;
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 18px;
-  background: var(--card);
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(245,158,11,0.09), transparent 34%),
+    linear-gradient(145deg, rgba(255,255,255,0.065), rgba(255,255,255,0.025)),
+    var(--card);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.055), 0 18px 42px rgba(0,0,0,0.18);
 }
 
 .home-progress__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 10px;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.home-progress__header > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.home-progress__eyebrow {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .7px;
+  text-transform: uppercase;
 }
 
 .home-progress__stage {
+  display: block;
   font-family: var(--disp);
-  font-size: 15px;
+  font-size: clamp(20px, 3vw, 28px);
+  line-height: .95;
   font-weight: 800;
   text-transform: uppercase;
   color: var(--gold-bright);
 }
 
 .home-progress__count {
+  flex: 0 0 auto;
   font-family: var(--disp);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
+  color: #111827;
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold));
+  border-radius: 999px;
+  padding: 7px 10px;
+  box-shadow: 0 10px 24px rgba(245,158,11,0.18);
+}
+
+.home-progress__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.065);
+  border-radius: 14px;
+  background: rgba(0,0,0,0.12);
+}
+
+.home-progress__summary b {
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.home-progress__summary span {
   color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.25;
 }
 
 .home-progress__bar {
@@ -1714,10 +1764,15 @@ body::after {
 .home-checkpoint {
   display: flex;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0;
-  padding: 18px 4px 14px;
+  padding: 18px 4px 16px;
   margin-bottom: 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.home-checkpoint::-webkit-scrollbar {
+  display: none;
 }
 .home-checkpoint__phase {
   appearance: none;
@@ -1729,8 +1784,8 @@ body::after {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  min-width: 40px;
+  gap: 6px;
+  min-width: 76px;
   padding: 0;
   position: relative;
 }
@@ -1773,13 +1828,15 @@ body::after {
 }
 .home-checkpoint__label {
   font-family: var(--disp);
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1.05;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .3px;
+  letter-spacing: 0;
   color: var(--muted);
   transition: color .3s;
-  white-space: nowrap;
+  text-align: center;
+  max-width: 74px;
 }
 .home-checkpoint__label--active {
   color: var(--gold-bright);
@@ -1789,7 +1846,14 @@ body::after {
   font-size: 10px;
   font-weight: 600;
   color: var(--ink-soft);
-  letter-spacing: .2px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.home-checkpoint__sub--active {
+  color: var(--gold-bright);
+}
+.home-checkpoint__sub--done {
+  color: #d9f99d;
 }
 .home-checkpoint__mini-bar {
   width: 40px;
@@ -1806,12 +1870,11 @@ body::after {
   transition: width .6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .home-checkpoint__rail {
-  flex: 1;
+  flex: 0 0 16px;
   height: 2.5px;
   background: rgba(255,255,255,0.08);
   border-radius: 2px;
   margin-top: 13px;
-  min-width: 8px;
   transition: background .4s;
 }
 .home-checkpoint__rail--done {
@@ -1820,11 +1883,14 @@ body::after {
 /* Narrow phones: seven steps still fit by shrinking dots and hiding the
    per-step counts (the header keeps the overall total). */
 @media (max-width: 430px) {
-  .home-checkpoint__phase { min-width: 34px; }
+  .home-dash__progress { padding: 15px; }
+  .home-progress__header { align-items: stretch; flex-direction: column; }
+  .home-progress__count { width: fit-content; }
+  .home-checkpoint__phase { min-width: 78px; }
   .home-checkpoint__dot { width: 24px; height: 24px; }
   .home-checkpoint__dot--trophy { font-size: 12px; }
-  .home-checkpoint__rail { margin-top: 11px; min-width: 5px; }
-  .home-checkpoint__label { font-size: 9px; letter-spacing: .2px; }
+  .home-checkpoint__rail { flex-basis: 16px; margin-top: 11px; }
+  .home-checkpoint__label { font-size: 9px; max-width: 74px; }
   .home-checkpoint__sub { font-size: 9px; }
 }
 

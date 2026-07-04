@@ -1879,11 +1879,11 @@ function PitchLines() {
 /* Every knockout round gets its own checkpoint on the home progress
    tracker — matched against the round labels in lib/data.ts. */
 const KO_ROUND_STEPS: { key: string; label: string; matches: (round: string) => boolean }[] = [
-  { key: "r32", label: "R32", matches: r => r.startsWith("Round of 32") },
-  { key: "r16", label: "R16", matches: r => r.startsWith("Round of 16") },
-  { key: "qf", label: "QF", matches: r => r.toLowerCase().startsWith("quarter") },
-  { key: "sf", label: "SF", matches: r => r.toLowerCase().startsWith("semi") },
-  { key: "third", label: "3rd", matches: r => /third/i.test(r) },
+  { key: "r32", label: "Round of 32", matches: r => r.startsWith("Round of 32") },
+  { key: "r16", label: "Round of 16", matches: r => r.startsWith("Round of 16") },
+  { key: "qf", label: "Quarterfinals", matches: r => r.toLowerCase().startsWith("quarter") },
+  { key: "sf", label: "Semifinals", matches: r => r.toLowerCase().startsWith("semi") },
+  { key: "third", label: "Third Place", matches: r => /third/i.test(r) },
   { key: "final", label: "Final", matches: r => r.trim() === "Final" },
 ];
 
@@ -1924,6 +1924,14 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
   const totalDone = groupDone + koDone;
 
   const stageLabel = koDone >= 31 ? "Final" : koDone >= 30 ? "Third Place" : koDone >= 28 ? "Semifinals" : koDone >= 24 ? "Quarterfinals" : koDone >= 16 ? "Round of 16" : koDone >= 0 && groupDone >= 72 ? "Round of 32" : "Group Stage";
+  const progressPct = totalMatches > 0 ? Math.round((totalDone / totalMatches) * 100) : 0;
+  const stageProgress = stageLabel === "Group Stage"
+    ? { done: groupDone, total: data.gs.length }
+    : koRounds.find(round => round.label === stageLabel) || { done: 0, total: 0 };
+  const remainingMatches = Math.max(0, totalMatches - totalDone);
+  const stageSummary = stageProgress.total > 0
+    ? `${stageProgress.done} of ${stageProgress.total} ${stageLabel} matches complete`
+    : "Tournament schedule is ready";
 
   /* -- live matches ----------------------------------------------- */
   const liveMatches = useMemo(() => {
@@ -2138,8 +2146,15 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
       {/* ── Section 2: Tournament Progress ───────────────────── */}
       <section className="home-dash__progress">
         <div className="home-progress__header">
-          <span className="home-progress__stage">{stageLabel}</span>
-          <span className="home-progress__count">{totalDone}/{totalMatches}</span>
+          <div>
+            <span className="home-progress__eyebrow">Tournament Status</span>
+            <span className="home-progress__stage">{stageLabel}</span>
+          </div>
+          <span className="home-progress__count">{progressPct}% complete</span>
+        </div>
+        <div className="home-progress__summary">
+          <b>{stageSummary}</b>
+          <span>{totalDone} of {totalMatches} matches played · {remainingMatches} to go</span>
         </div>
 
         {/* Checkpoint tracker — every tournament round is its own step:
@@ -2166,6 +2181,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
                 const active = index === firstIncomplete;
                 const pct = phase.total > 0 ? Math.min(100, Math.round((phase.done / phase.total) * 100)) : 0;
                 const prevComplete = index > 0 && phases[index - 1].total > 0 && phases[index - 1].done >= phases[index - 1].total;
+                const statusText = complete ? "Done" : active ? "Now" : "Next";
                 return (
                   <Fragment key={phase.key}>
                     {index > 0 && <div className={`home-checkpoint__rail ${prevComplete ? "home-checkpoint__rail--done" : ""}`} />}
@@ -2181,7 +2197,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
                           : <span className="home-checkpoint__dot-inner" />}
                       </div>
                       <span className={`home-checkpoint__label ${active ? "home-checkpoint__label--active" : ""}`}>{phase.label}</span>
-                      <span className="home-checkpoint__sub">{phase.done}/{phase.total}</span>
+                      <span className={`home-checkpoint__sub ${active ? "home-checkpoint__sub--active" : complete ? "home-checkpoint__sub--done" : ""}`}>{statusText} · {phase.done}/{phase.total}</span>
                       {active && <div className="home-checkpoint__mini-bar"><div className="home-checkpoint__mini-fill" style={{ width: `${pct}%` }} /></div>}
                     </button>
                   </Fragment>
@@ -2193,16 +2209,16 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
 
         <div className="home-progress__stats">
           <button type="button" className="home-progress__stat" onClick={() => onNavigate("schedule")}>
-            <b>{groupDone}<small>/{data.gs.length}</small></b><span>Group matches</span>
+            <b>{groupDone}<small>/{data.gs.length}</small></b><span>Group played</span>
           </button>
           <button type="button" className="home-progress__stat" onClick={() => onNavigate("bracket")}>
-            <b>{koDone}<small>/{data.ko.length}</small></b><span>Knockout matches</span>
+            <b>{koDone}<small>/{data.ko.length}</small></b><span>Knockout decided</span>
           </button>
           <div className="home-progress__stat">
             <b>{leaders.totalGoals}</b><span>Goals</span>
           </div>
           <div className="home-progress__stat">
-            <b>{leaders.avgGoals}</b><span>Per Match</span>
+            <b>{leaders.avgGoals}</b><span>Goals / Match</span>
           </div>
         </div>
       </section>

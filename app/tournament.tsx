@@ -2489,13 +2489,8 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
       const q = search.toLowerCase();
       result = result.filter(t => t.team.toLowerCase().includes(q));
     }
-    /* Sort favorites to top */
-    return [...result].sort((a, b) => {
-      const aFav = favs.has(a.team) ? 0 : 1;
-      const bFav = favs.has(b.team) ? 0 : 1;
-      return aFav - bFav;
-    });
-  }, [teamsData, filter, search, favs]);
+    return [...result].sort((a, b) => a.team.localeCompare(b.team));
+  }, [teamsData, filter, search]);
 
   return (
     <main className="teams-view" aria-label="Teams">

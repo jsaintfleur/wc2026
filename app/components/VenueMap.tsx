@@ -26,6 +26,8 @@ export interface VenueMapMarker {
   active: boolean;
   /* true when this venue is one of the selected team's route stops */
   onTeamPath: boolean;
+  /* true for dense northeast venues whose city labels read better leftward */
+  labelLeft: boolean;
   /* true when the venue is excluded by the current filter — rendered dimmed */
   muted: boolean;
   matchesHosted: number;
@@ -247,7 +249,7 @@ export default function VenueMap({
       '<span class="vm-marker__hit"></span>' +
       (m.live ? '<span class="vm-marker__pulse"></span>' : "") +
       '<span class="vm-marker__dot"></span>' +
-      `<span class="vm-marker__label">${m.city.replace(/</g, "&lt;")}</span>` +
+      `<span class="vm-marker__label${m.labelLeft ? " vm-marker__label--left" : ""}">${m.city.replace(/</g, "&lt;")}</span>` +
       "</span>",
   })), [markers]);
 

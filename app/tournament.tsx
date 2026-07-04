@@ -2868,6 +2868,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     live: venue.liveCount > 0,
     active: venue.venueId === activeVenueId,
     onTeamPath: selectedTeam !== "ALL" && teamJourney.some(match => match.venueId === venue.venueId),
+    labelLeft: MAP_LABEL_LEFT_VENUES.has(venue.venueId),
     muted: !filteredVenueIds.has(venue.venueId),
     matchesHosted: venue.matchesHosted,
     liveCount: venue.liveCount,

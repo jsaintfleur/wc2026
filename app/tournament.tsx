@@ -2654,6 +2654,11 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   const canvasScrollRef = useRef<HTMLDivElement>(null);
 
   const selectVenue = (venueId: string) => {
+    /* Explicit marker intent beats the active venue filter: if a dimmed
+       marker is tapped, clear the status/country filter so the selection and
+       panel cannot be immediately snapped back to another venue. Team path
+       context stays intact because the user may still be exploring that team. */
+    if (!filteredVenueIds.has(venueId)) setFilter("all");
     setActiveVenueId(venueId);
     /* Opening from closed/collapsed lands on the half sheet; an already
        open panel keeps its current size. */

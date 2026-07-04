@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useMemo, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Polyline, ZoomControl, useMap, useMapEvents } from "react-leaflet";
 import { divIcon, latLngBounds, type LeafletEvent, type Map as LeafletMap } from "leaflet";
 
 export interface VenueMapMarker {
@@ -232,10 +232,12 @@ export default function VenueMap({
       minZoom={3}
       maxZoom={12}
       className={`venue-leaflet venue-leaflet--${mapStyle.toLowerCase()}`}
+      zoomControl={false}
       scrollWheelZoom
       doubleClickZoom={false}
       attributionControl
     >
+      <ZoomControl position="bottomright" />
       <TileLayer key={mapStyle} url={tiles.url} attribution={tiles.attribution} />
       {routePoints.length > 1 && (
         <Polyline

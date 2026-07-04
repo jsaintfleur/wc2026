@@ -9092,6 +9092,7 @@ button.settings-row:active,
   .map-controls { top: 60px; right: 12px; }
   .map-empty { inset: 66px 14px auto; z-index: 6; max-width: calc(100% - 28px); }
   .map-reopen-pill { position: fixed; right: 12px; bottom: calc(74px + env(safe-area-inset-bottom) + 10px); z-index: 65; max-width: calc(100vw - 24px); }
+  .venue-leaflet .leaflet-bottom.leaflet-right { right: 12px; bottom: calc(92px + env(safe-area-inset-bottom)); }
   /* Bottom sheet: floats above the bottom nav, never part of page flow, so
      the map stays fully pannable behind/around it. Three sizes:
      collapsed (header pill) / half / expanded. */

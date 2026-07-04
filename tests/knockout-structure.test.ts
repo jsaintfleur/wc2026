@@ -27,6 +27,33 @@ test("knockout tab ranges use the full official match range", () => {
   assert.equal(knockoutMatchRange(KNOCKOUT_ROUND_MATCH_NUMBERS.final), "M104");
 });
 
+test("round of 32 schedule matches verified match-number order", () => {
+  const r32 = DATA.ko.filter(match => match.round === "Round of 32");
+  assert.equal(r32.length, 16);
+  assert.deepEqual(r32.map((match, index) => ({
+    no: KNOCKOUT_ROUND_MATCH_NUMBERS.r32[index],
+    ts: new Date(match.ts).toISOString(),
+    venue: match.v,
+  })), [
+    { no: 73, ts: "2026-06-28T19:00:00.000Z", venue: "SOFI" },
+    { no: 74, ts: "2026-06-29T20:30:00.000Z", venue: "GILLETTE" },
+    { no: 75, ts: "2026-06-30T01:00:00.000Z", venue: "BBVA" },
+    { no: 76, ts: "2026-06-29T17:00:00.000Z", venue: "NRG" },
+    { no: 77, ts: "2026-06-30T21:00:00.000Z", venue: "METLIFE" },
+    { no: 78, ts: "2026-06-30T17:00:00.000Z", venue: "ATT" },
+    { no: 79, ts: "2026-07-01T02:00:00.000Z", venue: "AZT" },
+    { no: 80, ts: "2026-07-01T16:00:00.000Z", venue: "MBS" },
+    { no: 81, ts: "2026-07-02T00:00:00.000Z", venue: "LEVI" },
+    { no: 82, ts: "2026-07-01T20:00:00.000Z", venue: "LUMEN" },
+    { no: 83, ts: "2026-07-02T23:00:00.000Z", venue: "BMO" },
+    { no: 84, ts: "2026-07-02T19:00:00.000Z", venue: "SOFI" },
+    { no: 85, ts: "2026-07-03T03:00:00.000Z", venue: "BCP" },
+    { no: 86, ts: "2026-07-03T22:00:00.000Z", venue: "HARDROCK" },
+    { no: 87, ts: "2026-07-04T01:30:00.000Z", venue: "ARROW" },
+    { no: 88, ts: "2026-07-03T18:00:00.000Z", venue: "ATT" },
+  ]);
+});
+
 test("round of 16 schedule and source pairs match verified ESPN/wc26 order", () => {
   const r16 = DATA.ko.filter(match => match.round === "Round of 16");
   assert.equal(r16.length, 8);
@@ -35,7 +62,7 @@ test("round of 16 schedule and source pairs match verified ESPN/wc26 order", () 
     [0, 2],   // M89: W73 Canada vs W75 Morocco
     [1, 4],   // M90: W74 Paraguay vs W77 France
     [3, 5],   // M91: W76 Brazil vs W78 Norway
-    [6, 7],   // M92: W79 Mexico vs W80 England
+    [6, 7],   // M92: W79 Mexico    vs W80 England
     [10, 11], // M93: W83 Portugal vs W84 Spain
     [8, 9],   // M94: W81 United States vs W82 Belgium
     [13, 15], // M95: W86 Argentina vs W88 Egypt

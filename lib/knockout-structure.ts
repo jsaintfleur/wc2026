@@ -10,10 +10,9 @@ export const KNOCKOUT_ROUND_MATCH_NUMBERS = {
 export type KnockoutStructureRoundKey = keyof typeof KNOCKOUT_ROUND_MATCH_NUMBERS;
 
 export const KNOCKOUT_SOURCE_PAIRS: Partial<Record<KnockoutStructureRoundKey, [number, number][]>> = {
-  // Verified against ESPN scoreboard and worldcup26.ir on 2026-07-04:
-  // M89 Canada-Morocco, M90 Paraguay-France, M91 Brazil-Norway,
-  // M92 Mexico-England, M93 Portugal-Spain, M94 United States-Belgium,
-  // M95 Argentina-Egypt, M96 Switzerland-Colombia.
+  // R16 feeder pairs as round-local R32 indices (index i = match M73+i).
+  // Keep this table coupled to DATA.ko's match-number order, not display
+  // chronology; R32 matches are not numbered chronologically.
   r16: [[0, 2], [1, 4], [3, 5], [6, 7], [10, 11], [8, 9], [13, 15], [12, 14]],
   qf: [[0, 1], [4, 5], [2, 3], [6, 7]],
   sf: [[0, 1], [2, 3]],

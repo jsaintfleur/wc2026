@@ -176,21 +176,21 @@ const KO_ROUNDS: {
 
 const R32_SEEDS = [
   ["2A", "2B"],
-  ["1C", "2F"],
   ["1E", "3ABCDF"],
   ["1F", "2C"],
-  ["2E", "2I"],
+  ["1C", "2F"],
   ["1I", "3CDFGH"],
+  ["2E", "2I"],
   ["1A", "3CEFHI"],
   ["1L", "3EHIJK"],
-  ["1G", "3AEHIJ"],
   ["1D", "3BEFIJ"],
-  ["1H", "2J"],
+  ["1G", "3AEHIJ"],
   ["2K", "2L"],
+  ["1H", "2J"],
   ["1B", "3EFGIJ"],
-  ["2D", "2G"],
   ["1J", "2H"],
   ["1K", "3DEIJL"],
+  ["2D", "2G"],
 ] as const;
 
 const KO_SOURCE_PAIRS: Partial<Record<KnockoutRoundKey, [number, number][]>> = KNOCKOUT_SOURCE_PAIRS;

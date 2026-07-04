@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DATA, type MatchEvent } from "@/lib/data";
-import { canon, canonPlayer, mergeFixtures, type VendorFixture as MergeVendorFixture, type ScheduleMatch } from "@/lib/merge";
+import { canon, canonPlayer, mergeFixtures, nrm, type VendorFixture as MergeVendorFixture, type ScheduleMatch } from "@/lib/merge";
 import { VERIFIED_RESULTS } from "@/lib/verified-results";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
@@ -158,6 +158,12 @@ const KO_SCHEDULE_BY_TS: Array<{ ts: number; venue: string; round: string }> = D
   ts: m.ts, venue: DATA.venues[m.v]?.common || "", round: m.round,
 }));
 
+function venueNamesMatch(left: string | undefined, right: string | undefined): boolean {
+  const a = nrm(left || "");
+  const b = nrm(right || "");
+  return !!a && !!b && (a === b || a.includes(b) || b.includes(a));
+}
+
 async function fetchStadiumMap(): Promise<Record<string, string>> {
   if (STADIUM_CACHE) return STADIUM_CACHE;
   try {
@@ -214,10 +220,12 @@ async function fetchWC26(): Promise<{ ok: boolean; fixtures: unknown[] }> {
     // and try to find the closest KO schedule slot.
     const pairKey = [canon(g.home_team_name_en), canon(g.away_team_name_en)].sort().join("|");
     let scheduled = SCHEDULE_BY_PAIR.get(pairKey);
+    const stadiumName = stadiums[g.stadium_id] || "";
     if (!scheduled && g.type !== "group" && g.local_date) {
       const wc26Ts = Date.parse(g.local_date);
       if (wc26Ts > 0) {
-        const koMatch = KO_SCHEDULE_BY_TS.find(k => Math.abs(k.ts - wc26Ts) < 12 * 3600000 && k.round === roundLabel(g));
+        const candidates = KO_SCHEDULE_BY_TS.filter(k => Math.abs(k.ts - wc26Ts) < 12 * 3600000 && k.round === roundLabel(g));
+        const koMatch = candidates.find(k => venueNamesMatch(k.venue, stadiumName)) || candidates[0];
         if (koMatch) scheduled = koMatch;
       }
     }
@@ -226,7 +234,7 @@ async function fetchWC26(): Promise<{ ok: boolean; fixtures: unknown[] }> {
       ts: scheduled?.ts || (g.local_date ? Date.parse(g.local_date) || 0 : 0),
       status,
       elapsed,
-      venue: scheduled?.venue || stadiums[g.stadium_id] || "",
+      venue: scheduled?.venue || stadiumName,
       round: scheduled?.round || roundLabel(g),
       home: g.home_team_name_en,
       away: g.away_team_name_en,

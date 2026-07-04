@@ -1560,7 +1560,7 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
             onViewVenueMatches={openVenueSchedule}
           />
         ) : view === "analytics" ? (
-          <AnalyticsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} />
+          <AnalyticsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} onMatchClick={openMatchDetail} />
         ) : view === "more" ? (
           <MoreView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} />
         ) : view === "settings" ? (
@@ -3861,6 +3861,7 @@ type AnalyticsMatch = {
   ts: number;
   home: string;
   away: string;
+  sourceMatch: GroupStageMatch;
   status: "completed" | "live" | "upcoming";
   gh: number | null;
   ga: number | null;
@@ -3938,7 +3939,7 @@ type AnalyticsModel = {
   confederations: ConfederationAnalytics[];
   remainingByConfed: Record<Confederation, TeamAnalytics[]>;
   comparisonCards: { label: string; value: string; detail: string }[];
-  matchups: { key: string; stage: string; date: string; home: TeamAnalytics; away: TeamAnalytics; upsetPotential: number; difficulty: string }[];
+  matchups: { key: string; stage: string; date: string; kickoff: string; venue: string; match: GroupStageMatch; fixture: LiveFixture | null; home: TeamAnalytics; away: TeamAnalytics; leanHome: number; leanAway: number; upsetPotential: number; difficulty: string }[];
   strongestTeam: TeamAnalytics;
   bestAttack: TeamAnalytics;
   bestDefense: TeamAnalytics;
@@ -4076,6 +4077,7 @@ function buildAnalyticsModel(
       ts: m.ts,
       home: canon(m.t1),
       away: canon(m.t2),
+      sourceMatch: m,
       status: done ? "completed" : live ? "live" : "upcoming",
       gh: done ? (fixture?.gh ?? m.dbGh ?? null) : null,
       ga: done ? (fixture?.ga ?? m.dbGa ?? null) : null,
@@ -4088,12 +4090,24 @@ function buildAnalyticsModel(
     const stale = fixture && isStaleStatus(m.ts, fixture.status, nowMs);
     const done = !stale && !!fixture && DONE_STATUSES.has(fixture.status) && fixture.gh != null && fixture.ga != null;
     const live = !stale && !!fixture && LIVE_STATUSES.has(fixture.status);
+    const sourceMatch: GroupStageMatch = {
+      no: 73 + index,
+      iso: m.iso,
+      local: m.local,
+      et: m.et,
+      g: "KO",
+      t1: fixture?.home ? canon(fixture.home) : "TBD",
+      t2: fixture?.away ? canon(fixture.away) : "TBD",
+      v: m.v,
+      ts: m.ts,
+    };
     matches.push({
       key: `ko-${index}`,
       stage: m.round,
       ts: m.ts,
       home: fixture?.home ? canon(fixture.home) : "TBD",
       away: fixture?.away ? canon(fixture.away) : "TBD",
+      sourceMatch,
       status: done ? "completed" : live ? "live" : "upcoming",
       gh: done ? fixture.gh : null,
       ga: done ? fixture.ga : null,
@@ -4290,12 +4304,20 @@ function buildAnalyticsModel(
       const home = byTeam.get(match.home)!;
       const away = byTeam.get(match.away)!;
       const diff = Math.abs(home.score - away.score);
+      const totalStrength = Math.max(1, home.score + away.score);
+      const leanHome = Math.round((home.score / totalStrength) * 100);
       return {
         key: match.key,
         stage: match.stage,
         date: shortDate(match.ts),
+        kickoff: new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(match.ts)),
+        venue: data.venues[match.sourceMatch.v]?.common || "Venue TBD",
+        match: match.sourceMatch,
+        fixture: match.fixture,
         home,
         away,
+        leanHome,
+        leanAway: 100 - leanHome,
         upsetPotential: Math.max(8, Math.round(100 - diff * 1.6)),
         difficulty: diff < 8 ? "Toss-up" : diff < 18 ? "Pressure match" : "Favorite-heavy",
       };
@@ -4310,12 +4332,13 @@ function normalizeAnalyticsTab(value: string | null): AnalyticsTab | null {
   return null;
 }
 
-function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
+function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchClick }: {
   data: TournamentData;
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
   onTeamClick: (team: string) => void;
+  onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
 }) {
   const initialTab = useMemo<AnalyticsTab>(() => {
     if (typeof window === "undefined") return "teams";
@@ -4545,17 +4568,23 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
             <div className="analytics-matchups">
               {analytics.matchups.map(matchup => (
                 <article key={matchup.key} className="analytics-matchup-card">
-                  <header><span>{matchup.stage} · {matchup.date}</span><b>{matchup.difficulty}</b></header>
+                  <header><span>{matchup.stage} · {matchup.kickoff}</span><b>{matchup.difficulty}</b></header>
                   <div className="analytics-matchup-card__teams">
                     <button type="button" onClick={() => setAnalyticsTeam(matchup.home.team)}>{data.flags[matchup.home.team]} {matchup.home.team}<small>{matchup.home.score} strength · {matchup.home.confederation}</small></button>
                     <strong>vs</strong>
                     <button type="button" onClick={() => setAnalyticsTeam(matchup.away.team)}>{data.flags[matchup.away.team]} {matchup.away.team}<small>{matchup.away.score} strength · {matchup.away.confederation}</small></button>
                   </div>
+                  <div className="analytics-lean" role="img" aria-label={`Model lean ${matchup.home.team} ${matchup.leanHome}, ${matchup.away.team} ${matchup.leanAway}`}>
+                    <span style={{ width: `${matchup.leanHome}%` }}>{matchup.leanHome}</span>
+                    <span style={{ width: `${matchup.leanAway}%` }}>{matchup.leanAway}</span>
+                  </div>
                   <div className="analytics-matchup-bars">
+                    <span>Model lean <b>{matchup.leanHome} / {matchup.leanAway}</b></span>
                     <span>Attack vs defense <b>{matchup.home.attack} / {matchup.away.defense}</b></span>
                     <span>Return pressure <b>{matchup.away.attack} / {matchup.home.defense}</b></span>
-                    <span>Upset potential <b>{matchup.upsetPotential}%</b></span>
+                    <span>Venue <b>{matchup.venue}</b></span>
                   </div>
+                  <button type="button" className="analytics-matchup-card__match" onClick={() => onMatchClick(matchup.match, matchup.fixture)}>View match details</button>
                 </article>
               ))}
             </div>

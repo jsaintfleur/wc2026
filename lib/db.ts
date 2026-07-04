@@ -106,6 +106,7 @@ export async function loadTournamentData(): Promise<{ data: TournamentData; sour
           } : {}),
         });
       } else {
+        const dbFixtureId = state?.vendorFixtureId == null ? null : Number(state.vendorFixtureId);
         ko.push({
           round: m.round || "",
           mr: m.matchRange || "",
@@ -114,6 +115,20 @@ export async function loadTournamentData(): Promise<{ data: TournamentData; sour
           et: m.etTime,
           v: m.venueCode,
           ts,
+          t1: m.homeTeam?.name || undefined,
+          t2: m.awayTeam?.name || undefined,
+          ...(state ? {
+            dbStatus: state.status,
+            dbElapsed: state.elapsed,
+            dbGh: state.homeGoals,
+            dbGa: state.awayGoals,
+            dbEvents: state.events as unknown as MatchEvent[] | undefined,
+            dbStats: state.stats as unknown as MatchStats | undefined,
+            dbLineups: state.lineups as unknown as TeamLineup[] | undefined,
+            dbPlayers: state.players as unknown as PlayerMatchStat[] | undefined,
+            dbReferee: state.referee,
+            dbFixtureId,
+          } : {}),
         });
       }
     }

@@ -51,6 +51,18 @@ export interface KnockoutMatch {
   et: string;
   v: string;
   ts: number;
+  t1?: string;
+  t2?: string;
+  dbStatus?: string;
+  dbElapsed?: number | null;
+  dbGh?: number | null;
+  dbGa?: number | null;
+  dbEvents?: MatchEvent[];
+  dbStats?: MatchStats;
+  dbLineups?: TeamLineup[];
+  dbPlayers?: PlayerMatchStat[];
+  dbReferee?: string | null;
+  dbFixtureId?: number | null;
 }
 
 export interface TournamentData {

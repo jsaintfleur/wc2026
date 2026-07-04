@@ -10,6 +10,7 @@ import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import { PLAYER_PHOTO_IDS, playerPhotoUrl } from "@/lib/player-photos";
 import { groupConsecutiveJourneyStops } from "@/lib/map-journey";
 import { resolveFilteredVenueSelection } from "@/lib/map-filters";
+import { bucketScheduleItems } from "@/lib/schedule-buckets";
 import { buildTeamJourney, type JourneyMatchInput, type JourneyVenue } from "@/lib/journey";
 import { buildTeamRecords } from "@/lib/team-records";
 import { auditTournament } from "@/lib/integrity";
@@ -556,6 +557,26 @@ function buildKnockoutCards(
     function loserFromFixture(fixture: LiveFixture | null): string | null {
       return loserNameFromKnockoutFixture(fixture, teamName);
     }
+    function fixtureFromMatchState(match: KnockoutMatch): LiveFixture | null {
+      if (!match.t1 || !match.t2 || !match.dbStatus) return null;
+      return {
+        ts: match.ts,
+        status: match.dbStatus,
+        elapsed: match.dbElapsed ?? null,
+        venue: match.v,
+        round: match.round,
+        home: match.t1,
+        away: match.t2,
+        gh: match.dbGh ?? null,
+        ga: match.dbGa ?? null,
+        events: match.dbEvents,
+        stats: match.dbStats,
+        lineups: match.dbLineups,
+        players: match.dbPlayers,
+        referee: match.dbReferee || undefined,
+        fixtureId: match.dbFixtureId || undefined,
+      };
+    }
     function sourcePair(round: KnockoutRoundKey, index: number): [number, number] {
       return KO_SOURCE_PAIRS[round]?.[index] || [index * 2, index * 2 + 1];
     }
@@ -581,19 +602,28 @@ function buildKnockoutCards(
       const scheduled = data.ko.filter(match => match.round === config.dataRound);
       const roundCards = scheduled.map((match, index) => {
         const matchNo = config.matchNumbers[index] || Number(match.mr) || 0;
-        const fixture = findLive({ ts: match.ts, v: match.v }, fixtures);
+        const liveFixture = findLive({ ts: match.ts, v: match.v }, fixtures);
+        const fixture = liveFixture || fixtureFromMatchState(match);
         const isLive = !!fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(match.ts, fixture.status, nowMs);
         const isDone = isCompletedKnockoutFixture(fixture);
         const winnerName = winnerFromFixture(fixture);
         const loserName = loserFromFixture(fixture);
         let teams: [KnockoutParticipant, KnockoutParticipant];
 
+        const hasMatchTeams = !!match.t1 && !!match.t2 && match.t1 !== "TBD" && match.t2 !== "TBD";
         const trustVendorTeams = fixture?.home && fixture?.away &&
           (config.key === "r32" || isLive || isDone);
 
         if (trustVendorTeams) {
           const home = teamName(fixture!.home);
           const away = teamName(fixture!.away);
+          teams = [
+            { name: home, winner: winnerName === home, loser: loserName === home },
+            { name: away, winner: winnerName === away, loser: loserName === away },
+          ];
+        } else if (hasMatchTeams) {
+          const home = teamName(match.t1);
+          const away = teamName(match.t2);
           teams = [
             { name: home, winner: winnerName === home, loser: loserName === home },
             { name: away, winner: winnerName === away, loser: loserName === away },
@@ -1240,11 +1270,18 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
     const completedMatches = list.filter(m => isMatchDone(m) || isPastUnresolved(m)).sort((a, b) => b.ts - a.ts);
     const futureMatches = list.filter(m => m.iso > today && !isMatchDone(m) && !isPastUnresolved(m) && !isLiveMatch(m));
 
-    /* Categorize knockout cards */
-    const liveKoCards = knockoutCards.filter(c => c.isLive);
-    const todayKoCards = knockoutCards.filter(c => c.match.iso === today && !c.isLive && !c.isDone);
-    const doneKoCards = knockoutCards.filter(c => c.isDone).sort((a, b) => b.match.ts - a.match.ts);
-    const futureKoCards = knockoutCards.filter(c => c.match.iso > today && !c.isDone && !c.isLive);
+    /* Categorize knockout cards. Unresolved past KO cards stay visible so
+       vendor lag cannot make a resolved matchup disappear from the schedule. */
+    const koBuckets = bucketScheduleItems(knockoutCards, today, now, card => ({
+      iso: card.match.iso,
+      ts: card.match.ts,
+      isLive: card.isLive,
+      isDone: card.isDone,
+    }));
+    const liveKoCards = koBuckets.live;
+    const todayKoCards = koBuckets.today;
+    const doneKoCards = koBuckets.previous.sort((a, b) => b.match.ts - a.match.ts);
+    const futureKoCards = koBuckets.future;
 
     /* Group by ISO date for chronological sections */
     function groupByDate<T>(items: T[], isoFn: (item: T) => string): Map<string, T[]> {

@@ -2671,6 +2671,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   const explicitSelectionRef = useRef<string | null>(null);
   const userFilterActionRef = useRef(false);
   const routeFitIssuedRef = useRef(false);
+  const mapInteractedRef = useRef(false);
 
   const mapFocusOffsets = (nextPanel: MapPanelState) => {
     const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
@@ -2686,6 +2687,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   };
 
   const selectVenue = (venueId: string) => {
+    mapInteractedRef.current = true;
     explicitSelectionRef.current = venueId;
     /* Explicit marker intent beats the active venue filter: if a dimmed
        marker is tapped, clear the status/country filter so the selection and
@@ -2707,6 +2709,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   };
 
   const showAllVenues = () => {
+    mapInteractedRef.current = true;
     /* Leaflet fits geographic bounds; the SVG error fallback resets to its
        full-country scale and scroll origin so all markers are recoverable. */
     setSvgZoom(1);
@@ -2715,22 +2718,26 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   };
 
   const setStatusFilterFromUser = (next: MapStatusFilter) => {
+    mapInteractedRef.current = true;
     userFilterActionRef.current = true;
     setStatusFilter(next);
   };
 
   const setCountryFilterFromUser = (next: MapCountryFilter | ((current: MapCountryFilter) => MapCountryFilter)) => {
+    mapInteractedRef.current = true;
     userFilterActionRef.current = true;
     setCountryFilter(next);
   };
 
   const setSelectedTeamFromUser = (next: string) => {
+    mapInteractedRef.current = true;
     userFilterActionRef.current = true;
     setSelectedTeam(next);
   };
 
   /* Persist the live map view when "remember last location" is on */
   const handleViewChange = useCallback((center: [number, number], zoom: number) => {
+    mapInteractedRef.current = true;
     viewRef.current = { center, zoom };
     if (!prefs.rememberMap) return;
     try {
@@ -2993,6 +3000,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
       navigator.permissions.query({ name: "geolocation" }).then(status => {
         if (status.state !== "granted") return;
         navigator.geolocation.getCurrentPosition(position => {
+          if (mapInteractedRef.current) return;
           const { latitude, longitude } = position.coords;
           let nearest: { venueId: string; d: number } | null = null;
           for (const venue of Object.values(HOST_VENUE_DETAILS)) {

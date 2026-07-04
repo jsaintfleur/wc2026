@@ -173,8 +173,20 @@ function MapController({ markers, focusRequest, fitRequest, routeFitRequest, aut
   const handledFitSeqRef = useRef(0);
   const handledRouteFitSeqRef = useRef(0);
   const checkedEmptyRestoreRef = useRef(false);
+  const pendingFocusSeqRef = useRef(0);
   const markersRef = useRef(markers);
   markersRef.current = markers;
+
+  const applyFocusRequest = (request: VenueFocusRequest): boolean => {
+    const marker = markersRef.current.find(m => m.venueId === request.venueId);
+    if (!marker) return false;
+    const zoom = Math.max(map.getZoom(), 5);
+    const point = map
+      .project([marker.latitude, marker.longitude], zoom)
+      .add([request.offsetX, request.offsetY]);
+    map.flyTo(map.unproject(point, zoom), zoom, { duration: 0.55 });
+    return true;
+  };
 
   /* Re-measure when the surrounding layout (sheet/panel) changes size —
      otherwise Leaflet keeps rendering into the stale viewport box. */
@@ -188,15 +200,15 @@ function MapController({ markers, focusRequest, fitRequest, routeFitRequest, aut
      by the offset moves the MARKER up/left in the viewport. */
   useEffect(() => {
     if (!focusRequest) return;
-    const marker = markers.find(m => m.venueId === focusRequest.venueId);
-    if (!marker) return;
-    const zoom = Math.max(map.getZoom(), 5);
-    const point = map
-      .project([marker.latitude, marker.longitude], zoom)
-      .add([focusRequest.offsetX, focusRequest.offsetY]);
-    map.flyTo(map.unproject(point, zoom), zoom, { duration: 0.55 });
+    if (!applyFocusRequest(focusRequest)) pendingFocusSeqRef.current = focusRequest.seq;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRequest?.seq]);
+
+  useEffect(() => {
+    if (!focusRequest || pendingFocusSeqRef.current !== focusRequest.seq || markers.length === 0) return;
+    if (applyFocusRequest(focusRequest)) pendingFocusSeqRef.current = 0;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markers]);
 
   /* Fit every host venue on explicit request. `handledFitSeqRef` prevents a
      marker array refresh from replaying the same one-shot request. */

@@ -2802,32 +2802,44 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     });
   }, [mapMatches, selectedTeam, selectedTeamCanon]);
 
+  const matchPassesActiveFilter = useCallback((match: MapMatch, venue: Pick<VenueDetails, "timezone">) => {
+    const status = matchStatus(match, nowMs);
+    if (filter === "today") return match.iso === venueTodayISO(venue.timezone, nowMs);
+    if (filter === "live") return status === "live";
+    if (filter === "upcoming") return status === "upcoming";
+    if (filter === "completed") return status === "completed";
+    if (filter === "knockout") return match.stage !== "Group Stage";
+    return true;
+  }, [filter, nowMs]);
+
+  const panelEmptyMessage = useMemo(() => {
+    if (filter === "today") return "No matches today at this venue.";
+    if (filter === "live") return "No live matches at this venue.";
+    if (filter === "upcoming") return "No upcoming matches at this venue.";
+    if (filter === "completed") return "No completed matches at this venue.";
+    if (filter === "knockout") return "No knockout matches at this venue.";
+    return "No matches at this venue for the current selection.";
+  }, [filter]);
+
   const filteredVenueIds = useMemo(() => {
     const ids = new Set<string>();
     for (const venue of venueModels) {
       const venueMatches = selectedTeam === "ALL"
         ? venue.matches
         : venue.matches.filter(match => [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon));
-      const hasMatch = venueMatches.some(match => {
-        const status = matchStatus(match, nowMs);
-        if (filter === "today") return match.iso === venueTodayISO(venue.timezone, nowMs);
-        if (filter === "live") return status === "live";
-        if (filter === "upcoming") return status === "upcoming";
-        if (filter === "completed") return status === "completed";
-        if (filter === "knockout") return match.stage !== "Group Stage";
-        return true;
-      });
+      const hasMatch = venueMatches.some(match => matchPassesActiveFilter(match, venue));
       const countryMatch = filter === "usa" || filter === "canada" || filter === "mexico"
         ? countryFilterKey(venue.country) === filter
         : true;
       if (countryMatch && hasMatch) ids.add(venue.venueId);
     }
     return ids;
-  }, [venueModels, selectedTeam, selectedTeamCanon, filter, nowMs]);
+  }, [venueModels, selectedTeam, selectedTeamCanon, filter, matchPassesActiveFilter]);
 
   const panelMatches = useMemo(() => activeVenue.matches
     .filter(match => selectedTeam === "ALL" || [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon))
-    .sort((a, b) => a.ts - b.ts), [activeVenue, selectedTeam, selectedTeamCanon]);
+    .filter(match => matchPassesActiveFilter(match, activeVenue))
+    .sort((a, b) => a.ts - b.ts), [activeVenue, selectedTeam, selectedTeamCanon, matchPassesActiveFilter]);
   // Live total derives from the per-venue counts already computed above —
   // no need for another full scan of mapMatches.
   const liveTotal = useMemo(() => venueModels.reduce((sum, venue) => sum + venue.liveCount, 0), [venueModels]);
@@ -2868,8 +2880,11 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   useEffect(() => {
     if (filteredVenueIds.size === 0 || filteredVenueIds.has(activeVenueId)) return;
     const first = venueModels.find(venue => filteredVenueIds.has(venue.venueId));
-    if (first) setActiveVenueId(first.venueId);
-  }, [filteredVenueIds, activeVenueId, venueModels]);
+    if (first) {
+      setActiveVenueId(first.venueId);
+      requestVenueMapFocus(first.venueId, panelState);
+    }
+  }, [filteredVenueIds, activeVenueId, venueModels, panelState]);
 
   /* Auto-center per the "Automatically center map" setting — runs once per
      mount, and only when no remembered location took precedence. */
@@ -3147,7 +3162,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
 
             <div className="venue-timeline" aria-label="Venue match timeline">
               {panelMatches.length === 0 && (
-                <p className="map-panel__empty" role="status">No matches at this venue for the current selection.</p>
+                <p className="map-panel__empty" role="status">{panelEmptyMessage}</p>
               )}
               {panelMatches.map(match => {
                 const status = matchStatus(match, nowMs);

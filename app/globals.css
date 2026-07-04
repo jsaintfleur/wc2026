@@ -8966,8 +8966,10 @@ button.settings-row:active,
 /* ── Leaflet map (the real interactive map) ─────────────────────
    The SVG .host-map styles below remain only for the error fallback. */
 .venue-leaflet { width: 100%; height: 100%; min-height: 640px; border-radius: 24px; background: #07111d; font: inherit; z-index: 1; }
-.venue-map-loading { display: grid; place-items: center; min-height: 640px; color: var(--muted); font-size: 13px; }
-.venue-leaflet .leaflet-control-attribution { color: rgba(255,255,255,0.5); background: rgba(8,13,24,0.72); font-size: 9px; }
+.venue-map-loading { position: relative; min-height: 640px; overflow: hidden; border-radius: 24px; background: #07111d; }
+.venue-map-loading::before { content: ""; position: absolute; inset: 18px; border-radius: 20px; background: linear-gradient(90deg, rgba(255,255,255,0.035) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.035) 75%); background-size: 220% 100%; animation: shimmer 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .venue-map-loading::before { animation: none; } }
+.venue-leaflet .leaflet-control-attribution { color: rgba(255,255,255,0.5); background: rgba(8,13,24,0.72); font-size: 10.5px; }
 .venue-leaflet .leaflet-control-attribution a { color: rgba(255,255,255,0.65); }
 .venue-leaflet--light .leaflet-control-attribution { color: rgba(20,32,46,0.7); background: rgba(255,255,255,0.72); }
 .venue-leaflet--light .leaflet-control-attribution a { color: rgba(20,32,46,0.85); }
@@ -9051,8 +9053,8 @@ button.settings-row:active,
 .map-shell--panel-collapsed .map-panel { align-self: start; }
 /* Sheet handle — a real button on mobile that collapses/expands the panel;
    hidden entirely on desktop where the panel is a static side column. */
-.map-panel__handle { display: none; appearance: none; width: 100%; padding: 4px 0 10px; border: 0; background: none; cursor: pointer; }
-.map-panel__handle span { display: block; width: 46px; height: 4px; border-radius: 999px; margin: 0 auto; background: rgba(255,255,255,0.22); }
+.map-panel__handle { display: none; appearance: none; width: 100%; padding: 0 0 8px; border: 0; background: none; cursor: pointer; }
+.map-panel__handle span { display: grid; place-items: center; width: 46px; height: 22px; border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; margin: 0 auto; color: var(--gold-bright); background: rgba(255,255,255,0.06); font-size: 14px; line-height: 1; }
 .map-panel__handle:focus-visible span { outline: 2px solid var(--gold-bright); outline-offset: 4px; }
 .map-panel__hero { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 12px; align-items: center; }
 .map-panel__image { display: grid; place-items: center; width: 82px; height: 82px; border-radius: 18px; background: radial-gradient(circle at 24% 20%, rgba(255,255,255,0.2), transparent 34%), linear-gradient(145deg, rgba(10,92,62,0.9), color-mix(in srgb, var(--gold) 36%, transparent)); background-size: cover; background-position: center; }

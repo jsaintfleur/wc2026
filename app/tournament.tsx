@@ -2621,7 +2621,7 @@ class MapErrorBoundary extends Component<{ fallback: ReactNode; children: ReactN
    only; SSR and the loading gap render a lightweight placeholder. */
 const VenueMap = dynamic(() => import("@/app/components/VenueMap"), {
   ssr: false,
-  loading: () => <div className="venue-map-loading" role="status">Loading map…</div>,
+  loading: () => <div className="venue-map-loading" role="status"><span className="sr-only">Loading map…</span></div>,
 });
 
 /* Memoized with minute-granular time comparison: nothing on the map needs
@@ -3204,7 +3204,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
               aria-label={panelState === "expanded" ? "Shrink venue details to half height" : "Expand venue details"}
               onClick={() => setPanelState(state => state === "expanded" ? "half" : "expanded")}
             >
-              <span aria-hidden="true" />
+              <span aria-hidden="true">{panelState === "expanded" ? "▾" : "▴"}</span>
             </button>
             <div className="map-panel__bar">
               <span className="map-panel__bar-title">{activeVenue.stadiumName}</span>
@@ -3493,7 +3493,12 @@ function SettingsView({ data, fixtures, leaderboardStats, liveTs, liveStatus, on
     try { window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings)); } catch { /* ignore private mode */ }
   }, [settings]);
 
-  const update = <K extends keyof SettingsModel>(key: K, value: SettingsModel[K]) => setSettings(prev => ({ ...prev, [key]: value }));
+  const update = <K extends keyof SettingsModel>(key: K, value: SettingsModel[K]) => {
+    if (key === "rememberMap" && value === false && typeof window !== "undefined") {
+      try { window.localStorage.removeItem(MAP_STATE_KEY); } catch { /* ignore private mode */ }
+    }
+    setSettings(prev => ({ ...prev, [key]: value }));
+  };
   const toggleGroup = (group: "notifications" | "stadium" | "stats" | "downloads", key: string) => {
     setSettings(prev => ({ ...prev, [group]: { ...prev[group], [key]: !prev[group][key] } }));
   };
@@ -3616,7 +3621,7 @@ function SettingsView({ data, fixtures, leaderboardStats, liveTs, liveStatus, on
       <Row key="map-style" icon="map" title="Default Map Style" subtitle="Sets the visual style for the host city map." tags={["light dark satellite terrain"]}>
         <SegmentControl value={settings.mapStyle} options={["Light", "Dark", "Satellite", "Terrain"] as const} label="Map style" onChange={value => update("mapStyle", value)} />
       </Row>,
-      <Row key="map-center" icon="venue" title="Automatically Center On" subtitle="Choose the map context that should take priority when opening Map." tags={["favorite team live venue user location"]}>
+      <Row key="map-center" icon="venue" title="Automatically Center On" subtitle={settings.mapCenter === "User location" ? "Uses your location only if permission is already granted." : "Choose the map context that should take priority when opening Map."} tags={["favorite team live venue user location"]}>
         <SelectControl value={settings.mapCenter} options={["Favorite team", "Current live venue", "User location"] as const} label="Automatically center map" onChange={value => update("mapCenter", value)} />
       </Row>,
       <Row key="remember-map" icon="settings" title="Remember Last Viewed Location" subtitle="Restores your previous map position, zoom, and selected venue." tags={["remember location map"]}>

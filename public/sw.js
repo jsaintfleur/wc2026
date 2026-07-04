@@ -4,7 +4,7 @@
  * assets. Match data must never be served from Cache Storage.
  * ---------------------------------------------------------------- */
 
-const CACHE_NAME = "compet-v7";
+const CACHE_NAME = "compet-v8";
 
 /* Static assets to pre-cache on install — the app shell. */
 const PRECACHE = [
@@ -18,7 +18,9 @@ const PRECACHE = [
   "/icons/compet-icon-512.png",
   "/icons/compet-icon-maskable-512.png",
   "/icons/apple-touch-icon.png",
-  "/wc26-logo.svg",
+  /* Must be .png — precaching a missing file makes cache.addAll reject,
+     which aborts install and disables the ENTIRE service worker. */
+  "/wc26-logo.png",
   "/world-cup-26-mark.png",
   "/trionda.png",
 ];

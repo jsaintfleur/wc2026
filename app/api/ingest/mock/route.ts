@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { MOCK_FIXTURES } from "@/lib/data";
 import { mergeFixtures, type VendorFixture, type ScheduleMatch } from "@/lib/merge";
@@ -15,7 +15,22 @@ function toJson(value: unknown): Prisma.InputJsonValue | undefined {
     : JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  /* This route OVERWRITES real match_state rows with mock data — it exists
+     only for local development. In production it is disabled outright
+     unless ALLOW_MOCK=1 is explicitly set, and it always requires the cron
+     secret (fail-closed: a missing CRON_SECRET denies access). Note that
+     HEAD requests execute GET in the App Router, so even a monitoring probe
+     to an unauthenticated version of this URL corrupted production data. */
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_MOCK !== "1") {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  const secret = request.headers.get("authorization")?.replace("Bearer ", "");
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret || secret !== cronSecret) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const fixtures: VendorFixture[] = MOCK_FIXTURES.map(f => ({ ...f, fixtureId: undefined }));
 
   const rows = await prisma.match.findMany({

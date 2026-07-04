@@ -764,7 +764,16 @@ async function persistFinished(fixtures: unknown[]): Promise<number> {
 export async function GET(request: NextRequest) {
   const apiFootballKey = process.env.APIFOOTBALL_KEY;
   const now = Date.now();
-  const debug = request.nextUrl.searchParams.has("debug");
+  /* Debug mode runs the full vendor fetch + detail enrichment on demand, so
+     it requires the cron secret — otherwise anyone could loop it to burn
+     API-Football quota. Fail-closed like the cron routes. */
+  const debugRequested = request.nextUrl.searchParams.has("debug");
+  const bearer = request.headers.get("authorization")?.replace("Bearer ", "");
+  const cronSecret = process.env.CRON_SECRET;
+  const debug = debugRequested && !!cronSecret && bearer === cronSecret;
+  if (debugRequested && !debug) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   const active = inWindow(now);
   const activeMatches = activeWindowCount(now);
 

@@ -7588,8 +7588,11 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .analytics-drawer__team-link { width: max-content; max-width: 100%; border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent); border-radius: 999px; padding: 9px 13px; color: #111; background: var(--gold); font: inherit; font-size: 12px; font-weight: 900; cursor: pointer; }
 .analytics-drawer h4 { margin: 4px 36px 2px 0; color: #fff; font-family: var(--disp); font-size: 28px; line-height: 1; }
 .analytics-breakdown { display: grid; gap: 8px; }
-.analytics-breakdown > span { display: grid; grid-template-columns: 70px minmax(0, 1fr) 32px; align-items: center; gap: 8px; color: var(--ink-soft); font-size: 11px; font-weight: 800; }
+.analytics-breakdown > span { display: grid; grid-template-columns: 108px minmax(0, 1fr) 32px; align-items: center; gap: 8px; color: var(--ink-soft); font-size: 11px; font-weight: 800; }
+.analytics-breakdown b { display: grid; gap: 1px; min-width: 0; color: var(--ink-soft); }
+.analytics-breakdown b small { color: var(--muted); font-size: 9.5px; font-weight: 900; }
 .analytics-breakdown em { color: #fff; font-style: normal; text-align: right; }
+.analytics-drawer__summary { border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px; background: rgba(255,255,255,0.04); }
 .analytics-form-strip { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 2px; }
 .analytics-form { flex: 0 0 118px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 8px; background: rgba(255,255,255,0.045); }
 .analytics-form b { color: #fff; font-family: var(--disp); font-size: 18px; }

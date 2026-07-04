@@ -3872,6 +3872,14 @@ type TeamAnalytics = {
   team: string;
   confederation: Confederation;
   score: number;
+  scoreComponents: {
+    results: number;
+    goalDifference: number;
+    attack: number;
+    defense: number;
+    path: number;
+  };
+  modelSummary: string;
   attack: number;
   defense: number;
   form: number;
@@ -3973,6 +3981,19 @@ function analyticsRoundDepth(stage: string): number {
   return 0;
 }
 
+function analyticsBand(value: number, label: string): string {
+  if (value >= 82) return `elite ${label} (${value})`;
+  if (value >= 65) return `strong ${label} (${value})`;
+  if (value >= 45) return `average ${label} (${value})`;
+  return `limited ${label} (${value})`;
+}
+
+function analyticsPathText(value: number): string {
+  if (value >= 72) return "manageable projected path";
+  if (value >= 48) return "balanced projected path";
+  return "difficult projected path";
+}
+
 function buildAnalyticsModel(
   data: TournamentData,
   fixtures: LiveFixture[],
@@ -3986,6 +4007,8 @@ function buildAnalyticsModel(
       team,
       confederation: analyticsConfederation(team),
       score: 0,
+      scoreComponents: { results: 0, goalDifference: 0, attack: 0, defense: 0, path: 0 },
+      modelSummary: "No completed matches yet. Baseline scores will move as verified results arrive.",
       attack: 0,
       defense: 0,
       form: 0,
@@ -4138,6 +4161,13 @@ function buildAnalyticsModel(
     team.pathDifficulty = team.alive ? 58 : 0;
     const gdScore = analyticsScorePct(team.goalDiff + 8, maxGD);
     const resultScore = analyticsScorePct(ppg, maxPPG);
+    team.scoreComponents = {
+      results: Math.round(resultScore),
+      goalDifference: Math.round(gdScore),
+      attack: team.attack,
+      defense: team.defense,
+      path: team.pathDifficulty,
+    };
     team.score = Math.round(resultScore * 0.3 + gdScore * 0.2 + team.attack * 0.2 + team.defense * 0.2 + team.pathDifficulty * 0.1);
     team.tier = analyticsTier(team.score, team.alive);
     const recent = team.matches.slice(-3);
@@ -4152,11 +4182,28 @@ function buildAnalyticsModel(
     const ppg = team.played ? (team.wins * 3 + team.draws) / team.played : 0;
     const gdScore = analyticsScorePct(team.goalDiff + 8, maxGD);
     const resultScore = analyticsScorePct(ppg, maxPPG);
+    team.scoreComponents = {
+      results: Math.round(resultScore),
+      goalDifference: Math.round(gdScore),
+      attack: team.attack,
+      defense: team.defense,
+      path: team.pathDifficulty,
+    };
     team.score = Math.round(resultScore * 0.3 + gdScore * 0.2 + team.attack * 0.2 + team.defense * 0.2 + team.pathDifficulty * 0.1);
     team.tier = analyticsTier(team.score, team.alive);
   }
 
   const teams = [...byTeam.values()].sort((a, b) => b.score - a.score || a.team.localeCompare(b.team));
+  const remainingCount = Math.max(1, teams.filter(team => team.alive).length);
+  const aliveRank = new Map(teams.filter(team => team.alive).map((team, index) => [team.team, index + 1]));
+  teams.forEach((team, index) => {
+    const rankLabel = team.alive ? `#${aliveRank.get(team.team) || index + 1} of ${remainingCount} remaining` : `#${index + 1} overall`;
+    if (!team.played) {
+      team.modelSummary = `Ranked ${rankLabel}. No completed matches yet, so the model is holding a baseline until verified results arrive.`;
+    } else {
+      team.modelSummary = `Ranked ${rankLabel}. ${analyticsBand(team.attack, "attack")}, ${analyticsBand(team.defense, "defense")}, ${analyticsPathText(team.pathDifficulty)}.`;
+    }
+  });
   const confederations = CONFEDERATIONS.map(confederation => {
     const members = teams.filter(team => team.confederation === confederation);
     const played = members.reduce((sum, team) => sum + team.played, 0);
@@ -4465,20 +4512,23 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
           <div>
             <span>{selectedAnalyticsTeam.confederation} · rank #{analytics.teams.findIndex(team => team.team === selectedAnalyticsTeam.team) + 1}</span>
             <h4>{data.flags[selectedAnalyticsTeam.team]} {selectedAnalyticsTeam.team}</h4>
-            <p>{selectedAnalyticsTeam.pathStatus}</p>
+            <p>{selectedAnalyticsTeam.score}/100 strength · {selectedAnalyticsTeam.pathStatus}</p>
           </div>
           <button type="button" className="analytics-drawer__close" aria-label="Close team analytics" onClick={() => setAnalyticsTeam(null)}>×</button>
-          <div className="analytics-breakdown">
-            {[
-              ["Overall", selectedAnalyticsTeam.score],
-              ["Attack", selectedAnalyticsTeam.attack],
-              ["Defense", selectedAnalyticsTeam.defense],
-              ["Form", selectedAnalyticsTeam.form],
-              ["Path", selectedAnalyticsTeam.pathDifficulty],
-            ].map(([label, value]) => (
-              <span key={label as string}><b>{label}</b><i><span style={{ width: `${value}%` }} /></i><em>{value}</em></span>
-            ))}
-          </div>
+            <div className="analytics-breakdown">
+              {[
+                ["Results & form", 30, selectedAnalyticsTeam.scoreComponents.results],
+                ["Goal difference", 20, selectedAnalyticsTeam.scoreComponents.goalDifference],
+                ["Attack", 20, selectedAnalyticsTeam.scoreComponents.attack],
+                ["Defense", 20, selectedAnalyticsTeam.scoreComponents.defense],
+                ["Path", 10, selectedAnalyticsTeam.scoreComponents.path],
+              ].map(([label, weight, score]) => (
+                <span key={label as string} role="img" aria-label={`${label} contributes ${weight} percent at ${score} of 100`}>
+                  <b>{label}<small>{weight}%</small></b><i><span style={{ width: `${score}%` }} /></i><em>{score}</em>
+                </span>
+              ))}
+            </div>
+            <p className="analytics-drawer__summary">{selectedAnalyticsTeam.modelSummary}</p>
           <div className="analytics-drawer__grid">
             <span><b>{selectedAnalyticsTeam.goalsFor}</b><small>goals for</small></span>
             <span><b>{selectedAnalyticsTeam.goalsAgainst}</b><small>against</small></span>

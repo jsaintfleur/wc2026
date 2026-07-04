@@ -4297,7 +4297,9 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
   const [analyticsSort, setAnalyticsSort] = useState<AnalyticsSort>("overall");
   const [aliveOnly, setAliveOnly] = useState(true);
   const [analyticsTeam, setAnalyticsTeam] = useState<string | null>(null);
+  const [modelSheetOpen, setModelSheetOpen] = useState(false);
   const drawerRef = useRef<HTMLElement | null>(null);
+  const modelSheetRef = useRef<HTMLElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const analytics = useMemo(() => buildAnalyticsModel(data, fixtures, findLive, nowMs), [data, fixtures, findLive, nowMs]);
   const rankedAnalyticsTeams = useMemo(() => {
@@ -4348,6 +4350,29 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
     };
   }, [selectedAnalyticsTeam?.team]);
 
+  useEffect(() => {
+    if (!modelSheetOpen || typeof window === "undefined") return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    requestAnimationFrame(() => modelSheetRef.current?.focus());
+    window.history.pushState({ competAnalyticsMethodology: true }, "");
+    let closedByPop = false;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setModelSheetOpen(false);
+    };
+    const onPop = () => {
+      closedByPop = true;
+      setModelSheetOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("popstate", onPop);
+      previousFocusRef.current?.focus?.();
+      if (!closedByPop && window.history.state?.competAnalyticsMethodology) window.history.back();
+    };
+  }, [modelSheetOpen]);
+
   return (
     <section className="analytics-hub analytics-hub--view" aria-label="Analytics Hub">
       <div className="analytics-hero">
@@ -4355,6 +4380,7 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
           <span className="analytics-kicker">Analytics Hub</span>
           <h3>Team strength, confederation power, and knockout survival.</h3>
           <p>Basic model: results/form 30%, goal difference 20%, attack 20%, defense 20%, knockout path difficulty 10%. Advanced metrics appear automatically when the live feed supplies them.</p>
+          <button type="button" className="analytics-method-button" onClick={() => setModelSheetOpen(true)}>ⓘ How scores work</button>
         </div>
         <div className="analytics-hero__cards">
           <button type="button" onClick={() => setAnalyticsTeam(analytics.strongestTeam.team)}>
@@ -4544,6 +4570,23 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
             ))}
           </div>
           <p className="analytics-drawer__note">Ranking among {selectedAnalyticsTeam.confederation}: #{analytics.teams.filter(team => team.confederation === selectedAnalyticsTeam.confederation).findIndex(team => team.team === selectedAnalyticsTeam.team) + 1}. Model is basic until shots, possession, xG, and xGA coverage is complete.</p>
+        </aside>
+      )}
+
+      {modelSheetOpen && (
+        <aside ref={modelSheetRef} className="analytics-method-sheet" role="dialog" aria-modal="true" aria-label="How Analytics Hub scores work" tabIndex={-1}>
+          <button type="button" className="analytics-drawer__close" aria-label="Close methodology" onClick={() => setModelSheetOpen(false)}>×</button>
+          <span className="analytics-kicker">About this model</span>
+          <h4>Transparent tournament-only strength scoring.</h4>
+          <p>Scores recompute on every live refresh from this app's canonical schedule, verified results, and live match payload.</p>
+          <div className="analytics-method-list">
+            <span><b>Results & form</b><em>30%</em><small>Points per match and recent W/D/L form from completed matches.</small></span>
+            <span><b>Goal difference</b><em>20%</em><small>Verified goals for and against, normalized across the field.</small></span>
+            <span><b>Attack</b><em>20%</em><small>Goals plus shots on target when the live feed supplies them.</small></span>
+            <span><b>Defense</b><em>20%</em><small>Goals allowed and clean sheets from completed matches.</small></span>
+            <span><b>Path difficulty</b><em>10%</em><small>Projected next-opponent strength; eliminated teams drop to zero.</small></span>
+          </div>
+          <p className="analytics-drawer__note">Derived entirely from this tournament's results. No preseason ratings, no external rankings, no betting odds.</p>
         </aside>
       )}
 

@@ -4350,6 +4350,7 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchCl
   const [aliveOnly, setAliveOnly] = useState(true);
   const [analyticsTeam, setAnalyticsTeam] = useState<string | null>(null);
   const [modelSheetOpen, setModelSheetOpen] = useState(false);
+  const [shareToast, setShareToast] = useState("");
   const drawerRef = useRef<HTMLElement | null>(null);
   const modelSheetRef = useRef<HTMLElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -4424,6 +4425,29 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchCl
       if (!closedByPop && window.history.state?.competAnalyticsMethodology) window.history.back();
     };
   }, [modelSheetOpen]);
+
+  const shareAnalyticsText = useCallback(async (text: string, tab: AnalyticsTab = analyticsTab) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", "analytics");
+    url.searchParams.set("tab", tab);
+    const payload = `${text} ${url.toString()}`;
+    try {
+      const canShare = typeof navigator.share === "function";
+      if (canShare) await navigator.share({ text: payload, url: url.toString() });
+      else await navigator.clipboard.writeText(payload);
+      setShareToast(canShare ? "Share sheet opened" : "Copied");
+      window.setTimeout(() => setShareToast(""), 1800);
+    } catch {
+      // Share cancellation is expected; keep the UI quiet.
+    }
+  }, [analyticsTab]);
+
+  const shareTeam = useCallback((team: TeamAnalytics) => {
+    const rank = analytics.teams.filter(item => item.alive).findIndex(item => item.team === team.team) + 1;
+    const remaining = analytics.teams.filter(item => item.alive).length;
+    shareAnalyticsText(`${data.flags[team.team] || ""} ${team.team} — ${team.score}/100 in the Compet 2026 strength model. #${rank || "—"} of ${remaining} remaining. ${analyticsBand(team.attack, "attack")}.`, "teams");
+  }, [analytics.teams, data.flags, shareAnalyticsText]);
 
   return (
     <section className="analytics-hub analytics-hub--view" aria-label="Analytics Hub">
@@ -4638,6 +4662,7 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchCl
             <span><b>{selectedAnalyticsTeam.nextOpponent}</b><small>next opponent</small></span>
           </div>
           <button type="button" className="analytics-drawer__team-link" onClick={() => onTeamClick(selectedAnalyticsTeam.team)}>Open team profile</button>
+          <button type="button" className="analytics-drawer__team-link analytics-drawer__team-link--ghost" onClick={() => shareTeam(selectedAnalyticsTeam)}>Share</button>
           <div className="analytics-form-strip">
             {selectedAnalyticsTeam.matches.length === 0 ? <span>No completed matches yet.</span> : selectedAnalyticsTeam.matches.slice(-5).map(match => (
               <span key={`${match.label}-${match.opponent}-${match.ts}`} className={`analytics-form analytics-form--${match.result.toLowerCase()}`}>
@@ -4666,6 +4691,7 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchCl
         </aside>
       )}
 
+      {shareToast && <div className="analytics-share-toast" role="status">{shareToast}</div>}
       <p className="analytics-disclaimer">Strength scores are unofficial model estimates derived from tournament results. FIFA is the source of record for standings and results.</p>
     </section>
   );

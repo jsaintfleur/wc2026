@@ -5498,7 +5498,7 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
         <div className="more-pulse" aria-label={`${progressPct}% tournament complete`}>
           <div className="more-pulse__row">
             <span className="more-pulse__stage">{stageLabel}</span>
-            {countdown && <span className="more-pulse__next">Next match in {countdown}</span>}
+            {countdown && <span className="more-pulse__next" suppressHydrationWarning>Next match in {countdown}</span>}
           </div>
           <div className="more-pulse__bar">
             <div className="more-pulse__fill" style={{ width: `${progressPct}%` }} />

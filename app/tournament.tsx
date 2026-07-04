@@ -2136,7 +2136,11 @@ function SearchOverlay({ data, fixtures, findLive, onClose, onTeamClick, onMatch
 
   useEffect(() => {
     inputRef.current?.focus();
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onClose();
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
@@ -2723,7 +2727,9 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   useEffect(() => {
     if (panelState === "closed") return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPanelState("closed");
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      setPanelState("closed");
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -4392,7 +4398,9 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, liveTs, liveStatus, on
     window.history.pushState({ competAnalyticsDrawer: true }, "");
     let closedByPop = false;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAnalyticsTeam(null);
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setAnalyticsTeam(null);
     };
     const onPop = () => {
       closedByPop = true;
@@ -4416,7 +4424,9 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, liveTs, liveStatus, on
     window.history.pushState({ competAnalyticsMethodology: true }, "");
     let closedByPop = false;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setModelSheetOpen(false);
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setModelSheetOpen(false);
     };
     const onPop = () => {
       closedByPop = true;
@@ -6215,7 +6225,11 @@ function PlayerProfileDrawer({ playerName, teamName, flags, data, onClose, onTea
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onClose();
+    };
     document.addEventListener("keydown", onKey);
     return () => { document.body.style.overflow = ""; document.removeEventListener("keydown", onKey); };
   }, [onClose]);
@@ -6318,7 +6332,11 @@ function HostCountryDrawer({ country, data, onClose }: {
   onClose: () => void;
 }) {
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onClose();
+    };
     window.addEventListener("keydown", onKey);
     // Lock body scroll while drawer is open
     const prev = document.body.style.overflow;
@@ -6437,7 +6455,11 @@ function TeamDrawer({ name, flags, groups, gcolor, gs, hosts, onClose, onPlayerC
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onClose();
+    };
     document.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = "";
@@ -6707,7 +6729,11 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onClose();
+    };
     document.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = "";

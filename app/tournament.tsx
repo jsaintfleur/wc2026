@@ -3,7 +3,7 @@
 import { Component, Fragment, memo, useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import type { VenueFitRequest, VenueFocusRequest, VenueMapMarker, VenueRouteFitRequest } from "@/app/components/VenueMap";
-import { HOST_VENUE_DETAILS, MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type PlayerMatchStat, type TeamLineup, type VenueDetails } from "@/lib/data";
+import { HOST_VENUE_DETAILS, MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type MatchStats, type PlayerMatchStat, type TeamLineup, type VenueDetails } from "@/lib/data";
 import { nrm, canon, canonPlayer } from "@/lib/merge";
 import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type TournamentStats } from "@/lib/stats";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
@@ -3790,6 +3790,439 @@ function SettingsView({ data, fixtures, leaderboardStats, liveTs, liveStatus, on
   );
 }
 
+type Confederation = "UEFA" | "CONMEBOL" | "CONCACAF" | "CAF" | "AFC" | "OFC";
+type AnalyticsTab = "teams" | "confeds" | "remaining" | "matchups";
+type AnalyticsSort = "overall" | "attack" | "defense" | "form" | "goals" | "confederation";
+
+const CONFEDERATIONS: Confederation[] = ["UEFA", "CONMEBOL", "CONCACAF", "CAF", "AFC", "OFC"];
+
+/* Confederation assignment is the one static team metadata layer the
+   analytics model needs. The actual results, survival, next matches, and
+   strength scores are derived from the canonical schedule + live overlay. */
+const TEAM_CONFEDERATION: Record<string, Confederation> = {
+  Mexico: "CONCACAF",
+  "South Africa": "CAF",
+  "South Korea": "AFC",
+  Czechia: "UEFA",
+  Canada: "CONCACAF",
+  "Bosnia & Herzegovina": "UEFA",
+  Qatar: "AFC",
+  Switzerland: "UEFA",
+  Brazil: "CONMEBOL",
+  Morocco: "CAF",
+  Haiti: "CONCACAF",
+  Scotland: "UEFA",
+  "United States": "CONCACAF",
+  Paraguay: "CONMEBOL",
+  Australia: "AFC",
+  Türkiye: "UEFA",
+  Germany: "UEFA",
+  Curaçao: "CONCACAF",
+  "Ivory Coast": "CAF",
+  Ecuador: "CONMEBOL",
+  Netherlands: "UEFA",
+  Japan: "AFC",
+  Sweden: "UEFA",
+  Tunisia: "CAF",
+  Belgium: "UEFA",
+  Egypt: "CAF",
+  Iran: "AFC",
+  "New Zealand": "OFC",
+  Spain: "UEFA",
+  "Cape Verde": "CAF",
+  "Saudi Arabia": "AFC",
+  Uruguay: "CONMEBOL",
+  France: "UEFA",
+  Senegal: "CAF",
+  Iraq: "AFC",
+  Norway: "UEFA",
+  Argentina: "CONMEBOL",
+  Algeria: "CAF",
+  Austria: "UEFA",
+  Jordan: "AFC",
+  Portugal: "UEFA",
+  "DR Congo": "CAF",
+  Uzbekistan: "AFC",
+  Colombia: "CONMEBOL",
+  England: "UEFA",
+  Croatia: "UEFA",
+  Ghana: "CAF",
+  Panama: "CONCACAF",
+};
+
+type AnalyticsMatch = {
+  key: string;
+  stage: string;
+  ts: number;
+  home: string;
+  away: string;
+  status: "completed" | "live" | "upcoming";
+  gh: number | null;
+  ga: number | null;
+  fixture: LiveFixture | null;
+  sourceStats?: MatchStats;
+};
+
+type TeamAnalytics = {
+  team: string;
+  confederation: Confederation;
+  score: number;
+  attack: number;
+  defense: number;
+  form: number;
+  pathDifficulty: number;
+  tier: "Elite" | "Contender" | "Dark Horse" | "Vulnerable" | "Eliminated";
+  trend: "up" | "flat" | "down";
+  alive: boolean;
+  eliminated: boolean;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDiff: number;
+  cleanSheets: number;
+  shots: number | null;
+  shotsOn: number | null;
+  possession: number | null;
+  xg: number | null;
+  xga: number | null;
+  nextOpponent: string;
+  nextMatchDate: string;
+  currentRound: string;
+  pathStatus: string;
+  matches: { label: string; opponent: string; gf: number; ga: number; result: "W" | "D" | "L"; ts: number }[];
+};
+
+type ConfederationAnalytics = {
+  confederation: Confederation;
+  qualified: number;
+  remaining: number;
+  eliminated: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDiff: number;
+  knockoutTeams: number;
+  quarterfinalists: number;
+  semifinalists: number;
+  finalists: number;
+  winPct: number;
+  pointsPerMatch: number;
+  avgStrength: number;
+  bestTeam: TeamAnalytics | null;
+  disappointment: TeamAnalytics | null;
+  survivalRate: number;
+};
+
+type AnalyticsModel = {
+  teams: TeamAnalytics[];
+  confederations: ConfederationAnalytics[];
+  remainingByConfed: Record<Confederation, TeamAnalytics[]>;
+  comparisonCards: { label: string; value: string; detail: string }[];
+  matchups: { key: string; stage: string; date: string; home: TeamAnalytics; away: TeamAnalytics; upsetPotential: number; difficulty: string }[];
+  strongestTeam: TeamAnalytics;
+  bestAttack: TeamAnalytics;
+  bestDefense: TeamAnalytics;
+  strongestConfed: ConfederationAnalytics;
+};
+
+function analyticsConfederation(team: string): Confederation {
+  return TEAM_CONFEDERATION[canon(team)] || "UEFA";
+}
+
+function numericStat(stats: MatchStats | undefined, side: "home" | "away", key: string): number | null {
+  const raw = stats?.[side]?.[key];
+  if (raw == null) return null;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+  const parsed = parseFloat(raw.replace("%", ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function analyticsScorePct(value: number, max: number): number {
+  if (!max) return 0;
+  return Math.max(0, Math.min(100, (value / max) * 100));
+}
+
+function analyticsTier(score: number, alive: boolean): TeamAnalytics["tier"] {
+  if (!alive) return "Eliminated";
+  if (score >= 82) return "Elite";
+  if (score >= 68) return "Contender";
+  if (score >= 54) return "Dark Horse";
+  return "Vulnerable";
+}
+
+function shortDate(ts: number): string {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(ts));
+}
+
+function analyticsRoundDepth(stage: string): number {
+  if (/final/i.test(stage) && !/third/i.test(stage)) return 5;
+  if (/semi/i.test(stage)) return 4;
+  if (/quarter/i.test(stage)) return 3;
+  if (/16/.test(stage)) return 2;
+  if (/32/.test(stage)) return 1;
+  return 0;
+}
+
+function buildAnalyticsModel(
+  data: TournamentData,
+  fixtures: LiveFixture[],
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null,
+  nowMs: number,
+): AnalyticsModel {
+  const allTeams = Object.values(data.groups).flat().map(canon);
+  const byTeam = new Map<string, TeamAnalytics>();
+  for (const team of allTeams) {
+    byTeam.set(team, {
+      team,
+      confederation: analyticsConfederation(team),
+      score: 0,
+      attack: 0,
+      defense: 0,
+      form: 0,
+      pathDifficulty: 0,
+      tier: "Vulnerable",
+      trend: "flat",
+      alive: true,
+      eliminated: false,
+      played: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      goalDiff: 0,
+      cleanSheets: 0,
+      shots: null,
+      shotsOn: null,
+      possession: null,
+      xg: null,
+      xga: null,
+      nextOpponent: "TBD",
+      nextMatchDate: "TBD",
+      currentRound: "Group Stage",
+      pathStatus: "Awaiting next confirmed match",
+      matches: [],
+    });
+  }
+
+  const matches: AnalyticsMatch[] = [];
+  for (const m of data.gs) {
+    const fixture = findLive({ ts: m.ts, v: m.v, t1: m.t1, t2: m.t2 }, fixtures);
+    const stale = (fixture && isStaleStatus(m.ts, fixture.status, nowMs)) || (!fixture && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, nowMs));
+    const done = !stale && ((fixture && DONE_STATUSES.has(fixture.status)) || (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null));
+    const live = !stale && !!fixture && LIVE_STATUSES.has(fixture.status);
+    matches.push({
+      key: `gs-${m.no}`,
+      stage: "Group Stage",
+      ts: m.ts,
+      home: canon(m.t1),
+      away: canon(m.t2),
+      status: done ? "completed" : live ? "live" : "upcoming",
+      gh: done ? (fixture?.gh ?? m.dbGh ?? null) : null,
+      ga: done ? (fixture?.ga ?? m.dbGa ?? null) : null,
+      fixture,
+      sourceStats: fixture?.stats || m.dbStats,
+    });
+  }
+  data.ko.forEach((m, index) => {
+    const fixture = findLive({ ts: m.ts, v: m.v }, fixtures);
+    const stale = fixture && isStaleStatus(m.ts, fixture.status, nowMs);
+    const done = !stale && !!fixture && DONE_STATUSES.has(fixture.status) && fixture.gh != null && fixture.ga != null;
+    const live = !stale && !!fixture && LIVE_STATUSES.has(fixture.status);
+    matches.push({
+      key: `ko-${index}`,
+      stage: m.round,
+      ts: m.ts,
+      home: fixture?.home ? canon(fixture.home) : "TBD",
+      away: fixture?.away ? canon(fixture.away) : "TBD",
+      status: done ? "completed" : live ? "live" : "upcoming",
+      gh: done ? fixture.gh : null,
+      ga: done ? fixture.ga : null,
+      fixture,
+      sourceStats: fixture?.stats,
+    });
+  });
+
+  const koLosers = new Set<string>();
+  const koTeams = new Set<string>();
+  const roundsReached = new Map<string, number>();
+  const nextByTeam = new Map<string, AnalyticsMatch>();
+
+  for (const match of matches.sort((a, b) => a.ts - b.ts)) {
+    const teams = [match.home, match.away].filter(team => byTeam.has(team));
+    for (const team of teams) {
+      if (match.stage !== "Group Stage") {
+        koTeams.add(team);
+        roundsReached.set(team, Math.max(roundsReached.get(team) || 0, analyticsRoundDepth(match.stage)));
+      }
+      if (match.status !== "completed" && match.ts >= nowMs - 4 * 60 * 60 * 1000 && !nextByTeam.has(team)) {
+        nextByTeam.set(team, match);
+      }
+    }
+    if (match.status !== "completed" || match.gh == null || match.ga == null || teams.length !== 2) continue;
+    const home = byTeam.get(match.home)!;
+    const away = byTeam.get(match.away)!;
+    const apply = (team: TeamAnalytics, opponent: TeamAnalytics, gf: number, ga: number, side: "home" | "away") => {
+      team.played++;
+      team.goalsFor += gf;
+      team.goalsAgainst += ga;
+      team.goalDiff = team.goalsFor - team.goalsAgainst;
+      if (ga === 0) team.cleanSheets++;
+      if (gf > ga) team.wins++;
+      else if (gf < ga) team.losses++;
+      else team.draws++;
+      const shots = numericStat(match.sourceStats, side, "Total Shots");
+      const shotsOn = numericStat(match.sourceStats, side, "Shots on Goal");
+      const possession = numericStat(match.sourceStats, side, "Ball Possession");
+      if (shots != null) team.shots = (team.shots || 0) + shots;
+      if (shotsOn != null) team.shotsOn = (team.shotsOn || 0) + shotsOn;
+      if (possession != null) team.possession = ((team.possession || 0) * (team.played - 1) + possession) / team.played;
+      team.matches.push({ label: match.stage, opponent: opponent.team, gf, ga, result: gf > ga ? "W" : gf < ga ? "L" : "D", ts: match.ts });
+    };
+    apply(home, away, match.gh, match.ga, "home");
+    apply(away, home, match.ga, match.gh, "away");
+    if (match.stage !== "Group Stage" && match.gh !== match.ga) {
+      koLosers.add(match.gh > match.ga ? away.team : home.team);
+    }
+  }
+
+  const standingsByGroup = Object.fromEntries(Object.keys(data.groups).map(g => [g, completedGroupStanding(g, data, fixtures, findLive, nowMs)]));
+  const allGroupsComplete = Object.values(standingsByGroup).every(standing => standing.complete);
+  const groupQualifiers = new Set<string>();
+  for (const standing of Object.values(standingsByGroup)) {
+    if (!standing.complete) continue;
+    standing.rows.slice(0, 2).forEach(row => groupQualifiers.add(row.t));
+  }
+  const third = rankThirdPlaceTeams(standingsByGroup);
+  if (third.allComplete) third.qualified.forEach(entry => groupQualifiers.add(entry.row.t));
+
+  for (const team of byTeam.values()) {
+    const groupEliminated = allGroupsComplete && !groupQualifiers.has(team.team) && !koTeams.has(team.team);
+    team.eliminated = koLosers.has(team.team) || groupEliminated;
+    team.alive = !team.eliminated;
+    const next = nextByTeam.get(team.team);
+    if (next) {
+      team.nextOpponent = next.home === team.team ? next.away : next.home;
+      team.nextMatchDate = shortDate(next.ts);
+      team.currentRound = next.stage;
+      team.pathStatus = next.stage === "Group Stage" ? "Group path active" : "Knockout path active";
+    } else if (team.eliminated) {
+      team.pathStatus = "Eliminated";
+      team.currentRound = "Eliminated";
+    } else {
+      team.pathStatus = "Alive, awaiting bracket slot";
+      team.currentRound = roundsReached.get(team.team) ? "Knockout" : "Group Stage";
+    }
+  }
+
+  const maxGF = Math.max(1, ...[...byTeam.values()].map(t => t.goalsFor));
+  const maxGD = Math.max(1, ...[...byTeam.values()].map(t => t.goalDiff + 8));
+  const maxPPG = Math.max(1, ...[...byTeam.values()].map(t => t.played ? (t.wins * 3 + t.draws) / t.played : 0));
+  for (const team of byTeam.values()) {
+    const ppg = team.played ? (team.wins * 3 + team.draws) / team.played : 0;
+    const lastFive = team.matches.slice(-5);
+    const formPts = lastFive.reduce((sum, m) => sum + (m.result === "W" ? 3 : m.result === "D" ? 1 : 0), 0);
+    team.form = Math.round(analyticsScorePct(formPts, Math.max(1, lastFive.length * 3)));
+    team.attack = Math.round((analyticsScorePct(team.goalsFor, maxGF) * 0.72) + (team.shotsOn != null ? analyticsScorePct(team.shotsOn, Math.max(1, team.played * 7)) * 0.28 : analyticsScorePct(team.goalsFor, maxGF) * 0.28));
+    team.defense = Math.round(Math.max(0, 100 - analyticsScorePct(team.goalsAgainst, Math.max(1, team.played * 3))) * 0.75 + analyticsScorePct(team.cleanSheets, Math.max(1, team.played)) * 0.25);
+    team.pathDifficulty = team.alive ? 58 : 0;
+    const gdScore = analyticsScorePct(team.goalDiff + 8, maxGD);
+    const resultScore = analyticsScorePct(ppg, maxPPG);
+    team.score = Math.round(resultScore * 0.3 + gdScore * 0.2 + team.attack * 0.2 + team.defense * 0.2 + team.pathDifficulty * 0.1);
+    team.tier = analyticsTier(team.score, team.alive);
+    const recent = team.matches.slice(-3);
+    team.trend = recent.filter(m => m.result === "W").length >= 2 ? "up" : recent.filter(m => m.result === "L").length >= 2 ? "down" : "flat";
+    team.matches.sort((a, b) => a.ts - b.ts);
+  }
+  for (const team of byTeam.values()) {
+    const next = nextByTeam.get(team.team);
+    const opponentName = next ? (next.home === team.team ? next.away : next.home) : "";
+    const opponentStrength = byTeam.get(opponentName)?.score ?? 48;
+    team.pathDifficulty = team.alive ? Math.round(Math.max(18, Math.min(92, 96 - opponentStrength))) : 0;
+    const ppg = team.played ? (team.wins * 3 + team.draws) / team.played : 0;
+    const gdScore = analyticsScorePct(team.goalDiff + 8, maxGD);
+    const resultScore = analyticsScorePct(ppg, maxPPG);
+    team.score = Math.round(resultScore * 0.3 + gdScore * 0.2 + team.attack * 0.2 + team.defense * 0.2 + team.pathDifficulty * 0.1);
+    team.tier = analyticsTier(team.score, team.alive);
+  }
+
+  const teams = [...byTeam.values()].sort((a, b) => b.score - a.score || a.team.localeCompare(b.team));
+  const confederations = CONFEDERATIONS.map(confederation => {
+    const members = teams.filter(team => team.confederation === confederation);
+    const played = members.reduce((sum, team) => sum + team.played, 0);
+    const wins = members.reduce((sum, team) => sum + team.wins, 0);
+    const draws = members.reduce((sum, team) => sum + team.draws, 0);
+    const losses = members.reduce((sum, team) => sum + team.losses, 0);
+    const goalsFor = members.reduce((sum, team) => sum + team.goalsFor, 0);
+    const goalsAgainst = members.reduce((sum, team) => sum + team.goalsAgainst, 0);
+    const remaining = members.filter(team => team.alive).length;
+    const knockoutTeams = members.filter(team => koTeams.has(team.team)).length;
+    const bestTeam = members[0] || null;
+    const disappointment = [...members].sort((a, b) => a.score - b.score)[0] || null;
+    return {
+      confederation,
+      qualified: members.length,
+      remaining,
+      eliminated: members.length - remaining,
+      wins,
+      draws,
+      losses,
+      goalsFor,
+      goalsAgainst,
+      goalDiff: goalsFor - goalsAgainst,
+      knockoutTeams,
+      quarterfinalists: members.filter(team => (roundsReached.get(team.team) || 0) >= 3).length,
+      semifinalists: members.filter(team => (roundsReached.get(team.team) || 0) >= 4).length,
+      finalists: members.filter(team => (roundsReached.get(team.team) || 0) >= 5).length,
+      winPct: played ? Math.round((wins / played) * 100) : 0,
+      pointsPerMatch: played ? Number((((wins * 3 + draws) / played)).toFixed(2)) : 0,
+      avgStrength: members.length ? Math.round(members.reduce((sum, team) => sum + team.score, 0) / members.length) : 0,
+      bestTeam,
+      disappointment,
+      survivalRate: members.length ? Math.round((remaining / members.length) * 100) : 0,
+    } satisfies ConfederationAnalytics;
+  }).sort((a, b) => b.avgStrength - a.avgStrength || b.remaining - a.remaining);
+
+  const remainingByConfed = Object.fromEntries(CONFEDERATIONS.map(confed => [confed, teams.filter(team => team.confederation === confed && team.alive)])) as Record<Confederation, TeamAnalytics[]>;
+  const strongestTeam = teams[0];
+  const bestAttack = [...teams].sort((a, b) => b.attack - a.attack)[0];
+  const bestDefense = [...teams].sort((a, b) => b.defense - a.defense)[0];
+  const strongestConfed = confederations[0];
+  const comparisonCards = [
+    { label: "Best attack", value: bestAttack.team, detail: `${bestAttack.attack}/100 attack score` },
+    { label: "Best defense", value: bestDefense.team, detail: `${bestDefense.defense}/100 defense score` },
+    { label: "Most efficient", value: [...confederations].sort((a, b) => b.pointsPerMatch - a.pointsPerMatch)[0].confederation, detail: `${[...confederations].sort((a, b) => b.pointsPerMatch - a.pointsPerMatch)[0].pointsPerMatch} pts/match` },
+    { label: "Most surviving teams", value: [...confederations].sort((a, b) => b.remaining - a.remaining)[0].confederation, detail: `${[...confederations].sort((a, b) => b.remaining - a.remaining)[0].remaining} still alive` },
+    { label: "Highest win rate", value: [...confederations].sort((a, b) => b.winPct - a.winPct)[0].confederation, detail: `${[...confederations].sort((a, b) => b.winPct - a.winPct)[0].winPct}% wins` },
+    { label: "Highest goal difference", value: [...confederations].sort((a, b) => b.goalDiff - a.goalDiff)[0].confederation, detail: `${[...confederations].sort((a, b) => b.goalDiff - a.goalDiff)[0].goalDiff > 0 ? "+" : ""}${[...confederations].sort((a, b) => b.goalDiff - a.goalDiff)[0].goalDiff}` },
+  ];
+
+  const matchups = matches
+    .filter(match => match.stage !== "Group Stage" && match.status !== "completed" && byTeam.has(match.home) && byTeam.has(match.away))
+    .slice(0, 8)
+    .map(match => {
+      const home = byTeam.get(match.home)!;
+      const away = byTeam.get(match.away)!;
+      const diff = Math.abs(home.score - away.score);
+      return {
+        key: match.key,
+        stage: match.stage,
+        date: shortDate(match.ts),
+        home,
+        away,
+        upsetPotential: Math.max(8, Math.round(100 - diff * 1.6)),
+        difficulty: diff < 8 ? "Toss-up" : diff < 18 ? "Pressure match" : "Favorite-heavy",
+      };
+    });
+
+  return { teams, confederations, remainingByConfed, comparisonCards, matchups, strongestTeam, bestAttack, bestDefense, strongestConfed };
+}
+
 /* ---------------------------------------------------------------
  * MoreView — comprehensive tournament dashboard
  * Sections: Hero, Progress, Quick Access, Stadiums, Host Cities,
@@ -3812,6 +4245,10 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
 
   /* -- helper: format large numbers with commas ---------------- */
   const fmtNum = (n: number) => n.toLocaleString("en-US");
+  const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTab>("teams");
+  const [analyticsSort, setAnalyticsSort] = useState<AnalyticsSort>("overall");
+  const [aliveOnly, setAliveOnly] = useState(true);
+  const [analyticsTeam, setAnalyticsTeam] = useState<string | null>(null);
 
   /* =============================================================
    * 1. Tournament progress calculations
@@ -3856,12 +4293,10 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
       { label: "Semifinals", count: 2, start: 26 },
       { label: "Third Place / Final", count: 2, start: 28 },
     ];
-    let koIdx = 0;
     let running = completedKO;
     for (const r of koRoundCounts) {
       if (running < r.count) return r.label;
       running -= r.count;
-      koIdx++;
     }
     return "Tournament Complete";
   }, [completedGS, completedKO, completedTotal]);
@@ -3947,6 +4382,20 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
    * 5. History and records
    * ============================================================= */
   const tournamentStats = useMemo(() => buildTournamentStats(data, fixtures, { players: leaderboardStats }), [data, fixtures, leaderboardStats]);
+  const analytics = useMemo(() => buildAnalyticsModel(data, fixtures, findLive, nowMs), [data, fixtures, findLive, nowMs]);
+  const rankedAnalyticsTeams = useMemo(() => {
+    const visible = aliveOnly ? analytics.teams.filter(team => team.alive) : analytics.teams;
+    const sorters: Record<AnalyticsSort, (a: TeamAnalytics, b: TeamAnalytics) => number> = {
+      overall: (a, b) => b.score - a.score,
+      attack: (a, b) => b.attack - a.attack,
+      defense: (a, b) => b.defense - a.defense,
+      form: (a, b) => b.form - a.form,
+      goals: (a, b) => b.goalsFor - a.goalsFor,
+      confederation: (a, b) => a.confederation.localeCompare(b.confederation) || b.score - a.score,
+    };
+    return [...visible].sort((a, b) => sorters[analyticsSort](a, b) || a.team.localeCompare(b.team));
+  }, [analytics.teams, analyticsSort, aliveOnly]);
+  const selectedAnalyticsTeam = analyticsTeam ? analytics.teams.find(team => team.team === analyticsTeam) || null : null;
   const formatLeaderTie = (leaders: PlayerLeader[], value: (leader: PlayerLeader) => number, label: string) => {
     const topValue = leaders[0] ? value(leaders[0]) : 0;
     if (!topValue) return "Pending live data";
@@ -4024,6 +4473,201 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
             <span key={host}>{countryFlag(host)} {host}</span>
           ))}
         </div>
+      </section>
+
+      <section className="analytics-hub" aria-label="Analytics Hub">
+        <div className="analytics-hero">
+          <div>
+            <span className="analytics-kicker">Analytics Hub</span>
+            <h3>Team strength, confederation power, and knockout survival.</h3>
+            <p>Basic model: results/form 30%, goal difference 20%, attack 20%, defense 20%, knockout path difficulty 10%. Advanced metrics appear automatically when the live feed supplies them.</p>
+          </div>
+          <div className="analytics-hero__cards">
+            <button type="button" onClick={() => setAnalyticsTeam(analytics.strongestTeam.team)}>
+              <small>Strongest Team</small><b>{data.flags[analytics.strongestTeam.team]} {analytics.strongestTeam.team}</b><span>{analytics.strongestTeam.score}/100</span>
+            </button>
+            <button type="button" onClick={() => setAnalyticsTeam(analytics.bestAttack.team)}>
+              <small>Best Attack</small><b>{data.flags[analytics.bestAttack.team]} {analytics.bestAttack.team}</b><span>{analytics.bestAttack.attack}/100</span>
+            </button>
+            <button type="button" onClick={() => setAnalyticsTeam(analytics.bestDefense.team)}>
+              <small>Best Defense</small><b>{data.flags[analytics.bestDefense.team]} {analytics.bestDefense.team}</b><span>{analytics.bestDefense.defense}/100</span>
+            </button>
+            <div>
+              <small>Strongest Confederation</small><b>{analytics.strongestConfed.confederation}</b><span>{analytics.strongestConfed.avgStrength}/100 avg</span>
+            </div>
+            <div>
+              <small>Most Teams Remaining</small><b>{[...analytics.confederations].sort((a, b) => b.remaining - a.remaining)[0].confederation}</b><span>{[...analytics.confederations].sort((a, b) => b.remaining - a.remaining)[0].remaining} alive</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="analytics-tabs" role="tablist" aria-label="Analytics Hub sections">
+          {[
+            ["teams", "Teams"],
+            ["confeds", "Confederations"],
+            ["remaining", "Remaining"],
+            ["matchups", "Matchups"],
+          ].map(([key, label]) => (
+            <button key={key} type="button" role="tab" aria-selected={analyticsTab === key} onClick={() => setAnalyticsTab(key as AnalyticsTab)}>{label}</button>
+          ))}
+        </div>
+
+        {analyticsTab === "teams" && (
+          <div className="analytics-panel">
+            <div className="analytics-controls">
+              <button type="button" className="analytics-toggle" aria-pressed={aliveOnly} onClick={() => setAliveOnly(v => !v)}>Alive teams only</button>
+              <label>
+                <span>Sort</span>
+                <select value={analyticsSort} onChange={event => setAnalyticsSort(event.target.value as AnalyticsSort)}>
+                  <option value="overall">Overall</option>
+                  <option value="attack">Attack</option>
+                  <option value="defense">Defense</option>
+                  <option value="form">Form</option>
+                  <option value="goals">Goals</option>
+                  <option value="confederation">Confederation</option>
+                </select>
+              </label>
+            </div>
+            <div className="analytics-ranking">
+              {rankedAnalyticsTeams.map((team, index) => (
+                <button key={team.team} type="button" className="analytics-team-row" onClick={() => setAnalyticsTeam(team.team)}>
+                  <span className="analytics-rank">{index + 1}</span>
+                  <span className="analytics-team-row__name">
+                    <b>{data.flags[team.team]} {team.team}</b>
+                    <small>{team.confederation} · {team.wins}-{team.draws}-{team.losses} · GD {team.goalDiff > 0 ? "+" : ""}{team.goalDiff}</small>
+                  </span>
+                  <span className={`analytics-tier analytics-tier--${team.tier.toLowerCase().replace(/\s/g, "-")}`}>{team.tier}</span>
+                  <span className="analytics-score">
+                    <b>{team.score}</b>
+                    <i><span style={{ width: `${team.score}%` }} /></i>
+                  </span>
+                  <span className="analytics-mini">
+                    <em>ATT {team.attack}</em><em>DEF {team.defense}</em><em>FORM {team.form}</em>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {analyticsTab === "confeds" && (
+          <div className="analytics-panel">
+            <div className="analytics-confed-grid">
+              {analytics.confederations.map(confed => (
+                <article key={confed.confederation} className="analytics-confed-card">
+                  <header><span>{confed.confederation}</span><b>{confed.avgStrength}</b></header>
+                  <div className="analytics-confed-card__stats">
+                    <span><b>{confed.qualified}</b><small>qualified</small></span>
+                    <span><b>{confed.remaining}</b><small>remaining</small></span>
+                    <span><b>{confed.eliminated}</b><small>eliminated</small></span>
+                    <span><b>{confed.winPct}%</b><small>win rate</small></span>
+                    <span><b>{confed.pointsPerMatch}</b><small>pts/match</small></span>
+                    <span><b>{confed.goalDiff > 0 ? "+" : ""}{confed.goalDiff}</b><small>goal diff</small></span>
+                  </div>
+                  <p>KO {confed.knockoutTeams} · QF {confed.quarterfinalists} · SF {confed.semifinalists} · Finalists {confed.finalists}</p>
+                  <small>Best: {confed.bestTeam?.team || "Pending"} · Biggest disappointment: {confed.disappointment?.team || "Pending"} · Survival {confed.survivalRate}%</small>
+                </article>
+              ))}
+            </div>
+            <div className="analytics-comparison-grid">
+              {analytics.comparisonCards.map(card => (
+                <article key={card.label} className="analytics-compare-card">
+                  <span>{card.label}</span><b>{card.value}</b><small>{card.detail}</small>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {analyticsTab === "remaining" && (
+          <div className="analytics-panel">
+            <div className="analytics-survival-board">
+              {CONFEDERATIONS.map(confed => {
+                const teams = analytics.remainingByConfed[confed];
+                return (
+                  <article key={confed} className="analytics-survival-card">
+                    <header><b>{confed}</b><span>{teams.length} alive</span></header>
+                    {teams.length === 0 ? (
+                      <p>No teams remaining. Tournament performance summary is still shown in Confederations.</p>
+                    ) : (
+                      <div className="analytics-team-chips">
+                        {teams.map(team => (
+                          <button key={team.team} type="button" onClick={() => setAnalyticsTeam(team.team)}>
+                            <b>{data.flags[team.team]} {team.team}</b>
+                            <small>{team.currentRound} · vs {team.nextOpponent} · {team.nextMatchDate}</small>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {analyticsTab === "matchups" && (
+          <div className="analytics-panel">
+            {analytics.matchups.length === 0 ? (
+              <p className="analytics-empty">No confirmed upcoming knockout matchups yet. The model will populate this board as the bracket resolves.</p>
+            ) : (
+              <div className="analytics-matchups">
+                {analytics.matchups.map(matchup => (
+                  <article key={matchup.key} className="analytics-matchup-card">
+                    <header><span>{matchup.stage} · {matchup.date}</span><b>{matchup.difficulty}</b></header>
+                    <div className="analytics-matchup-card__teams">
+                      <button type="button" onClick={() => setAnalyticsTeam(matchup.home.team)}>{data.flags[matchup.home.team]} {matchup.home.team}<small>{matchup.home.score} strength · {matchup.home.confederation}</small></button>
+                      <strong>vs</strong>
+                      <button type="button" onClick={() => setAnalyticsTeam(matchup.away.team)}>{data.flags[matchup.away.team]} {matchup.away.team}<small>{matchup.away.score} strength · {matchup.away.confederation}</small></button>
+                    </div>
+                    <div className="analytics-matchup-bars">
+                      <span>Attack vs defense <b>{matchup.home.attack} / {matchup.away.defense}</b></span>
+                      <span>Return pressure <b>{matchup.away.attack} / {matchup.home.defense}</b></span>
+                      <span>Upset potential <b>{matchup.upsetPotential}%</b></span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedAnalyticsTeam && (
+          <aside className="analytics-drawer" aria-label={`${selectedAnalyticsTeam.team} analytics`}>
+            <div>
+              <span>{selectedAnalyticsTeam.confederation} · rank #{analytics.teams.findIndex(team => team.team === selectedAnalyticsTeam.team) + 1}</span>
+              <h4>{data.flags[selectedAnalyticsTeam.team]} {selectedAnalyticsTeam.team}</h4>
+              <p>{selectedAnalyticsTeam.pathStatus}</p>
+            </div>
+            <button type="button" className="analytics-drawer__close" aria-label="Close team analytics" onClick={() => setAnalyticsTeam(null)}>×</button>
+            <div className="analytics-breakdown">
+              {[
+                ["Overall", selectedAnalyticsTeam.score],
+                ["Attack", selectedAnalyticsTeam.attack],
+                ["Defense", selectedAnalyticsTeam.defense],
+                ["Form", selectedAnalyticsTeam.form],
+                ["Path", selectedAnalyticsTeam.pathDifficulty],
+              ].map(([label, value]) => (
+                <span key={label as string}><b>{label}</b><i><span style={{ width: `${value}%` }} /></i><em>{value}</em></span>
+              ))}
+            </div>
+            <div className="analytics-drawer__grid">
+              <span><b>{selectedAnalyticsTeam.goalsFor}</b><small>goals for</small></span>
+              <span><b>{selectedAnalyticsTeam.goalsAgainst}</b><small>against</small></span>
+              <span><b>{selectedAnalyticsTeam.cleanSheets}</b><small>clean sheets</small></span>
+              <span><b>{selectedAnalyticsTeam.nextOpponent}</b><small>next opponent</small></span>
+            </div>
+            <button type="button" className="analytics-drawer__team-link" onClick={() => onTeamClick(selectedAnalyticsTeam.team)}>Open team profile</button>
+            <div className="analytics-form-strip">
+              {selectedAnalyticsTeam.matches.length === 0 ? <span>No completed matches yet.</span> : selectedAnalyticsTeam.matches.slice(-5).map(match => (
+                <span key={`${match.label}-${match.opponent}-${match.ts}`} className={`analytics-form analytics-form--${match.result.toLowerCase()}`}>
+                  <b>{match.result}</b><small>{match.gf}-{match.ga} vs {match.opponent}</small>
+                </span>
+              ))}
+            </div>
+            <p className="analytics-drawer__note">Ranking among {selectedAnalyticsTeam.confederation}: #{analytics.teams.filter(team => team.confederation === selectedAnalyticsTeam.confederation).findIndex(team => team.team === selectedAnalyticsTeam.team) + 1}. Model is basic until shots, possession, xG, and xGA coverage is complete.</p>
+          </aside>
+        )}
       </section>
 
       {/* ── Section 4: Stadiums ─────────────────────────────── */}

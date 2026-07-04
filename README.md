@@ -58,6 +58,9 @@ Top scorers, assists, and discipline, aggregated from match events with player-n
 ### Tournament Leaders
 Golden Boot race and team leaderboards computed from verified match data.
 
+### Analytics Hub
+More tab command center for team strength, confederation performance, remaining-team survival, and upcoming knockout matchup comparisons. The hub uses a transparent basic model from verified results, goal difference, attack, defense, form, and path difficulty, then upgrades automatically when richer match stats are available.
+
 ### Host City Map
 Interactive tournament map covering all 16 World Cup 2026 host venues across the United States, Canada, and Mexico. The map uses the same schedule and live overlay data as Schedule, Knockout, Team pages, and Match details, so live venues pulse, scores update, and team travel paths stay aligned with the canonical tournament state.
 
@@ -200,6 +203,16 @@ No map token is required. The host map is rendered with a custom SVG layer and s
 
 The map view joins that venue metadata to `DATA.gs`, `DATA.ko`, and the live fixture overlay at render time. Match rows expose venue ID, kickoff time, local kickoff time, stage, teams, status, score, and winner where verified/live data provides it.
 
+**Analytics model:** the Analytics Hub is computed client-side from the same canonical groups, knockout bracket, live fixture overlay, and stored match stats. Each team has a confederation mapping and receives a 0-100 strength score using this basic weighting:
+
+- Results/form: 30%
+- Goal difference: 20%
+- Attack: 20%
+- Defense: 20%
+- Path difficulty: 10%
+
+The model intentionally stays transparent when advanced data is missing: goals, clean sheets, verified results, and tournament progression remain enough to populate every section. If richer provider stats such as shots, shots on target, possession, or xG become available, the same cards surface those metrics without duplicating tournament data.
+
 **Flow:**
 
 1. **Ingest** (`/api/ingest`, cron @ 04:00 UTC) — pulls fixtures from API-Football into Postgres.
@@ -226,8 +239,8 @@ Live data is unofficial; FIFA is the source of record. The data provider is attr
 ## Roadmap
 
 - [ ] Improve live match sync (tighter polling during match windows, smarter backoff)
-- [ ] Add full advanced team stats (possession, shots, xG breakdowns per match)
-- [ ] Add xG/xA if the data source supports it
+- [ ] Add full advanced team stats (possession, shots, xG breakdowns per match) to deepen Analytics Hub scoring
+- [ ] Add xG/xA and opponent-adjusted strength if the data source supports it
 - [ ] Improve bracket gestures (pinch-to-zoom, momentum tuning on iOS)
 - [ ] Add match notifications (web push for kickoffs and goals)
 - [ ] Add deeper player profiles (per-match logs, heat maps)

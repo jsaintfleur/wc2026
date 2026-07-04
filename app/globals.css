@@ -7379,6 +7379,150 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   overflow-wrap: anywhere;
 }
 
+/* ── Analytics Hub ------------------------------------------------ */
+.analytics-hub { display: grid; gap: 14px; margin: 14px 0; }
+.analytics-hero,
+.analytics-panel,
+.analytics-drawer {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(56,189,248,0.1), transparent 34%),
+    linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)),
+    rgba(8, 13, 24, 0.94);
+  box-shadow: 0 18px 50px rgba(0,0,0,0.26);
+}
+.analytics-hero { display: grid; gap: 14px; padding: 16px; }
+.analytics-kicker { color: var(--gold-bright); font-family: var(--disp); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.analytics-hero h3 { margin: 4px 0 6px; color: #fff; font-family: var(--disp); font-size: 28px; line-height: 1; text-transform: uppercase; }
+.analytics-hero p, .analytics-empty, .analytics-survival-card p { margin: 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.45; }
+.analytics-hero__cards, .analytics-comparison-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.analytics-hero__cards > *, .analytics-compare-card {
+  appearance: none;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 11px 12px;
+  color: inherit;
+  text-align: left;
+  background: rgba(255,255,255,0.045);
+  font: inherit;
+}
+.analytics-hero__cards button, .analytics-team-row, .analytics-team-chips button, .analytics-matchup-card button { cursor: pointer; }
+.analytics-hero__cards small,
+.analytics-compare-card span,
+.analytics-confed-card small,
+.analytics-survival-card small,
+.analytics-matchup-card span,
+.analytics-drawer span:first-child {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .55px;
+  text-transform: uppercase;
+}
+.analytics-hero__cards b, .analytics-compare-card b {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-family: var(--disp);
+  font-size: 18px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.analytics-hero__cards span, .analytics-compare-card small { color: var(--gold-bright); font-size: 12px; font-weight: 800; }
+.analytics-tabs, .analytics-controls { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.analytics-tabs::-webkit-scrollbar, .analytics-controls::-webkit-scrollbar { display: none; }
+.analytics-tabs button, .analytics-toggle, .analytics-controls select {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 999px;
+  padding: 9px 12px;
+  color: var(--ink);
+  background: rgba(255,255,255,0.045);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+.analytics-tabs button[aria-selected="true"], .analytics-toggle[aria-pressed="true"] { border-color: color-mix(in srgb, var(--gold) 55%, transparent); color: #111; background: var(--gold); }
+.analytics-panel { display: grid; gap: 12px; padding: 12px; }
+.analytics-controls { align-items: center; justify-content: space-between; }
+.analytics-controls label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.analytics-ranking, .analytics-confed-grid, .analytics-survival-board, .analytics-matchups { display: grid; gap: 9px; }
+.analytics-team-row {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 15px;
+  padding: 10px;
+  color: var(--ink);
+  text-align: left;
+  background: rgba(255,255,255,0.042);
+  font: inherit;
+}
+.analytics-rank { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: #111; background: var(--gold); font-family: var(--disp); font-weight: 900; }
+.analytics-team-row__name { min-width: 0; }
+.analytics-team-row__name b { display: block; overflow: hidden; color: #fff; font-family: var(--disp); font-size: 17px; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
+.analytics-team-row__name small { display: block; margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.analytics-tier { justify-self: end; border: 1px solid rgba(255,255,255,0.1); border-radius: 999px; padding: 4px 8px; color: #fff; background: rgba(255,255,255,0.06); font-size: 10px; font-weight: 900; letter-spacing: .5px; text-transform: uppercase; }
+.analytics-tier--elite { border-color: rgba(251,191,36,0.45); color: var(--gold-bright); }
+.analytics-tier--contender { border-color: rgba(56,189,248,0.35); color: #7dd3fc; }
+.analytics-tier--dark-horse { border-color: rgba(34,197,94,0.35); color: #86efac; }
+.analytics-tier--vulnerable { color: #fca5a5; }
+.analytics-tier--eliminated { color: var(--muted); }
+.analytics-score { grid-column: 2 / -1; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 8px; }
+.analytics-score b { color: #fff; font-family: var(--disp); font-size: 20px; }
+.analytics-score i, .analytics-breakdown i { height: 8px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,0.08); }
+.analytics-score i span, .analytics-breakdown i span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--gold), #38bdf8); }
+.analytics-mini { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.analytics-mini em { border-radius: 999px; padding: 3px 7px; color: var(--ink-soft); background: rgba(255,255,255,0.045); font-style: normal; font-size: 10.5px; font-weight: 800; }
+.analytics-confed-card, .analytics-survival-card, .analytics-matchup-card { border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 12px; background: rgba(255,255,255,0.042); }
+.analytics-confed-card header, .analytics-survival-card header, .analytics-matchup-card header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.analytics-confed-card header span, .analytics-survival-card header b { color: #fff; font-family: var(--disp); font-size: 22px; font-weight: 900; }
+.analytics-confed-card header b { color: var(--gold-bright); font-family: var(--disp); font-size: 26px; }
+.analytics-confed-card__stats, .analytics-drawer__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.analytics-confed-card__stats span, .analytics-drawer__grid span { display: grid; gap: 2px; min-width: 0; border-radius: 11px; padding: 8px; background: rgba(255,255,255,0.045); }
+.analytics-confed-card__stats b, .analytics-drawer__grid b { overflow: hidden; color: #fff; font-family: var(--disp); font-size: 18px; text-overflow: ellipsis; white-space: nowrap; }
+.analytics-confed-card p, .analytics-drawer p { margin: 9px 0; color: var(--ink-soft); font-size: 12px; }
+.analytics-team-chips { display: grid; gap: 7px; }
+.analytics-team-chips button { border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 9px; color: var(--ink); text-align: left; background: rgba(255,255,255,0.045); font: inherit; }
+.analytics-team-chips b, .analytics-team-chips small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.analytics-matchup-card__teams { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr); gap: 8px; align-items: stretch; }
+.analytics-matchup-card__teams button { border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px; color: #fff; background: rgba(255,255,255,0.05); font: inherit; font-weight: 800; text-align: left; }
+.analytics-matchup-card__teams small { display: block; margin-top: 4px; color: var(--muted); font-size: 10.5px; }
+.analytics-matchup-card__teams strong { display: grid; place-items: center; color: var(--gold-bright); font-family: var(--disp); }
+.analytics-matchup-bars { display: grid; gap: 5px; margin-top: 9px; color: var(--ink-soft); font-size: 11px; }
+.analytics-matchup-bars span { display: flex; justify-content: space-between; gap: 10px; }
+.analytics-drawer { position: relative; display: grid; gap: 12px; padding: 14px; }
+.analytics-drawer__close { position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; color: var(--ink); background: rgba(255,255,255,0.06); font-size: 18px; cursor: pointer; }
+.analytics-drawer__team-link { width: max-content; max-width: 100%; border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent); border-radius: 999px; padding: 9px 13px; color: #111; background: var(--gold); font: inherit; font-size: 12px; font-weight: 900; cursor: pointer; }
+.analytics-drawer h4 { margin: 4px 36px 2px 0; color: #fff; font-family: var(--disp); font-size: 28px; line-height: 1; }
+.analytics-breakdown { display: grid; gap: 8px; }
+.analytics-breakdown > span { display: grid; grid-template-columns: 70px minmax(0, 1fr) 32px; align-items: center; gap: 8px; color: var(--ink-soft); font-size: 11px; font-weight: 800; }
+.analytics-breakdown em { color: #fff; font-style: normal; text-align: right; }
+.analytics-form-strip { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 2px; }
+.analytics-form { flex: 0 0 118px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 8px; background: rgba(255,255,255,0.045); }
+.analytics-form b { color: #fff; font-family: var(--disp); font-size: 18px; }
+.analytics-form--w { border-color: rgba(34,197,94,0.3); }
+.analytics-form--d { border-color: rgba(245,158,11,0.28); }
+.analytics-form--l { border-color: rgba(244,63,94,0.28); }
+.analytics-drawer__note { margin-bottom: 0 !important; }
+
+@media (min-width: 900px) {
+  .analytics-hero { grid-template-columns: minmax(0, .9fr) minmax(0, 1.2fr); align-items: stretch; }
+  .analytics-hero__cards, .analytics-comparison-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .analytics-confed-grid, .analytics-survival-board, .analytics-matchups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .analytics-team-row { grid-template-columns: 32px minmax(190px, 1fr) 112px 190px 230px; }
+  .analytics-score, .analytics-mini { grid-column: auto; }
+}
+
 /* ── App Settings list ──────────────────────────────────── */
 .more-section--settings {
   margin-bottom: 80px;

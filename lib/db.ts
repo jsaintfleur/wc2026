@@ -1,6 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "./generated/prisma/client";
-import { DATA, type TournamentData, type GroupStageMatch, type KnockoutMatch, type Venue, type MatchEvent, type MatchStats, type TeamLineup, type PlayerMatchStat } from "./data";
+import { DATA, applyVerifiedKnockoutSchedule, type TournamentData, type GroupStageMatch, type KnockoutMatch, type Venue, type MatchEvent, type MatchStats, type TeamLineup, type PlayerMatchStat } from "./data";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
@@ -36,7 +36,7 @@ function dbConfigured(): boolean {
 }
 
 export async function loadTournamentData(): Promise<{ data: TournamentData; source: "db" | "static" }> {
-  if (!dbConfigured()) return { data: DATA, source: "static" };
+  if (!dbConfigured()) return { data: applyVerifiedKnockoutSchedule(DATA), source: "static" };
 
   try {
     const [allTeams, allVenues, allGroups, allGroupTeams, allMatches] = await Promise.all([
@@ -134,11 +134,11 @@ export async function loadTournamentData(): Promise<{ data: TournamentData; sour
     }
 
     return {
-      data: { venues, groups, hosts, gs, ko, flags, gcolor, starts },
+      data: applyVerifiedKnockoutSchedule({ venues, groups, hosts, gs, ko, flags, gcolor, starts }),
       source: "db",
     };
   } catch (err) {
     console.error("Failed to load from database:", err);
-    return { data: DATA, source: "static" };
+    return { data: applyVerifiedKnockoutSchedule(DATA), source: "static" };
   }
 }

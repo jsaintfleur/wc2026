@@ -1362,12 +1362,18 @@ export default function Tournament({ data, initialView = "home", initialLiveData
 
     const futureGsByDate = groupByDate(futureMatches, m => m.iso);
     const futureKoByDate = groupByDate(futureKoCards, c => c.match.iso);
-    const completedGsByDate = groupByDate(completedMatches, m => m.iso);
-    const completedKoByDate = groupByDate(doneKoCards, c => c.match.iso);
+    type CompletedScheduleItem =
+      | { type: "gs"; iso: string; ts: number; item: GroupStageMatch }
+      | { type: "ko"; iso: string; ts: number; item: KnockoutCardModel };
+    const completedItems: CompletedScheduleItem[] = [
+      ...completedMatches.map(item => ({ type: "gs" as const, iso: item.iso, ts: item.ts, item })),
+      ...doneKoCards.map(item => ({ type: "ko" as const, iso: item.match.iso, ts: item.match.ts, item })),
+    ].sort((a, b) => b.ts - a.ts);
+    const completedByDate = groupByDate(completedItems, item => item.iso);
 
     /* Merge all future dates (GS + KO) into sorted order */
     const allFutureDates = [...new Set([...futureGsByDate.keys(), ...futureKoByDate.keys()])].sort();
-    const allPastDates = [...new Set([...completedGsByDate.keys(), ...completedKoByDate.keys()])].sort().reverse();
+    const allPastDates = [...completedByDate.keys()].sort().reverse();
 
     let html = "";
 
@@ -1429,13 +1435,13 @@ export default function Tournament({ data, initialView = "home", initialLiveData
       for (const iso of allPastDates) {
         const dt = parseISO(iso);
         const dateLabel = `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`;
-        const gsDay = completedGsByDate.get(iso) || [];
-        const koDay = completedKoByDate.get(iso) || [];
-        if (!gsDay.length && !koDay.length) continue;
-        const koTag = koDay.length ? `<small class="sched-ko-tag">Knockout</small>` : "";
-        html += `<div class="sched-day sched-day--past"><div class="sched-day__hd">${dateLabel}${koTag}<b>${gsDay.length + koDay.length}</b></div>`;
-        for (const m of gsDay) html += tixCard(m, anim, true);
-        for (const card of koDay) html += koTixCard(card, anim, true);
+        const dayItems = completedByDate.get(iso) || [];
+        if (!dayItems.length) continue;
+        const koTag = dayItems.some(item => item.type === "ko") ? `<small class="sched-ko-tag">Knockout</small>` : "";
+        html += `<div class="sched-day sched-day--past"><div class="sched-day__hd">${dateLabel}${koTag}<b>${dayItems.length}</b></div>`;
+        for (const result of dayItems) {
+          html += result.type === "gs" ? tixCard(result.item, anim, true) : koTixCard(result.item, anim, true);
+        }
         html += `</div>`;
       }
       html += `</div></details>`;

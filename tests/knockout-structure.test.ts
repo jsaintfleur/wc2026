@@ -6,7 +6,7 @@ import {
   knockoutMatchRange,
   validateKnockoutMatchNumbers,
 } from "../lib/knockout-structure";
-import { DATA } from "../lib/data";
+import { DATA, applyVerifiedKnockoutSchedule } from "../lib/data";
 
 test("knockout match numbers are contiguous from M73 through M104", () => {
   assert.deepEqual(validateKnockoutMatchNumbers(), []);
@@ -51,6 +51,34 @@ test("round of 32 schedule matches verified match-number order", () => {
     { no: 86, ts: "2026-07-03T22:00:00.000Z", venue: "HARDROCK" },
     { no: 87, ts: "2026-07-04T01:30:00.000Z", venue: "ARROW" },
     { no: 88, ts: "2026-07-03T18:00:00.000Z", venue: "ATT" },
+  ]);
+});
+
+test("verified knockout normalizer fixes stale db-loaded R32 rows", () => {
+  const stale = {
+    ...DATA,
+    ko: DATA.ko.map((match, index) => index === 13
+      ? { ...match, iso: "2026-07-03", local: "1:00 PM CDT", et: "2:00 PM ET", v: "ATT", ts: Date.parse("2026-07-03T18:00:00.000Z") }
+      : index === 14
+        ? { ...match, iso: "2026-07-03", local: "6:00 PM ET", et: "6:00 PM ET", v: "HARDROCK", ts: Date.parse("2026-07-03T22:00:00.000Z") }
+        : index === 15
+          ? { ...match, iso: "2026-07-03", local: "8:30 PM CDT", et: "9:30 PM ET", v: "ARROW", ts: Date.parse("2026-07-04T01:30:00.000Z") }
+          : match),
+  };
+  const fixed = applyVerifiedKnockoutSchedule(stale);
+  assert.deepEqual([85, 86, 87, 88].map(no => {
+    const match = fixed.ko[no - 73];
+    return { no, ts: new Date(match.ts).toISOString(), venue: match.v };
+  }), [
+    { no: 85, ts: "2026-07-03T03:00:00.000Z", venue: "BCP" },
+    { no: 86, ts: "2026-07-03T22:00:00.000Z", venue: "HARDROCK" },
+    { no: 87, ts: "2026-07-04T01:30:00.000Z", venue: "ARROW" },
+    { no: 88, ts: "2026-07-03T18:00:00.000Z", venue: "ATT" },
+  ]);
+  assert.deepEqual(fixed.starts.slice(85, 88).map(ts => new Date(ts).toISOString()), [
+    "2026-07-03T22:00:00.000Z",
+    "2026-07-04T01:30:00.000Z",
+    "2026-07-03T18:00:00.000Z",
   ]);
 });
 

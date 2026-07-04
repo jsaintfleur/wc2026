@@ -2442,9 +2442,6 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
   favs: Set<string>;
   toggleFav: (team: string) => void;
 }) {
-  const [filter, setFilter] = useState<string>("ALL");
-  const [search, setSearch] = useState("");
-
   /* -- build team data with records ------------------------------- */
   const teamsData = useMemo(() => {
     const groupEntries = Object.entries(data.groups);
@@ -2480,17 +2477,7 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
     return teams;
   }, [data, fixtures, findLive, nowMs]);
 
-  const groups = useMemo(() => ["ALL", ...Object.keys(data.groups).sort()], [data.groups]);
-
-  const filtered = useMemo(() => {
-    let result = teamsData;
-    if (filter !== "ALL") result = result.filter(t => t.group === filter);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(t => t.team.toLowerCase().includes(q));
-    }
-    return [...result].sort((a, b) => a.team.localeCompare(b.team));
-  }, [teamsData, filter, search]);
+  const sortedTeams = useMemo(() => [...teamsData].sort((a, b) => a.team.localeCompare(b.team)), [teamsData]);
 
   return (
     <main className="teams-view" aria-label="Teams">
@@ -2500,34 +2487,9 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
         <p>Browse squads, group records and tournament paths.</p>
       </section>
 
-      {/* -- search + group filter --------------------------------- */}
-      <div className="teams-view__controls">
-        <input
-          type="search"
-          className="teams-view__search"
-          placeholder="Search teams…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          aria-label="Search teams"
-        />
-        <div className="teams-view__chips" role="group" aria-label="Filter by group">
-          {groups.map(g => (
-            <button
-              key={g}
-              type="button"
-              className={`teams-view__chip${filter === g ? " teams-view__chip--active" : ""}`}
-              aria-pressed={filter === g}
-              onClick={() => setFilter(g)}
-            >
-              {g === "ALL" ? "All" : g}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* -- team grid --------------------------------------------- */}
       <div className="teams-view__grid">
-        {filtered.map(({ team, group, flag, host, w, d, l, gf, ga, pts, form }) => (
+        {sortedTeams.map(({ team, group, flag, host, w, d, l, gf, ga, pts, form }) => (
           <button key={team} type="button" className={`team-tile${favs.has(team) ? " team-tile--fav" : ""}`} onClick={() => onTeamClick(team)}>
             <div className="team-tile__top">
               <span className="team-tile__flag">{flag}</span>
@@ -2562,13 +2524,6 @@ function TeamsView({ data, fixtures, findLive, nowMs, onTeamClick, favs, toggleF
           </button>
         ))}
       </div>
-
-      {filtered.length === 0 && (
-        <div className="teams-view__empty">
-          No teams match your search.
-          <button type="button" onClick={() => { setSearch(""); setFilter("ALL"); }}>Clear filters</button>
-        </div>
-      )}
     </main>
   );
 }

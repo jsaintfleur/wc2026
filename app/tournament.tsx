@@ -727,6 +727,10 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
   const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
   const [hostDrawer, setHostDrawer] = useState<string | null>(null);
   const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture | null } | null>(null);
+  /* One-shot handoff: a stadium card elsewhere (More view) requests the map
+     to open centered on this venue. Cleared once the map consumes it. */
+  const [mapVenueTarget, setMapVenueTarget] = useState<string | null>(null);
+  const clearMapVenueTarget = useCallback(() => setMapVenueTarget(null), []);
   const [playerProfile, setPlayerProfile] = useState<{ name: string; team: string } | null>(null);
   const [goalToast, setGoalToast] = useState<{ team: string; player: string; minute: string; score: string; flag: string } | null>(null);
   const [toastExiting, setToastExiting] = useState(false);
@@ -1574,11 +1578,13 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
             nowMs={nowMs}
             onMatchClick={openMatchDetail}
             onViewVenueMatches={openVenueSchedule}
+            initialVenueId={mapVenueTarget}
+            onInitialVenueConsumed={clearMapVenueTarget}
           />
         ) : view === "analytics" ? (
           <AnalyticsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} liveTs={liveTs} liveStatus={liveStatus} onTeamClick={setTeamDrawer} onMatchClick={openMatchDetail} />
         ) : view === "more" ? (
-          <MoreView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} />
+          <MoreView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} findLive={findLive} nowMs={nowMs} onNavigate={handleTab} onVenueClick={(venueId) => { setMapVenueTarget(venueId); handleTab("map"); }} />
         ) : view === "settings" ? (
           <SettingsView data={data} fixtures={fixtures} leaderboardStats={leaderboardStats} liveTs={liveTs} liveStatus={liveStatus} onNavigate={handleTab} onTeamClick={setTeamDrawer} />
         ) : (
@@ -2589,6 +2595,11 @@ type MapViewProps = {
   nowMs: number;
   onMatchClick: (match: GroupStageMatch, fixture: LiveFixture | null) => void;
   onViewVenueMatches: (stadiumName: string) => void;
+  /* One-shot venue handoff from other views (e.g. tapping a stadium card in
+     More): the map opens with this venue selected and centered, then
+     reports consumption so a later map visit isn't re-forced. */
+  initialVenueId?: string | null;
+  onInitialVenueConsumed?: () => void;
 };
 
 /* Map preferences from the shared settings store (Settings view writes it).
@@ -2664,12 +2675,12 @@ const VenueMap = dynamic(() => import("@/app/components/VenueMap"), {
 /* Memoized with minute-granular time comparison: nothing on the map needs
    sub-minute precision, so parent re-renders (drawer state, search typing,
    nowMs ticks) don't re-run the venue/status computations. */
-const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMatches }: MapViewProps) {
+const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatchClick, onViewVenueMatches, initialVenueId, onInitialVenueConsumed }: MapViewProps) {
   /* Settings-driven map preferences (style, auto-center, remember) */
   const prefs = useMemo(loadMapPrefs, []);
   const remembered = useMemo(() => (prefs.rememberMap ? loadRememberedMapState() : null), [prefs.rememberMap]);
 
-  const [activeVenueId, setActiveVenueId] = useState(remembered?.venueId || "METLIFE");
+  const [activeVenueId, setActiveVenueId] = useState(initialVenueId || remembered?.venueId || "METLIFE");
   const [statusFilter, setStatusFilter] = useState<MapStatusFilter>("all");
   const [countryFilter, setCountryFilter] = useState<MapCountryFilter>("all");
   const [selectedTeam, setSelectedTeam] = useState("ALL");
@@ -2743,6 +2754,22 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     canvasScrollRef.current?.scrollTo({ left: 0, top: 0, behavior: "smooth" });
     setFitRequest(req => ({ seq: (req?.seq || 0) + 1 }));
   };
+
+  /* Venue handoff from another view (stadium card in More): center the map
+     on it and open its panel once on mount, then report consumption so
+     future map visits fall back to remembered/default behavior. */
+  const consumedInitialVenueRef = useRef(false);
+  useEffect(() => {
+    if (!initialVenueId || consumedInitialVenueRef.current) return;
+    consumedInitialVenueRef.current = true;
+    /* Delay one frame so the Leaflet chunk's mount can accept the focus */
+    const id = window.requestAnimationFrame(() => {
+      selectVenue(initialVenueId);
+      onInitialVenueConsumed?.();
+    });
+    return () => window.cancelAnimationFrame(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialVenueId]);
 
   const setStatusFilterFromUser = (next: MapStatusFilter) => {
     mapInteractedRef.current = true;
@@ -3538,6 +3565,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   prev.findLive === next.findLive &&
   prev.onMatchClick === next.onMatchClick &&
   prev.onViewVenueMatches === next.onViewVenueMatches &&
+  prev.initialVenueId === next.initialVenueId &&
   // Minute granularity: map statuses don't need sub-minute time precision,
   // so nowMs ticks within the same minute skip the render entirely.
   Math.floor(prev.nowMs / 60000) === Math.floor(next.nowMs / 60000)
@@ -4935,13 +4963,15 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, liveTs, liveStatus, on
  * Sections: Hero, Progress, Quick Access, Stadiums, Host Cities,
  *           Calendar Timeline, History, App Settings
  * --------------------------------------------------------------- */
-function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigate }: {
+function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigate, onVenueClick }: {
   data: TournamentData;
   fixtures: LiveFixture[];
   leaderboardStats: ExternalLeaderStat[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
   onNavigate: (view: ViewType) => void;
+  /* Opens the Map view centered on the given venue (stadium card tap) */
+  onVenueClick: (venueId: string) => void;
 }) {
 
   const countryFlag = (country: string) => {
@@ -5177,10 +5207,13 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
         <h3 className="more-section__heading">Stadiums</h3>
         <div className="more-venue-grid">
           {venueList.map((v, i) => (
-            <div
+            <button
               key={v.key}
+              type="button"
               className="more-venue-card"
               style={{ animationDelay: `${i * 40}ms` }}
+              onClick={() => onVenueClick(v.key)}
+              aria-label={`View ${v.common} on the map`}
             >
               <div className="more-venue-card__top">
                 <span className="more-venue-card__flag" role="img" aria-label={v.country}>{countryFlag(v.country)}</span>
@@ -5191,7 +5224,8 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
                 <span>{fmtNum(v.cap)} seats</span>
                 <span>{v.matches} match{v.matches !== 1 ? "es" : ""}</span>
               </div>
-            </div>
+              <span className="more-venue-card__cta" aria-hidden="true">View on map ↗</span>
+            </button>
           ))}
         </div>
       </section>

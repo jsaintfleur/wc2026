@@ -7163,6 +7163,12 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 .more-venue-card {
+  /* Now a real button — tapping opens the Map centered on this venue */
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -7174,6 +7180,25 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
     rgba(8, 12, 21, 0.88);
   box-shadow: 0 12px 32px rgba(0,0,0,0.22);
   animation: moreCardIn 0.4s ease both;
+  transition: border-color .16s ease, transform .16s ease;
+}
+.more-venue-card:hover {
+  border-color: rgba(245,158,11,0.32);
+  transform: translateY(-1px);
+}
+.more-venue-card:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+.more-venue-card__cta {
+  margin-top: 4px;
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  opacity: .85;
 }
 
 .more-venue-card__top {
@@ -9341,8 +9366,11 @@ button.settings-row:active,
 .map-panel__handle { display: none; appearance: none; width: 100%; padding: 0 0 8px; border: 0; background: none; cursor: pointer; }
 .map-panel__handle span { display: grid; place-items: center; width: 46px; height: 22px; border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; margin: 0 auto; color: var(--gold-bright); background: rgba(255,255,255,0.06); font-size: 14px; line-height: 1; }
 .map-panel__handle:focus-visible span { outline: 2px solid var(--gold-bright); outline-offset: 4px; }
-.map-panel__hero { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 12px; align-items: center; }
-.map-panel__image { display: grid; place-items: center; width: 82px; height: 82px; border-radius: 18px; background: radial-gradient(circle at 24% 20%, rgba(255,255,255,0.2), transparent 34%), linear-gradient(145deg, rgba(10,92,62,0.9), color-mix(in srgb, var(--gold) 36%, transparent)); background-size: cover; background-position: center; }
+.map-panel__hero { display: grid; grid-template-columns: 118px minmax(0, 1fr); gap: 12px; align-items: center; }
+/* Stadium photo (Wikimedia, baked via scripts/fetch-venue-images.ts) sits
+   next to the venue's location details; the gradient + monogram only show
+   if a photo is missing. Landscape ratio suits stadium exteriors. */
+.map-panel__image { display: grid; place-items: center; flex-shrink: 0; width: 118px; height: 84px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.10); background: radial-gradient(circle at 24% 20%, rgba(255,255,255,0.2), transparent 34%), linear-gradient(145deg, rgba(10,92,62,0.9), color-mix(in srgb, var(--gold) 36%, transparent)); background-size: cover; background-position: center; }
 .map-panel__image span { color: #fff; font-family: var(--disp); font-size: 22px; font-weight: 900; }
 .map-panel__eyebrow { color: var(--gold-bright); font-family: var(--disp); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .map-panel h3 { margin: 4px 0; color: #fff; font-family: var(--disp); font-size: 24px; line-height: 1; }

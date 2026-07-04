@@ -1849,18 +1849,20 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
     return !!((f && DONE_STATUSES.has(f.status)) || (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null));
   }).length, [data.gs, fixtures, findLive]);
 
-  const koDone = useMemo(() => data.ko.filter(m => {
-    const f = findLive({ ts: m.ts, v: m.v }, fixtures);
-    return isCompletedKnockoutFixture(f);
-  }).length, [data.ko, fixtures, findLive]);
+  const knockoutCards = useMemo(
+    () => buildKnockoutCards(data, fixtures, findLive, nowMs),
+    [data, fixtures, findLive, nowMs],
+  );
+
+  const koDone = useMemo(() => knockoutCards.filter(card => card.isDone).length, [knockoutCards]);
 
   /* Per-round knockout completion — one checkpoint per round so no round
      is lumped into a generic "Knockout" phase. */
   const koRounds = useMemo(() => KO_ROUND_STEPS.map(step => {
-    const roundMatches = data.ko.filter(m => step.matches(m.round));
-    const done = roundMatches.filter(m => isCompletedKnockoutFixture(findLive({ ts: m.ts, v: m.v }, fixtures))).length;
+    const roundMatches = knockoutCards.filter(card => step.matches(card.match.round));
+    const done = roundMatches.filter(card => card.isDone).length;
     return { key: step.key, label: step.label, done, total: roundMatches.length };
-  }), [data.ko, fixtures, findLive]);
+  }), [knockoutCards]);
 
   const totalMatches = data.gs.length + data.ko.length;
   const totalDone = groupDone + koDone;
@@ -1890,23 +1892,22 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
         });
       }
     }
-    for (const m of data.ko) {
-      const f = findLive({ ts: m.ts, v: m.v }, fixtures);
-      if (f && LIVE_STATUSES.has(f.status)) {
+    for (const card of knockoutCards) {
+      const f = card.fixture;
+      if (f && card.isLive) {
+        const [homeTeam, awayTeam] = card.teams;
         live.push({
           type: "ko",
-          match: m,
+          match: card.match,
           fixture: f,
-          // canon() maps vendor names ("Cape Verde Islands", "Korea
-          // Republic") to app names — fixes flag lookups and long labels
-          home: f.home ? canon(f.home) : "TBD",
-          away: f.away ? canon(f.away) : "TBD",
-          venue: data.venues[m.v]?.common || m.v,
+          home: homeTeam.placeholder ? "TBD" : homeTeam.name,
+          away: awayTeam.placeholder ? "TBD" : awayTeam.name,
+          venue: data.venues[card.match.v]?.common || card.match.v,
         });
       }
     }
     return live.sort((a, b) => a.match.ts - b.match.ts);
-  }, [data.gs, data.ko, data.venues, fixtures, findLive]);
+  }, [data.gs, data.venues, fixtures, findLive, knockoutCards]);
 
   /* -- next match countdown --------------------------------------- */
   const nextMatch = useMemo(() => {
@@ -1924,28 +1925,31 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
           iso: match.iso,
           et: match.et,
           round: `Group ${match.g}`,
+          isDone: !!((fixture && DONE_STATUSES.has(fixture.status)) || (match.dbStatus && DONE_STATUSES.has(match.dbStatus) && match.dbGh != null && match.dbGa != null)),
         };
       }),
-      ...data.ko.map(match => {
-        const fixture = findLive({ ts: match.ts, v: match.v }, fixtures);
+      ...knockoutCards.map(card => {
+        const match = card.match;
+        const [homeTeam, awayTeam] = card.teams;
         return {
           type: "ko" as const,
           match,
-          fixture,
+          fixture: card.fixture,
           ts: match.ts,
-          home: fixture?.home ? canon(fixture.home) : "TBD",
-          away: fixture?.away ? canon(fixture.away) : "TBD",
+          home: homeTeam.placeholder ? (homeTeam.seed || homeTeam.name) : homeTeam.name,
+          away: awayTeam.placeholder ? (awayTeam.seed || awayTeam.name) : awayTeam.name,
           venue: data.venues[match.v]?.common || match.v,
           iso: match.iso,
           et: match.et,
           round: match.round,
+          isDone: card.isDone,
         };
       }),
     ];
     return scheduled
-      .filter(item => item.ts > nowMs && !DONE_STATUSES.has(item.fixture?.status || ""))
+      .filter(item => item.ts > nowMs && !item.isDone && !DONE_STATUSES.has(item.fixture?.status || ""))
       .sort((a, b) => a.ts - b.ts)[0] || null;
-  }, [data.gs, data.ko, data.venues, fixtures, findLive, nowMs]);
+  }, [data.gs, data.venues, fixtures, findLive, knockoutCards, nowMs]);
 
   /* -- recent results (last 6 completed matches, GS + KO) --------- */
   const recentResults = useMemo(() => {
@@ -1968,17 +1972,20 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
 
     // Collect finished knockout matches — synthesize a GroupStageMatch shape
     // so the match detail drawer can render them the same way
-    for (const m of data.ko) {
-      candidates.push({ ts: m.ts, build: () => {
-        const f = findLive({ ts: m.ts, v: m.v }, fixtures);
-        if (!f || !DONE_STATUSES.has(f.status) || f.gh == null || f.ga == null) return null;
+    for (const card of knockoutCards) {
+      candidates.push({ ts: card.match.ts, build: () => {
+        const f = card.fixture;
+        if (!f || !card.isDone || f.gh == null || f.ga == null) return null;
+        const [homeTeam, awayTeam] = card.teams;
+        const home = homeTeam.placeholder ? (f.home ? canon(f.home) : "TBD") : homeTeam.name;
+        const away = awayTeam.placeholder ? (f.away ? canon(f.away) : "TBD") : awayTeam.name;
         const synthMatch: GroupStageMatch = {
-          no: parseInt(m.mr.replace("M", ""), 10) || 0,
-          iso: m.iso, local: m.local, et: m.et,
-          g: "KO", t1: f.home ? canon(f.home) : "TBD", t2: f.away ? canon(f.away) : "TBD",
-          v: m.v, ts: m.ts,
+          no: card.matchNo,
+          iso: card.match.iso, local: card.match.local, et: card.match.et,
+          g: "KO", t1: home, t2: away,
+          v: card.match.v, ts: card.match.ts,
         };
-        return { match: synthMatch, fixture: f, roundLabel: m.round };
+        return { match: synthMatch, fixture: f, roundLabel: card.match.round };
       }});
     }
 
@@ -1990,7 +1997,7 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
       if (results.length >= 6) break;
     }
     return results;
-  }, [data.gs, data.ko, fixtures, findLive]);
+  }, [data.gs, fixtures, findLive, knockoutCards]);
 
   /* -- top scorer & assister -------------------------------------- */
   const leaders = useMemo(() => computeLeaders(), [computeLeaders]);

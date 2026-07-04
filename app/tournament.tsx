@@ -3175,7 +3175,8 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
                 const markerLabel =
                   `${venue.stadiumName}, ${venue.city}, ${venue.country}. ` +
                   `${venue.matchesHosted} matches: ${venue.liveCount} live, ${venue.upcomingCount} upcoming, ${venue.completedCount} completed.` +
-                  (live ? " Live now." : "");
+                  (live ? " Live now." : "") +
+                  (!visible ? " Not in current filter." : "");
                 return (
                   <g key={venue.venueId} className={`map-marker-group${visible ? "" : " map-marker-group--muted"}${active ? " map-marker-group--active" : ""}${live ? " map-marker-group--live" : ""}${onTeamPath ? " map-marker-group--route" : ""}`}>
                     {live && <circle cx={point.x} cy={point.y} r="24" className="map-marker-pulse" />}

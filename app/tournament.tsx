@@ -4624,6 +4624,7 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchCl
                     <span>Venue <b>{matchup.venue}</b></span>
                   </div>
                   <button type="button" className="analytics-matchup-card__match" onClick={() => onMatchClick(matchup.match, matchup.fixture)}>View match details</button>
+                  <button type="button" className="analytics-matchup-card__match analytics-matchup-card__match--ghost" onClick={() => shareAnalyticsText(`${matchup.home.team} ${matchup.leanHome} — ${matchup.leanAway} ${matchup.away.team} · model lean · ${matchup.stage}, ${matchup.kickoff}`, "matchups")}>Share matchup</button>
                 </article>
               ))}
             </div>

@@ -7600,6 +7600,7 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .analytics-matchup-bars { display: grid; gap: 5px; margin-top: 9px; color: var(--ink-soft); font-size: 11px; }
 .analytics-matchup-bars span { display: flex; justify-content: space-between; gap: 10px; }
 .analytics-matchup-card__match { margin-top: 10px; border: 1px solid rgba(251,191,36,0.38); border-radius: 999px; padding: 9px 12px; color: var(--gold-bright); background: rgba(251,191,36,0.08); font: inherit; font-size: 12px; font-weight: 900; cursor: pointer; }
+.analytics-matchup-card__match--ghost { margin-left: 6px; border-color: rgba(255,255,255,0.12); color: var(--ink-soft); background: rgba(255,255,255,0.045); }
 .analytics-drawer { position: relative; display: grid; gap: 12px; padding: 14px; }
 .analytics-drawer:focus { outline: 2px solid color-mix(in srgb, var(--gold) 55%, transparent); outline-offset: 3px; }
 .analytics-drawer__back { width: max-content; border: 0; padding: 0; color: var(--gold-bright); background: transparent; font: inherit; font-size: 12px; font-weight: 900; cursor: pointer; }

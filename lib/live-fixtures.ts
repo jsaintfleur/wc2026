@@ -84,7 +84,7 @@ export function normalizeWc26Status(timeElapsed: string, finished: string): { st
     case "live":
     case "inplay":
     case "in_play":
-    case "playing": return { status: "1H", elapsed: null };
+    case "playing": return { status: "LIVE", elapsed: null };
     default: {
       // During live play, time_elapsed may be a minute number like "34" or "67".
       const min = parseInt(token, 10);
@@ -95,9 +95,24 @@ export function normalizeWc26Status(timeElapsed: string, finished: string): { st
       }
       // Preserve an in-play posture for unexpected non-empty tokens. Falling
       // back to NS hides live fixtures when the vendor changes token wording.
-      return token ? { status: "1H", elapsed: null } : { status: "NS", elapsed: null };
+      return token ? { status: "LIVE", elapsed: null } : { status: "NS", elapsed: null };
     }
   }
+}
+
+export function estimateLiveElapsed(status: string | null | undefined, kickoffTs: number, elapsed: number | null | undefined, nowMs = Date.now()): number | null {
+  if (typeof elapsed === "number" && Number.isFinite(elapsed) && elapsed > 0) return elapsed;
+  if (!status || !Number.isFinite(kickoffTs) || kickoffTs <= 0) return elapsed ?? null;
+  if (status === "HT") return 45;
+  if (!["1H", "2H", "ET", "BT", "P", "LIVE"].includes(status)) return elapsed ?? null;
+
+  const wallMinutes = Math.floor((nowMs - kickoffTs) / 60000) + 1;
+  if (wallMinutes < 1) return elapsed ?? null;
+
+  if (status === "1H") return Math.min(wallMinutes, 45);
+  if (status === "2H") return Math.min(Math.max(wallMinutes, 46), 90);
+  if (status === "ET") return Math.min(Math.max(wallMinutes, 91), 120);
+  return Math.min(wallMinutes, 120);
 }
 
 export function sameFixture(a: unknown, b: unknown): boolean {

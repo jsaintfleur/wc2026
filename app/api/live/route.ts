@@ -9,6 +9,7 @@ import {
   cappedDetailCandidates,
   freshSnapshot,
   hasGoalAssistData,
+  estimateLiveElapsed,
   normalizeWc26Status,
   parseRemainingQuota,
   readThroughTtlCache,
@@ -230,10 +231,13 @@ async function fetchWC26(): Promise<{ ok: boolean; fixtures: unknown[] }> {
       }
     }
 
+    const ts = scheduled?.ts || (g.local_date ? Date.parse(g.local_date) || 0 : 0);
+    const displayElapsed = estimateLiveElapsed(status, ts, elapsed);
+
     return {
-      ts: scheduled?.ts || (g.local_date ? Date.parse(g.local_date) || 0 : 0),
+      ts,
       status,
-      elapsed,
+      elapsed: displayElapsed,
       venue: scheduled?.venue || stadiumName,
       round: scheduled?.round || roundLabel(g),
       home: g.home_team_name_en,
@@ -442,10 +446,13 @@ function normalizeVendorFixture(f: VendorFixture) {
   const stats = mapVendorStats(f);
   const lineups = mapVendorLineups(f);
   const players = mapVendorPlayers(f);
+  const ts = Date.parse(f.fixture?.date ?? "");
+  const status = f.fixture?.status?.short;
+  const elapsed = estimateLiveElapsed(status, ts, f.fixture?.status?.elapsed);
   return {
-    ts: Date.parse(f.fixture?.date ?? ""),
-    status: f.fixture?.status?.short,
-    elapsed: f.fixture?.status?.elapsed,
+    ts,
+    status,
+    elapsed,
     venue: f.fixture?.venue?.name,
     round: f.league?.round,
     home: f.teams?.home?.name,

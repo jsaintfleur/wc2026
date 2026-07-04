@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   assembleLiveFixtureBase,
   cappedDetailCandidates,
+  estimateLiveElapsed,
   freshSnapshot,
   liveSnapshotTtl,
   normalizeWc26Status,
@@ -80,11 +81,20 @@ test("quota parser fails closed when remaining header is missing or invalid", ()
 });
 
 test("worldcup26 live tokens normalize to in-play statuses", () => {
-  assert.deepEqual(normalizeWc26Status("live", "FALSE"), { status: "1H", elapsed: null });
+  assert.deepEqual(normalizeWc26Status("live", "FALSE"), { status: "LIVE", elapsed: null });
   assert.deepEqual(normalizeWc26Status("67", "FALSE"), { status: "2H", elapsed: 67 });
   assert.deepEqual(normalizeWc26Status("halftime", "FALSE"), { status: "HT", elapsed: 45 });
   assert.deepEqual(normalizeWc26Status("notstarted", "FALSE"), { status: "NS", elapsed: null });
   assert.deepEqual(normalizeWc26Status("finished", "TRUE"), { status: "FT", elapsed: 90 });
+});
+
+test("live elapsed fallback estimates display minute from kickoff", () => {
+  const kickoff = Date.UTC(2026, 6, 4, 17, 0, 0);
+  assert.equal(estimateLiveElapsed("LIVE", kickoff, null, kickoff + 48 * 60000 + 20_000), 49);
+  assert.equal(estimateLiveElapsed("1H", kickoff, null, kickoff + 48 * 60000), 45);
+  assert.equal(estimateLiveElapsed("2H", kickoff, null, kickoff + 66 * 60000), 67);
+  assert.equal(estimateLiveElapsed("LIVE", kickoff, 32, kickoff + 48 * 60000), 32);
+  assert.equal(estimateLiveElapsed("NS", kickoff, null, kickoff + 48 * 60000), null);
 });
 
 test("detail enrichment candidates are hard capped at one batch", () => {

@@ -218,6 +218,7 @@ export default function VenueMap({
       maxZoom={12}
       className={`venue-leaflet venue-leaflet--${mapStyle.toLowerCase()}`}
       scrollWheelZoom
+      doubleClickZoom={false}
       attributionControl
     >
       <TileLayer key={mapStyle} url={tiles.url} attribution={tiles.attribution} />

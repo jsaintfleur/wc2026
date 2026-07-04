@@ -1415,15 +1415,15 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
         </div>
       </header>
 
-      {view !== "bracket" && view !== "home" && (
+      {view !== "bracket" && view !== "home" && view !== "map" && (
         <section className="hero hero--compact">
           <div className="hero__pitch-lines" aria-hidden="true" />
           <div className="hero__context">
             <h1 className="hero__context-title">
-              {view === "schedule" ? "Schedule" : view === "groups" ? "Groups" : view === "teams" ? "Teams" : view === "map" ? "Map" : view === "settings" ? "Settings" : view === "stats" ? "Statistics" : view === "more" ? "More" : view === "venues" ? "Venues" : view === "about" ? "About" : "COMPET 2026"}
+              {view === "schedule" ? "Schedule" : view === "groups" ? "Groups" : view === "teams" ? "Teams" : view === "settings" ? "Settings" : view === "stats" ? "Statistics" : view === "more" ? "More" : view === "venues" ? "Venues" : view === "about" ? "About" : "COMPET 2026"}
             </h1>
             <p className="hero__context-sub">
-              {view === "schedule" ? `${data.gs.length + data.ko.length} matches · Group stage & knockout` : view === "groups" ? `${Object.keys(data.groups).length} groups · 48 teams` : view === "teams" ? "48 nations competing" : view === "map" ? "16 host cities across three countries" : view === "settings" ? "Personalize tournament, alerts, map, data, and display" : view === "stats" ? "Goals, assists & cards" : view === "more" ? "Venues, about & more" : ""}
+              {view === "schedule" ? `${data.gs.length + data.ko.length} matches · Group stage & knockout` : view === "groups" ? `${Object.keys(data.groups).length} groups · 48 teams` : view === "teams" ? "48 nations competing" : view === "settings" ? "Personalize tournament, alerts, map, data, and display" : view === "stats" ? "Goals, assists & cards" : view === "more" ? "Venues, about & more" : ""}
             </p>
           </div>
         </section>
@@ -1444,7 +1444,7 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
         ))}
       </nav>
 
-      {view !== "bracket" && view !== "home" && <CountdownHero data={data} fixtures={fixtures} findLive={findLive} />}
+      {view !== "bracket" && view !== "home" && view !== "map" && <CountdownHero data={data} fixtures={fixtures} findLive={findLive} />}
 
       {view === "schedule" && (
         <div className="filters">

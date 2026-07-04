@@ -387,6 +387,19 @@ type LeaderboardStat = {
   matches?: number;
 };
 
+type SlimPlayerStat = {
+  name: string;
+  team: string;
+  minutes?: number | null;
+  goals?: number;
+  assists?: number;
+  yellowCards?: number;
+  redCards?: number;
+  imageUrl?: string | null;
+  headshotUrl?: string | null;
+  avatarUrl?: string | null;
+};
+
 function vendorEventType(type: string | undefined): MatchEvent["type"] {
   if (type === "Goal" || type === "Card" || type === "subst" || type === "Var") return type;
   if (/sub/i.test(type || "")) return "subst";
@@ -530,6 +543,52 @@ function normalizeVendorFixture(f: VendorFixture) {
     players: players?.length ? players : undefined,
     referee: f.fixture?.referee ?? undefined,
   };
+}
+
+function slimPlayerProjection(players: unknown): SlimPlayerStat[] | undefined {
+  if (!Array.isArray(players) || players.length === 0) return undefined;
+  const slim = players
+    .map(player => {
+      const p = player as Partial<SlimPlayerStat> & { goals?: unknown; assists?: unknown; yellowCards?: unknown; redCards?: unknown; minutes?: unknown };
+      if (!p.name || !p.team) return null;
+      const out: SlimPlayerStat = { name: String(p.name), team: String(p.team) };
+      if (typeof p.minutes === "number") out.minutes = p.minutes;
+      if (typeof p.goals === "number" && p.goals > 0) out.goals = p.goals;
+      if (typeof p.assists === "number" && p.assists > 0) out.assists = p.assists;
+      if (typeof p.yellowCards === "number" && p.yellowCards > 0) out.yellowCards = p.yellowCards;
+      if (typeof p.redCards === "number" && p.redCards > 0) out.redCards = p.redCards;
+      if (typeof p.imageUrl === "string" && p.imageUrl) out.imageUrl = p.imageUrl;
+      if (typeof p.headshotUrl === "string" && p.headshotUrl) out.headshotUrl = p.headshotUrl;
+      if (typeof p.avatarUrl === "string" && p.avatarUrl) out.avatarUrl = p.avatarUrl;
+      return out;
+    })
+    .filter((player): player is SlimPlayerStat => !!player);
+  return slim.length ? slim : undefined;
+}
+
+function slimFixtureForLiveList(fixture: unknown): unknown {
+  const f = fixture as Record<string, unknown>;
+  const slim: Record<string, unknown> = {
+    ts: f.ts,
+    status: f.status,
+    elapsed: f.elapsed,
+    venue: f.venue,
+    round: f.round,
+    home: f.home,
+    away: f.away,
+    gh: f.gh,
+    ga: f.ga,
+  };
+  for (const key of ["penHome", "penAway", "assistDataMissing", "events", "referee", "fixtureId"] as const) {
+    if (f[key] !== undefined) slim[key] = f[key];
+  }
+  const players = slimPlayerProjection(f.players);
+  if (players) slim.players = players;
+  return slim;
+}
+
+function slimFixturesForLiveList(fixtures: unknown[]): unknown[] {
+  return fixtures.map(slimFixtureForLiveList);
 }
 
 async function fetchFixtures(key: string): Promise<FixtureResponse> {
@@ -888,6 +947,7 @@ export async function GET(request: NextRequest) {
   enrichment.detailEnrichment = detailEnrichment;
 
   const fixtures = withVerifiedResults(base);
+  const listFixtures = slimFixturesForLiveList(fixtures);
   const hasLiveData = wc26.ok || apifFixtures.length > 0;
 
   // Opportunistically persist finished results to DB so ISR pages show scores.
@@ -899,19 +959,19 @@ export async function GET(request: NextRequest) {
 
   if (!active && !hasLiveData) {
     return NextResponse.json(
-      { configured: !!apiFootballKey, active: false, ts: LAST ? LAST.ts : now, fixtures, enrichment, leaderboardStats },
+      { configured: !!apiFootballKey, active: false, ts: LAST ? LAST.ts : now, fixtures: listFixtures, enrichment, leaderboardStats },
       { headers: LIVE_RESPONSE_HEADERS }
     );
   }
 
-  LAST = { fixtures, ts: now };
+  LAST = { fixtures: listFixtures, ts: now };
 
   return NextResponse.json(
     {
       configured: !!apiFootballKey,
       active,
       ts: now,
-      fixtures,
+      fixtures: listFixtures,
       source: apifFixtures.length > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
       enrichment,
       leaderboardStats,

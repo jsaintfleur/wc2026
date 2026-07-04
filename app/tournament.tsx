@@ -5450,6 +5450,26 @@ function eventIcon(type: string, detail: string): string {
 
 type MdTab = "summary" | "stats" | "lineups" | "report";
 
+const MATCH_DETAIL_CACHE = new Map<number, LiveFixture>();
+
+function playerPayloadScore(players?: PlayerMatchStat[]): number {
+  if (!players?.length) return 0;
+  return players.reduce((score, player) => {
+    const detailedFields = [
+      player.rating, player.shots, player.shotsOn, player.passes, player.passAccuracy,
+      player.tackles, player.duels, player.duelsWon, player.dribbles, player.dribblesSuccess,
+      player.foulsDrawn, player.foulsCommitted, player.saves,
+    ];
+    return score + 1 + detailedFields.filter(value => value !== undefined && value !== null && value !== 0 && value !== "").length;
+  }, 0);
+}
+
+function richerPlayerPayload(primary?: PlayerMatchStat[], fallback?: PlayerMatchStat[]): PlayerMatchStat[] | undefined {
+  if (!primary?.length) return fallback;
+  if (!fallback?.length) return primary;
+  return playerPayloadScore(fallback) > playerPayloadScore(primary) ? fallback : primary;
+}
+
 function mergeRichFixture(primary: LiveFixture | null, fallback: LiveFixture | null): LiveFixture | null {
   if (!primary) return fallback;
   if (!fallback) return primary;
@@ -5458,7 +5478,7 @@ function mergeRichFixture(primary: LiveFixture | null, fallback: LiveFixture | n
     events: primary.events?.length ? primary.events : fallback.events,
     stats: primary.stats && (Object.keys(primary.stats.home).length || Object.keys(primary.stats.away).length) ? primary.stats : fallback.stats,
     lineups: (primary.lineups?.length || 0) >= 2 ? primary.lineups : (fallback.lineups || primary.lineups),
-    players: primary.players?.length ? primary.players : fallback.players,
+    players: richerPlayerPayload(primary.players, fallback.players),
     referee: primary.referee || fallback.referee,
     fixtureId: primary.fixtureId || fallback.fixtureId,
   };
@@ -5480,11 +5500,37 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
 }) {
   const [tab, setTab] = useState<MdTab>("summary");
   const [nowMs, setNowMs] = useState(0);
+  const [detailFixture, setDetailFixture] = useState<LiveFixture | null>(() => MATCH_DETAIL_CACHE.get(match.no) || null);
   useEffect(() => {
     queueMicrotask(() => setNowMs(Date.now()));
     const id = setInterval(() => { if (!document.hidden) setNowMs(Date.now()); }, 60000);
     return () => clearInterval(id);
   }, []);
+  const liveFixture = findLive(match, fixtures) || initialFixture;
+  const fetchMatchDetail = useCallback(async () => {
+    if (!match.no) return;
+    try {
+      const res = await fetch(`/api/match/${match.no}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const payload = await res.json().catch(() => null) as { fixture?: LiveFixture } | null;
+      if (!payload?.fixture) return;
+      MATCH_DETAIL_CACHE.set(match.no, payload.fixture);
+      setDetailFixture(payload.fixture);
+    } catch {
+      // Detail is an enhancement; the drawer can still render the live list payload.
+    }
+  }, [match.no]);
+  useEffect(() => {
+    const cached = MATCH_DETAIL_CACHE.get(match.no);
+    if (cached) setDetailFixture(cached);
+    fetchMatchDetail();
+  }, [fetchMatchDetail, match.no]);
+  useEffect(() => {
+    const status = liveFixture?.status || match.dbStatus || "";
+    if (!LIVE_STATUSES.has(status)) return;
+    const id = window.setInterval(fetchMatchDetail, 30000);
+    return () => window.clearInterval(id);
+  }, [fetchMatchDetail, liveFixture?.status, match.dbStatus]);
   const persistedFixture: LiveFixture | null = match.dbStatus ? {
     ts: match.ts,
     status: match.dbStatus,
@@ -5502,8 +5548,8 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     referee: match.dbReferee || undefined,
     fixtureId: match.dbFixtureId || undefined,
   } : null;
-  const liveFixture = findLive(match, fixtures) || initialFixture;
-  const fixture = mergeRichFixture(liveFixture, persistedFixture);
+  const storedFixture = mergeRichFixture(detailFixture, persistedFixture);
+  const fixture = mergeRichFixture(liveFixture, storedFixture);
 
   const hasKickedOff = match.ts <= nowMs + 5 * 60000;
   const hasDbScore = match.dbStatus && match.dbGh != null && match.dbGa != null;

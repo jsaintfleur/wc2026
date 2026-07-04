@@ -109,10 +109,86 @@ export function estimateLiveElapsed(status: string | null | undefined, kickoffTs
   const wallMinutes = Math.floor((nowMs - kickoffTs) / 60000) + 1;
   if (wallMinutes < 1) return elapsed ?? null;
 
-  if (status === "1H") return Math.min(wallMinutes, 90);
-  if (status === "2H") return Math.min(Math.max(wallMinutes, 46), 90);
-  if (status === "ET") return Math.min(Math.max(wallMinutes, 91), 120);
-  return Math.min(wallMinutes, 120);
+  // This is only a conservative first-half approximation. Soccer clocks pause
+  // for halftime and kickoff delays, so wall time must never invent a second-
+  // half or extra-time minute. ESPN clock enrichment handles those periods.
+  if (status === "1H" || status === "LIVE") return Math.min(wallMinutes, 45);
+  return elapsed ?? null;
+}
+
+export type EspnClock = {
+  home: string;
+  away: string;
+  status: string;
+  elapsed: number | null;
+};
+
+export function parseEspnDisplayClock(displayClock: unknown): number | null {
+  if (typeof displayClock !== "string") return null;
+  const match = displayClock.trim().match(/^(\d+)/);
+  if (!match) return null;
+  const minute = Number(match[1]);
+  return Number.isFinite(minute) && minute > 0 ? minute : null;
+}
+
+export function normalizeEspnClock(period: unknown, displayClock: unknown, statusName?: unknown, state?: unknown): { status: string; elapsed: number | null } {
+  const name = String(statusName || "").toUpperCase();
+  const stateText = String(state || "").toLowerCase();
+  const minute = parseEspnDisplayClock(displayClock);
+
+  if (name.includes("HALFTIME")) return { status: "HT", elapsed: 45 };
+  if (stateText === "post" || name.includes("FINAL")) return { status: "FT", elapsed: 90 };
+
+  const p = typeof period === "number" ? period : Number(period);
+  if (Number.isFinite(p)) {
+    if (p === 1) return { status: "1H", elapsed: minute };
+    if (p === 2) return { status: "2H", elapsed: minute };
+    if (p > 2) return { status: "ET", elapsed: minute };
+  }
+
+  return { status: "LIVE", elapsed: minute };
+}
+
+export function extractEspnClocks(scoreboard: unknown): EspnClock[] {
+  const events = (scoreboard as { events?: unknown[] })?.events || [];
+  const clocks: EspnClock[] = [];
+  for (const event of events) {
+    const competition = (event as { competitions?: unknown[] })?.competitions?.[0] as {
+      competitors?: Array<{ homeAway?: string; team?: { displayName?: string; name?: string; shortDisplayName?: string } }>;
+      status?: { period?: unknown; displayClock?: unknown; type?: { name?: unknown; state?: unknown } };
+    } | undefined;
+    const eventStatus = (event as { status?: { period?: unknown; displayClock?: unknown; type?: { name?: unknown; state?: unknown } } }).status;
+    const status = competition?.status || eventStatus;
+    const home = competition?.competitors?.find(c => c.homeAway === "home")?.team;
+    const away = competition?.competitors?.find(c => c.homeAway === "away")?.team;
+    const homeName = home?.displayName || home?.name || home?.shortDisplayName || "";
+    const awayName = away?.displayName || away?.name || away?.shortDisplayName || "";
+    if (!homeName || !awayName) continue;
+    const clock = normalizeEspnClock(status?.period, status?.displayClock, status?.type?.name, status?.type?.state);
+    clocks.push({ home: homeName, away: awayName, ...clock });
+  }
+  return clocks;
+}
+
+export function applyEspnClocksToFixtures(fixtures: unknown[], clocks: EspnClock[]): number {
+  if (!fixtures.length || !clocks.length) return 0;
+  const byPair = new Map<string, EspnClock>();
+  for (const clock of clocks) {
+    byPair.set([canon(clock.home), canon(clock.away)].sort().join("|"), clock);
+  }
+
+  let changed = 0;
+  for (const fixture of fixtures as Array<Record<string, unknown>>) {
+    const key = [canon(String(fixture.home || "")), canon(String(fixture.away || ""))].sort().join("|");
+    const clock = byPair.get(key);
+    if (!clock) continue;
+    if (fixture.status === "LIVE" || fixture.elapsed == null || typeof fixture.elapsed !== "number") {
+      fixture.status = clock.status;
+      fixture.elapsed = clock.elapsed;
+      changed++;
+    }
+  }
+  return changed;
 }
 
 export function sameFixture(a: unknown, b: unknown): boolean {

@@ -5,16 +5,18 @@ import { VERIFIED_RESULTS } from "@/lib/verified-results";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import {
+  applyEspnClocksToFixtures,
   assembleLiveFixtureBase,
   cappedDetailCandidates,
+  extractEspnClocks,
   freshSnapshot,
   hasGoalAssistData,
-  estimateLiveElapsed,
   normalizeWc26Status,
   parseRemainingQuota,
   readThroughTtlCache,
   slimFixturesForLiveList,
   type LeaderboardStat,
+  type EspnClock,
   type LiveSnapshot,
   type TimedCache,
   withVerifiedResults,
@@ -33,6 +35,7 @@ const POST = 6 * 60 * 60000;
 const WC26_URL = "https://worldcup26.ir/get/games";
 const WC26_STADIUMS_URL = "https://worldcup26.ir/get/stadiums";
 const ESPN_STATS_URL = "https://site.web.api.espn.com/apis/site/v2/sports/soccer/fifa.world/statistics?season=2026&limit=50";
+const ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
 
 // In-memory, per-serverless-instance snapshot cache. A cold instance still does
 // one full vendor fetch, then warm requests reuse the post-merge/post-slim
@@ -42,9 +45,11 @@ let LAST: LiveSnapshot | null = null;
 let STADIUM_CACHE: Record<string, string> | null = null;
 const DETAIL_CACHE = new Map<number, { data: VendorFixture; ts: number }>();
 let ESPN_LEADER_CACHE: TimedCache<LeaderboardStat[]> | null = null;
+let ESPN_CLOCK_CACHE: TimedCache<EspnClock[]> | null = null;
 const DETAIL_TTL = 30 * 60 * 1000;
 const DETAIL_BATCH_SIZE = 20;
 const ESPN_LEADER_TTL = 10 * 60 * 1000;
+const ESPN_CLOCK_TTL = 45 * 1000;
 const DETAIL_REQUEST_CAP = DETAIL_BATCH_SIZE;
 // Paid API-Football tier is ~7,500/day, so preserving the final 500 requests
 // leaves room for live match recovery and manual debugging. If the plan is
@@ -231,13 +236,10 @@ async function fetchWC26(): Promise<{ ok: boolean; fixtures: unknown[] }> {
       }
     }
 
-    const ts = scheduled?.ts || (g.local_date ? Date.parse(g.local_date) || 0 : 0);
-    const displayElapsed = estimateLiveElapsed(status, ts, elapsed);
-
     return {
-      ts,
+      ts: scheduled?.ts || (g.local_date ? Date.parse(g.local_date) || 0 : 0),
       status,
-      elapsed: displayElapsed,
+      elapsed,
       venue: scheduled?.venue || stadiumName,
       round: scheduled?.round || roundLabel(g),
       home: g.home_team_name_en,
@@ -448,11 +450,10 @@ function normalizeVendorFixture(f: VendorFixture) {
   const players = mapVendorPlayers(f);
   const ts = Date.parse(f.fixture?.date ?? "");
   const status = f.fixture?.status?.short;
-  const elapsed = estimateLiveElapsed(status, ts, f.fixture?.status?.elapsed);
   return {
     ts,
     status,
-    elapsed,
+    elapsed: f.fixture?.status?.elapsed ?? null,
     venue: f.fixture?.venue?.name,
     round: f.league?.round,
     home: f.teams?.home?.name,
@@ -562,6 +563,29 @@ async function fetchEspnLeaderStats(): Promise<LeaderboardStat[]> {
   }, []);
   ESPN_LEADER_CACHE = result.cache;
   return result.data;
+}
+
+async function fetchEspnClockFeed(): Promise<EspnClock[]> {
+  const now = Date.now();
+  const result = await readThroughTtlCache(ESPN_CLOCK_CACHE, now, ESPN_CLOCK_TTL, async () => {
+    const res = await fetch(ESPN_SCOREBOARD_URL, {
+      cache: "no-store",
+      headers: { Accept: "application/json", "User-Agent": "CompetTracker/1.0" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) throw new Error(`ESPN scoreboard returned ${res.status}`);
+    const data = await res.json().catch(() => ({}));
+    return extractEspnClocks(data);
+  }, []);
+  ESPN_CLOCK_CACHE = result.cache;
+  return result.data;
+}
+
+function needsEspnClock(fixtures: unknown[]): boolean {
+  return fixtures.some(fixture => {
+    const f = fixture as { status?: string; elapsed?: unknown };
+    return f.status === "LIVE" || (["1H", "2H", "ET", "BT", "P"].includes(f.status || "") && typeof f.elapsed !== "number");
+  });
 }
 
 function sourceRoundCounts(fixtures: unknown[] = []): Record<string, number> {
@@ -745,6 +769,9 @@ export async function GET(request: NextRequest) {
       ? await fetchFixtures(apiFootballKey).catch(e => ({ ok: false, http: 0, errors: String(e) } as FixtureResponse))
       : null;
     const debugBase = apif?.fixtures?.length ? [...apif.fixtures] : (wc26.ok ? [...wc26.fixtures] : []);
+    const debugClockEnrichment = active && needsEspnClock(debugBase)
+      ? await fetchEspnClockFeed().then(clocks => ({ clocks: clocks.length, applied: applyEspnClocksToFixtures(debugBase, clocks) })).catch(() => ({ clocks: 0, applied: 0 }))
+      : { clocks: 0, applied: 0 };
     const detailEnrichment = apiFootballKey && debugBase.length
       ? await enrichWithFixtureDetails(apiFootballKey, debugBase, apif?.quota?.remaining)
       : { requested: 0, enriched: 0, skipped: !apiFootballKey };
@@ -761,6 +788,7 @@ export async function GET(request: NextRequest) {
         activeMatches,
         source: apif?.ok && (apif.fixtures?.length ?? 0) > 0 ? "api-football" : "missing",
         richFixtureCount,
+        clockEnrichment: debugClockEnrichment,
         detailEnrichment,
       },
       verifiedCount: VERIFIED_RESULTS.length,
@@ -794,6 +822,7 @@ export async function GET(request: NextRequest) {
     apiFootballConfigured: boolean;
     apiFootballOk: boolean;
     quota: FixtureResponse["quota"] | undefined;
+    clockEnrichment?: { clocks: number; applied: number };
     detailEnrichment?: { requested: number; enriched: number; skipped: boolean };
   } = {
     required: true,
@@ -807,6 +836,10 @@ export async function GET(request: NextRequest) {
   };
 
   const base = assembleLiveFixtureBase(apifFixtures, wc26.fixtures, wc26.ok);
+  const clockEnrichment = active && needsEspnClock(base)
+    ? await fetchEspnClockFeed().then(clocks => ({ clocks: clocks.length, applied: applyEspnClocksToFixtures(base, clocks) })).catch(() => ({ clocks: 0, applied: 0 }))
+    : { clocks: 0, applied: 0 };
+  enrichment.clockEnrichment = clockEnrichment;
 
   const detailEnrichment = apiFootballKey && base.length > 0
     ? await enrichWithFixtureDetails(apiFootballKey, base, apif?.quota?.remaining)

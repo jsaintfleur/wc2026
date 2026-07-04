@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  applyEspnClocksToFixtures,
   assembleLiveFixtureBase,
   cappedDetailCandidates,
   estimateLiveElapsed,
+  extractEspnClocks,
   freshSnapshot,
   liveSnapshotTtl,
+  normalizeEspnClock,
   normalizeWc26Status,
   parseRemainingQuota,
   readThroughTtlCache,
@@ -90,39 +93,41 @@ test("worldcup26 live tokens normalize to in-play statuses", () => {
 
 test("live elapsed fallback estimates display minute from kickoff", () => {
   const kickoff = Date.UTC(2026, 6, 4, 17, 0, 0);
-  assert.equal(estimateLiveElapsed("LIVE", kickoff, null, kickoff + 48 * 60000 + 20_000), 49);
-  assert.equal(estimateLiveElapsed("1H", kickoff, null, kickoff + 48 * 60000), 49);
-  assert.equal(estimateLiveElapsed("2H", kickoff, null, kickoff + 66 * 60000), 67);
+  assert.equal(estimateLiveElapsed("LIVE", kickoff, null, kickoff + 80 * 60000), 45);
+  assert.equal(estimateLiveElapsed("1H", kickoff, null, kickoff + 48 * 60000), 45);
+  assert.equal(estimateLiveElapsed("2H", kickoff, null, kickoff + 66 * 60000), null);
   assert.equal(estimateLiveElapsed("LIVE", kickoff, 32, kickoff + 48 * 60000), 32);
   assert.equal(estimateLiveElapsed("NS", kickoff, null, kickoff + 48 * 60000), null);
 });
 
-test("live assembly updates stale 45 minute with richer wc26 clock", () => {
-  const base = [{
-    ts: 1,
-    status: "1H",
-    elapsed: 45,
-    venue: "NRG Stadium",
-    round: "Round of 16",
-    home: "Canada",
-    away: "Morocco",
-    gh: 0,
-    ga: 0,
-  }];
-  const wc26 = [{
-    ts: 1,
-    status: "LIVE",
-    elapsed: 66,
-    venue: "NRG Stadium",
-    round: "Round of 16",
-    home: "Canada",
-    away: "Morocco",
-    gh: 0,
-    ga: 0,
-  }];
+test("ESPN clock mapping normalizes period status and display minute", () => {
+  assert.deepEqual(normalizeEspnClock(2, "56'", "STATUS_SECOND_HALF", "in"), { status: "2H", elapsed: 56 });
+  assert.deepEqual(normalizeEspnClock(1, "45'", "STATUS_HALFTIME", "in"), { status: "HT", elapsed: 45 });
+  assert.deepEqual(normalizeEspnClock(2, "90'+3'", "STATUS_SECOND_HALF", "in"), { status: "2H", elapsed: 90 });
+  assert.deepEqual(normalizeEspnClock(3, "97'", "STATUS_EXTRA_TIME", "in"), { status: "ET", elapsed: 97 });
+});
 
-  const [fixture] = assembleLiveFixtureBase(base, wc26, true) as Array<{ elapsed: number }>;
-  assert.equal(fixture.elapsed, 66);
+test("ESPN clocks apply by canonical team pair and leave missing events alone", () => {
+  const fixtures = [
+    { home: "Canada", away: "Morocco", status: "LIVE", elapsed: null },
+    { home: "Paraguay", away: "France", status: "LIVE", elapsed: null },
+  ];
+  const scoreboard = {
+    events: [{
+      competitions: [{
+        status: { period: 2, displayClock: "56'", type: { name: "STATUS_SECOND_HALF", state: "in" } },
+        competitors: [
+          { homeAway: "home", team: { displayName: "Canada" } },
+          { homeAway: "away", team: { displayName: "Morocco" } },
+        ],
+      }],
+    }],
+  };
+  const applied = applyEspnClocksToFixtures(fixtures, extractEspnClocks(scoreboard));
+
+  assert.equal(applied, 1);
+  assert.deepEqual(fixtures[0], { home: "Canada", away: "Morocco", status: "2H", elapsed: 56 });
+  assert.deepEqual(fixtures[1], { home: "Paraguay", away: "France", status: "LIVE", elapsed: null });
 });
 
 test("detail enrichment candidates are hard capped at one batch", () => {

@@ -3886,6 +3886,8 @@ type TeamAnalytics = {
   pathDifficulty: number;
   tier: "Elite" | "Contender" | "Dark Horse" | "Vulnerable" | "Eliminated";
   trend: "up" | "flat" | "down";
+  formString: string;
+  scoreDelta: number | null;
   alive: boolean;
   eliminated: boolean;
   played: number;
@@ -3994,6 +3996,28 @@ function analyticsPathText(value: number): string {
   return "difficult projected path";
 }
 
+function analyticsScoreFromMatches(
+  matches: TeamAnalytics["matches"],
+  maxGF: number,
+  maxGD: number,
+  maxPPG: number,
+  pathDifficulty: number,
+): number {
+  const played = matches.length;
+  if (!played) return Math.round(pathDifficulty * 0.1);
+  const wins = matches.filter(match => match.result === "W").length;
+  const draws = matches.filter(match => match.result === "D").length;
+  const gf = matches.reduce((sum, match) => sum + match.gf, 0);
+  const ga = matches.reduce((sum, match) => sum + match.ga, 0);
+  const cleanSheets = matches.filter(match => match.ga === 0).length;
+  const ppg = (wins * 3 + draws) / played;
+  const resultScore = analyticsScorePct(ppg, maxPPG);
+  const gdScore = analyticsScorePct(gf - ga + 8, maxGD);
+  const attack = analyticsScorePct(gf, maxGF);
+  const defense = Math.max(0, 100 - analyticsScorePct(ga, Math.max(1, played * 3))) * 0.75 + analyticsScorePct(cleanSheets, played) * 0.25;
+  return Math.round(resultScore * 0.3 + gdScore * 0.2 + attack * 0.2 + defense * 0.2 + pathDifficulty * 0.1);
+}
+
 function buildAnalyticsModel(
   data: TournamentData,
   fixtures: LiveFixture[],
@@ -4015,6 +4039,8 @@ function buildAnalyticsModel(
       pathDifficulty: 0,
       tier: "Vulnerable",
       trend: "flat",
+      formString: "No results",
+      scoreDelta: null,
       alive: true,
       eliminated: false,
       played: 0,
@@ -4191,6 +4217,9 @@ function buildAnalyticsModel(
     };
     team.score = Math.round(resultScore * 0.3 + gdScore * 0.2 + team.attack * 0.2 + team.defense * 0.2 + team.pathDifficulty * 0.1);
     team.tier = analyticsTier(team.score, team.alive);
+    const lastThree = team.matches.slice(-3);
+    team.formString = lastThree.length ? lastThree.map(match => match.result).join("-") : "No results";
+    team.scoreDelta = team.matches.length > 1 ? team.score - analyticsScoreFromMatches(team.matches.slice(0, -1), maxGF, maxGD, maxPPG, team.pathDifficulty) : null;
   }
 
   const teams = [...byTeam.values()].sort((a, b) => b.score - a.score || a.team.localeCompare(b.team));
@@ -4442,7 +4471,9 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
                   <i><span style={{ width: `${team.score}%` }} /></i>
                 </span>
                 <span className="analytics-mini">
-                  <em>ATT {team.attack}</em><em>DEF {team.defense}</em><em>FORM {team.form}</em>
+                  <em title={`Form: ${team.formString}, last 3`}>FORM {team.formString}</em>
+                  <em>{team.trend === "up" ? "↑" : team.trend === "down" ? "↓" : "→"} {team.trend}</em>
+                  {team.scoreDelta != null && <em>{team.scoreDelta >= 0 ? "+" : ""}{team.scoreDelta} since last match</em>}
                 </span>
               </button>
             ))}
@@ -4554,7 +4585,8 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick }: {
                 </span>
               ))}
             </div>
-            <p className="analytics-drawer__summary">{selectedAnalyticsTeam.modelSummary}</p>
+          <p className="analytics-drawer__summary">{selectedAnalyticsTeam.modelSummary}</p>
+          <p className="analytics-drawer__note">Trend: {selectedAnalyticsTeam.trend} · Form: {selectedAnalyticsTeam.formString}, last 3{selectedAnalyticsTeam.scoreDelta != null ? ` · ${selectedAnalyticsTeam.scoreDelta >= 0 ? "+" : ""}${selectedAnalyticsTeam.scoreDelta} since last completed match` : ""}</p>
           <div className="analytics-drawer__grid">
             <span><b>{selectedAnalyticsTeam.goalsFor}</b><small>goals for</small></span>
             <span><b>{selectedAnalyticsTeam.goalsAgainst}</b><small>against</small></span>

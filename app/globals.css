@@ -3975,6 +3975,101 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 18px 40px rgba(0,0,0,0.26);
 }
 
+.host-flag-mark {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 92px;
+  height: 92px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 24px;
+  background: rgba(255,255,255,0.06);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 18px 40px rgba(0,0,0,0.3);
+}
+
+.host-flag-mark__shine {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 28% 20%, rgba(255,255,255,0.34), transparent 28%),
+    linear-gradient(145deg, rgba(255,255,255,0.2), transparent 44%, rgba(0,0,0,0.22));
+}
+
+.host-flag-mark__stripe {
+  min-width: 0;
+  height: 100%;
+}
+
+.host-flag-mark__stripe--green { background: #006847; }
+.host-flag-mark__stripe--white { background: #f7f7f2; }
+.host-flag-mark__stripe--red { background: #ce1126; }
+
+.host-flag-mark__crest {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(94,69,29,0.34);
+  border-radius: 999px;
+  color: #806322;
+  background:
+    radial-gradient(circle, rgba(214,171,72,0.26), rgba(255,255,255,0.78) 58%, rgba(0,104,71,0.16));
+  font-family: var(--disp);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .2px;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.22);
+}
+
+.host-flag-mark__stripe--canada-red { background: #d80621; }
+.host-flag-mark__stripe--canada-white { background: #fff; }
+
+.host-flag-mark__leaf {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 4;
+  width: 34px;
+  height: 38px;
+  background: #d80621;
+  clip-path: polygon(50% 0, 58% 22%, 74% 12%, 70% 34%, 92% 30%, 72% 48%, 82% 66%, 58% 58%, 58% 100%, 42% 100%, 42% 58%, 18% 66%, 28% 48%, 8% 30%, 30% 34%, 26% 12%, 42% 22%);
+  transform: translate(-50%, -52%);
+  filter: drop-shadow(0 3px 8px rgba(0,0,0,0.18));
+}
+
+.host-flag-mark--usa {
+  display: block;
+  background: repeating-linear-gradient(
+    to bottom,
+    #b22234 0 7.07%,
+    #fff 7.07% 14.14%
+  );
+}
+
+.host-flag-mark__usa-canton {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 48%;
+  height: 54%;
+  color: #fff;
+  background: #3c3b6e;
+  font-size: 10px;
+  letter-spacing: 2px;
+  line-height: 1.4;
+}
+
 .host-drawer__hero-image {
   width: 92px;
   height: 92px;
@@ -8045,6 +8140,23 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
     width: 76px;
     height: 76px;
     border-radius: 20px;
+  }
+
+  .host-flag-mark {
+    width: 76px;
+    height: 76px;
+    border-radius: 20px;
+  }
+
+  .host-flag-mark__crest {
+    width: 23px;
+    height: 23px;
+    font-size: 8px;
+  }
+
+  .host-flag-mark__leaf {
+    width: 29px;
+    height: 32px;
   }
 
   .host-drawer__key {

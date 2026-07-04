@@ -552,6 +552,37 @@ function VenueImage({ venueId, venueName, city = "", className = "", decorative 
   );
 }
 
+function HostCountryFlagMark({ country }: { country: string }) {
+  const key = country === "United States" ? "usa" : country.toLowerCase();
+  const label = `${country} flag`;
+  return (
+    <span className={`host-flag-mark host-flag-mark--${key}`} role="img" aria-label={label}>
+      <span className="host-flag-mark__shine" aria-hidden="true" />
+      {country === "Mexico" && (
+        <>
+          <span className="host-flag-mark__stripe host-flag-mark__stripe--green" aria-hidden="true" />
+          <span className="host-flag-mark__stripe host-flag-mark__stripe--white" aria-hidden="true" />
+          <span className="host-flag-mark__stripe host-flag-mark__stripe--red" aria-hidden="true" />
+          <span className="host-flag-mark__crest" aria-hidden="true">MX</span>
+        </>
+      )}
+      {country === "Canada" && (
+        <>
+          <span className="host-flag-mark__stripe host-flag-mark__stripe--canada-red" aria-hidden="true" />
+          <span className="host-flag-mark__stripe host-flag-mark__stripe--canada-white" aria-hidden="true" />
+          <span className="host-flag-mark__stripe host-flag-mark__stripe--canada-red" aria-hidden="true" />
+          <span className="host-flag-mark__leaf" aria-hidden="true" />
+        </>
+      )}
+      {country === "United States" && (
+        <>
+          <span className="host-flag-mark__usa-canton" aria-hidden="true">✦ ✦</span>
+        </>
+      )}
+    </span>
+  );
+}
+
 function venueImageHtml(venueId: string, venueName: string, city?: string): string {
   const src = venueImageUrl(venueId);
   const fallback = esc(venueInitials(venueName, city));
@@ -7105,16 +7136,13 @@ function HostCountryDrawer({ country, data, onClose }: {
 
   const keyVenue = keyMatch ? data.venues[keyMatch.v] : null;
   const keyDate = keyMatch ? parseISO(keyMatch.iso) : null;
-  const heroVenue = venues[0] || null;
 
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <aside className="drawer host-drawer" onClick={e => e.stopPropagation()} aria-label={`${country} host profile`}>
         <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
         <div className="host-drawer__hero">
-          {heroVenue
-            ? <VenueImage venueId={heroVenue.key} venueName={heroVenue.common} city={heroVenue.city} className="host-drawer__hero-image" />
-            : <span className="host-drawer__flag">{data.flags[country] || "⚽"}</span>}
+          <HostCountryFlagMark country={country} />
           <div>
             <small>Host Country</small>
             <h2>{country}</h2>

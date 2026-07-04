@@ -91,10 +91,38 @@ test("worldcup26 live tokens normalize to in-play statuses", () => {
 test("live elapsed fallback estimates display minute from kickoff", () => {
   const kickoff = Date.UTC(2026, 6, 4, 17, 0, 0);
   assert.equal(estimateLiveElapsed("LIVE", kickoff, null, kickoff + 48 * 60000 + 20_000), 49);
-  assert.equal(estimateLiveElapsed("1H", kickoff, null, kickoff + 48 * 60000), 45);
+  assert.equal(estimateLiveElapsed("1H", kickoff, null, kickoff + 48 * 60000), 49);
   assert.equal(estimateLiveElapsed("2H", kickoff, null, kickoff + 66 * 60000), 67);
   assert.equal(estimateLiveElapsed("LIVE", kickoff, 32, kickoff + 48 * 60000), 32);
   assert.equal(estimateLiveElapsed("NS", kickoff, null, kickoff + 48 * 60000), null);
+});
+
+test("live assembly updates stale 45 minute with richer wc26 clock", () => {
+  const base = [{
+    ts: 1,
+    status: "1H",
+    elapsed: 45,
+    venue: "NRG Stadium",
+    round: "Round of 16",
+    home: "Canada",
+    away: "Morocco",
+    gh: 0,
+    ga: 0,
+  }];
+  const wc26 = [{
+    ts: 1,
+    status: "LIVE",
+    elapsed: 66,
+    venue: "NRG Stadium",
+    round: "Round of 16",
+    home: "Canada",
+    away: "Morocco",
+    gh: 0,
+    ga: 0,
+  }];
+
+  const [fixture] = assembleLiveFixtureBase(base, wc26, true) as Array<{ elapsed: number }>;
+  assert.equal(fixture.elapsed, 66);
 });
 
 test("detail enrichment candidates are hard capped at one batch", () => {

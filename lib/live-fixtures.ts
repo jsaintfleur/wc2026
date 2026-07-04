@@ -109,7 +109,7 @@ export function estimateLiveElapsed(status: string | null | undefined, kickoffTs
   const wallMinutes = Math.floor((nowMs - kickoffTs) / 60000) + 1;
   if (wallMinutes < 1) return elapsed ?? null;
 
-  if (status === "1H") return Math.min(wallMinutes, 45);
+  if (status === "1H") return Math.min(wallMinutes, 90);
   if (status === "2H") return Math.min(Math.max(wallMinutes, 46), 90);
   if (status === "ET") return Math.min(Math.max(wallMinutes, 91), 120);
   return Math.min(wallMinutes, 120);
@@ -249,7 +249,9 @@ export function assembleLiveFixtureBase(apiFootballFixtures: unknown[], wc26Fixt
       if (existing.penHome == null && wc26Fix.penHome != null) target.penHome = wc26Fix.penHome;
       if (existing.penAway == null && wc26Fix.penAway != null) target.penAway = wc26Fix.penAway;
       if (!existing.status && wc26Fix.status) target.status = wc26Fix.status;
-      if (existing.elapsed == null && wc26Fix.elapsed != null) target.elapsed = wc26Fix.elapsed;
+      if (typeof wc26Fix.elapsed === "number" && (existing.elapsed == null || (typeof existing.elapsed === "number" && wc26Fix.elapsed > existing.elapsed))) {
+        target.elapsed = wc26Fix.elapsed;
+      }
       const existingEvents = existing.events as MatchEvent[] | undefined;
       const wc26Events = wc26Fix.events as MatchEvent[] | undefined;
       const enrichedWc26Events = mergeAssistNames(wc26Events, existingEvents);

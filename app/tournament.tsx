@@ -4508,6 +4508,19 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, onTeamClick, onMatchCl
 
       {analyticsTab === "confederations" && (
         <div className="analytics-panel">
+          <div className="analytics-confed-bars" aria-label="Confederation survival overview">
+            {analytics.confederations.map(confed => (
+              <div key={confed.confederation} className="analytics-confed-bar-row">
+                <b>{confed.avgStrength}</b>
+                <span>{confed.confederation}</span>
+                <i role="img" aria-label={`${confed.confederation}: ${confed.remaining} alive, ${confed.eliminated} eliminated`}>
+                  <em style={{ width: `${confed.survivalRate}%` }} />
+                  <strong style={{ width: `${100 - confed.survivalRate}%` }} />
+                </i>
+                <small>{confed.remaining} alive · {confed.eliminated} out</small>
+              </div>
+            ))}
+          </div>
           <div className="analytics-confed-grid">
             {analytics.confederations.map(confed => (
               <article key={confed.confederation} className="analytics-confed-card">

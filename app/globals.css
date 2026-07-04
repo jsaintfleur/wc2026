@@ -7571,6 +7571,15 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 .analytics-dot--l { color: #fecaca; background: rgba(244,63,94,0.16); }
 .analytics-form-dots em, .analytics-form-dots small { color: var(--muted); font-style: normal; font-size: 10.5px; font-weight: 900; }
 .analytics-confed-card, .analytics-survival-card, .analytics-matchup-card { border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 12px; background: rgba(255,255,255,0.042); }
+.analytics-confed-bars { display: grid; gap: 8px; }
+.analytics-confed-bar-row { display: grid; grid-template-columns: 38px 86px minmax(0, 1fr); gap: 8px; align-items: center; border: 1px solid rgba(255,255,255,0.08); border-radius: 13px; padding: 9px; background: rgba(255,255,255,0.04); }
+.analytics-confed-bar-row b { color: var(--gold-bright); font-family: var(--disp); font-size: 22px; line-height: 1; }
+.analytics-confed-bar-row span { overflow: hidden; color: #fff; font-size: 12px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.analytics-confed-bar-row i { display: flex; overflow: hidden; height: 12px; border-radius: 999px; background: rgba(255,255,255,0.08); }
+.analytics-confed-bar-row em, .analytics-confed-bar-row strong { display: block; min-width: 2px; transition: width .35s ease; }
+.analytics-confed-bar-row em { background: linear-gradient(90deg, var(--gold), var(--gold-bright)); }
+.analytics-confed-bar-row strong { background: rgba(244,63,94,0.25); }
+.analytics-confed-bar-row small { grid-column: 2 / -1; color: var(--muted); font-size: 10.5px; font-weight: 800; }
 .analytics-confed-card header, .analytics-survival-card header, .analytics-matchup-card header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .analytics-confed-card header span, .analytics-survival-card header b { color: #fff; font-family: var(--disp); font-size: 22px; font-weight: 900; }
 .analytics-confed-card header b { color: var(--gold-bright); font-family: var(--disp); font-size: 26px; }

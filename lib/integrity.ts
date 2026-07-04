@@ -25,6 +25,7 @@ export interface RawFixtureIntegrityInput {
   round: string;
   home: string;
   away: string;
+  ts?: number | null;
   status: string;
   gh: number | null;
   ga: number | null;
@@ -37,6 +38,7 @@ export interface IntegrityOptions {
 }
 
 const DONE_STATUSES = new Set(["FT", "AET", "PEN", "PEN_LIVE", "WO", "AWD"]);
+const SCHEDULE_DRIFT_WARN_MS = 3 * 60 * 60 * 1000;
 
 function teamPairKey(home: string, away: string): string {
   return [canon(home), canon(away)].sort().join("|");
@@ -108,6 +110,22 @@ export function validateTournamentIntegrity(
     .filter(match => match.status === "completed" && knockoutRoundDepth(match.stage) > 0 && match.home !== "TBD" && match.away !== "TBD")
     .map(match => `${knockoutRoundDepth(match.stage)}|${teamPairKey(match.home, match.away)}`));
   for (const fixture of options.rawFixtures || []) {
+    if (typeof fixture.ts === "number" && Number.isFinite(fixture.ts)) {
+      const fixturePairKey = teamPairKey(fixture.home, fixture.away);
+      const samePairMatch = matches.find(match =>
+        match.home !== "TBD" &&
+        match.away !== "TBD" &&
+        teamPairKey(match.home, match.away) === fixturePairKey
+      );
+      if (samePairMatch && Math.abs(samePairMatch.ts - fixture.ts) > SCHEDULE_DRIFT_WARN_MS) {
+        push(
+          "warn",
+          "schedule-time-drift",
+          `Raw fixture ${canon(fixture.home)} vs ${canon(fixture.away)} (${fixture.round}) kicks off more than 3 hours from schedule slot ${samePairMatch.key}.`,
+        );
+      }
+    }
+
     if (!isCompletedRawKnockoutFixture(fixture)) continue;
     const key = `${knockoutRoundDepth(fixture.round)}|${teamPairKey(fixture.home, fixture.away)}`;
     if (!resolvedCompletedKnockoutPairs.has(key)) {

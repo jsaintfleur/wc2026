@@ -15,7 +15,7 @@ import { buildTeamJourney, type JourneyMatchInput, type JourneyVenue } from "@/l
 import { buildTeamRecords } from "@/lib/team-records";
 import { auditTournament } from "@/lib/integrity";
 import { claimKnockoutFixtureForSlot } from "@/lib/knockout-fixtures";
-import { KNOCKOUT_ROUND_MATCH_NUMBERS, knockoutMatchRange } from "@/lib/knockout-structure";
+import { KNOCKOUT_ROUND_MATCH_NUMBERS, KNOCKOUT_SOURCE_PAIRS, knockoutMatchRange } from "@/lib/knockout-structure";
 import TriondaBall from "@/app/components/TriondaBall";
 import WorldCupTrophy from "@/app/components/WorldCupTrophy";
 
@@ -193,13 +193,7 @@ const R32_SEEDS = [
   ["1K", "3DEIJL"],
 ] as const;
 
-const KO_SOURCE_PAIRS: Partial<Record<KnockoutRoundKey, [number, number][]>> = {
-  r16: [[2, 5], [0, 3], [1, 4], [6, 7], [11, 10], [9, 8], [14, 13], [12, 15]],
-  qf: [[0, 1], [4, 5], [2, 3], [6, 7]],
-  sf: [[0, 1], [2, 3]],
-  final: [[0, 1]],
-  third: [[0, 1]],
-};
+const KO_SOURCE_PAIRS: Partial<Record<KnockoutRoundKey, [number, number][]>> = KNOCKOUT_SOURCE_PAIRS;
 
 // ── FIFA Annex C: Third-Place Bracket Assignment Table ──
 // Maps sorted qualifying-group key (8 letters, e.g. "BDEFIJKL") to an
@@ -829,6 +823,7 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
         round: fixture.round,
         home: fixture.home,
         away: fixture.away,
+        ts: fixture.ts,
         status: fixture.status,
         gh: fixture.gh,
         ga: fixture.ga,

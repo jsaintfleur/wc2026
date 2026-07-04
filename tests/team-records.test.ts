@@ -165,6 +165,25 @@ test("integrity: completed raw knockout fixtures must attach to resolved bracket
   assert.ok(issues.some(i => i.code === "unattached-knockout-fixture"));
 });
 
+test("integrity: raw fixture team pair warns on schedule time drift over three hours", () => {
+  const scheduledTs = Date.parse("2026-07-04T17:00:00.000Z");
+  const { issues } = auditTournament(TEAMS, [
+    m({ key: "ko-89", home: "Alpha", away: "Beta", stage: "Round of 16", ts: scheduledTs, status: "upcoming", gh: null, ga: null }),
+  ], {
+    rawFixtures: [{
+      round: "Round of 16",
+      home: "Beta",
+      away: "Alpha",
+      ts: scheduledTs + 4 * 60 * 60 * 1000,
+      status: "NS",
+      gh: null,
+      ga: null,
+    }],
+  });
+
+  assert.ok(issues.some(i => i.level === "warn" && i.code === "schedule-time-drift"));
+});
+
 test("matchWinner: regulation, pens, and undecided", () => {
   assert.equal(matchWinner(m({ home: "A", away: "B", gh: 2, ga: 1 })), "A");
   assert.equal(matchWinner(m({ home: "A", away: "B", gh: 1, ga: 1, penHome: 2, penAway: 4 })), "B");

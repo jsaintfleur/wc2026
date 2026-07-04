@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Polyline, ZoomControl, useMap, useMapEvents } from "react-leaflet";
-import { divIcon, latLngBounds, type LeafletEvent, type Map as LeafletMap } from "leaflet";
+import { divIcon, latLngBounds, type LeafletEvent, type Map as LeafletMap, type Marker as LeafletMarker } from "leaflet";
 
 export interface VenueMapMarker {
   venueId: string;
@@ -103,7 +103,8 @@ const TILE_STYLES: Record<VenueMapProps["mapStyle"], { url: string; attribution:
 function markerAriaLabel(m: VenueMapMarker): string {
   return `${m.stadiumName}, ${m.city}, ${m.country}. ` +
     `${m.matchesHosted} matches: ${m.liveCount} live, ${m.upcomingCount} upcoming, ${m.completedCount} completed.` +
-    (m.live ? " Live now." : "");
+    (m.live ? " Live now." : "") +
+    (m.muted ? " Not in current filter." : "");
 }
 
 function validVenuePoints(markers: VenueMapMarker[]): [number, number][] {
@@ -232,6 +233,7 @@ export default function VenueMap({
   focusRequest, fitRequest, routeFitRequest, autoFitIfEmpty, layoutKey, onSelect, onBackgroundClick, onViewChange,
 }: VenueMapProps) {
   const tiles = TILE_STYLES[mapStyle] || TILE_STYLES.Dark;
+  const markerRefs = useRef(new Map<string, LeafletMarker>());
 
   /* divIcon per marker state — CSS-styled dot + city label + live pulse.
      Custom icons avoid Leaflet's bundler-hostile default marker images and
@@ -248,6 +250,20 @@ export default function VenueMap({
       `<span class="vm-marker__label">${m.city.replace(/</g, "&lt;")}</span>` +
       "</span>",
   })), [markers]);
+
+  /* Leaflet marker DOM can survive prop changes, so labels set only in the
+     add event go stale as live counts and filter state change. Keep the
+     marker instances keyed by venueId and refresh their current DOM element
+     whenever the marker model changes. */
+  useEffect(() => {
+    for (const marker of markers) {
+      const leafletMarker = markerRefs.current.get(marker.venueId);
+      const el = leafletMarker?.getElement();
+      if (!el) continue;
+      el.setAttribute("role", "button");
+      el.setAttribute("aria-label", markerAriaLabel(marker));
+    }
+  }, [markers]);
 
   return (
     <MapContainer
@@ -281,12 +297,15 @@ export default function VenueMap({
             /* Leaflet renders the icon as a focusable element when
                keyboard=true; add the rich label + role for screen readers */
             add: (event: LeafletEvent) => {
-              const el = (event.target as { getElement?: () => HTMLElement | null }).getElement?.();
+              const marker = event.target as LeafletMarker;
+              markerRefs.current.set(m.venueId, marker);
+              const el = marker.getElement?.();
               if (el) {
                 el.setAttribute("role", "button");
                 el.setAttribute("aria-label", markerAriaLabel(m));
               }
             },
+            remove: () => { markerRefs.current.delete(m.venueId); },
           }}
         />
       ))}

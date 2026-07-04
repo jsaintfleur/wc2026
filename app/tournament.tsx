@@ -2841,6 +2841,9 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     }
     return ids;
   }, [venueModels, selectedTeam, selectedTeamCanon, countryFilter, matchPassesActiveFilter]);
+  const mapStatusMessage = activeVenue
+    ? `Showing ${filteredVenueIds.size} of ${venueModels.length} venues. ${activeVenue.stadiumName} selected.`
+    : `Showing ${filteredVenueIds.size} of ${venueModels.length} venues.`;
 
   const panelMatches = useMemo(() => activeVenue.matches
     .filter(match => selectedTeam === "ALL" || [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon))
@@ -2989,6 +2992,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
           <span><b>{liveTotal}</b> live</span>
         </div>
       </section>
+      <p className="sr-only" aria-live="polite">{mapStatusMessage}</p>
 
       <div className="map-toolbar">
         <div className="map-filter-row map-filter-row--status" role="group" aria-label="Map status filters">
@@ -3185,12 +3189,13 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
           )}
         </div>
 
-        {/* aria-live lets screen readers hear panel updates triggered from
-            the map; the heading takes focus when a marker is activated.
-            States: collapsed (header pill), half, expanded — closed unmounts
-            the panel so the map is fully usable. Escape closes. */}
+        {/* The separate sr-only status line announces selection/filter
+            changes; the panel itself stays quiet so screen readers don't get
+            the entire venue card re-read on every marker change. States:
+            collapsed (header pill), half, expanded — closed unmounts the
+            panel so the map is fully usable. Escape closes. */}
         {activeVenue && panelState !== "closed" && (
-          <aside className={`map-panel map-panel--${panelState}`} aria-label={`${activeVenue.stadiumName} details`} aria-live="polite">
+          <aside className={`map-panel map-panel--${panelState}`} aria-label={`${activeVenue.stadiumName} details`}>
             {/* Drag-handle bar (mobile): toggles between half and expanded */}
             <button
               type="button"

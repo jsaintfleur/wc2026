@@ -9264,7 +9264,8 @@ button.settings-row:active,
 .vm-marker__dot { position: absolute; top: 22px; left: 22px; width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid rgba(0,0,0,0.45); background: var(--gold); box-shadow: 0 2px 10px rgba(0,0,0,0.55); transform: translate(-50%, -50%); transition: transform .15s ease, background .15s ease; }
 .vm-marker__label { position: absolute; top: 32px; left: 22px; transform: translateX(-50%); color: #fff; font-family: var(--disp); font-size: 12px; font-weight: 800; letter-spacing: .3px; white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.6); pointer-events: none; }
 .vm-marker__label--left { left: 12px; text-align: right; transform: translateX(-100%); }
-.venue-leaflet--light .vm-marker__label { color: #14202e; text-shadow: 0 1px 3px rgba(255,255,255,0.9), 0 0 6px rgba(255,255,255,0.7); }
+.venue-leaflet--light .vm-marker__label,
+.venue-leaflet--terrain .vm-marker__label { color: #14202e; text-shadow: 0 1px 3px rgba(255,255,255,0.9), 0 0 6px rgba(255,255,255,0.7); }
 .vm-marker--active .vm-marker__dot { background: #fff; transform: translate(-50%, -50%) scale(1.35); }
 .vm-marker--live .vm-marker__dot { background: var(--live); }
 .vm-marker--route .vm-marker__dot { box-shadow: 0 0 0 5px rgba(245,158,11,0.24), 0 0 0 9px rgba(245,158,11,0.1), 0 2px 10px rgba(0,0,0,0.55); }
@@ -9274,11 +9275,11 @@ button.settings-row:active,
 /* Keyboard focus ring on the Leaflet marker element itself */
 .leaflet-marker-icon:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 6px; border-radius: 50%; }
 /* Empty states — shown when a filter matches no venues / no panel matches */
-.map-empty { position: absolute; inset: auto 16px 16px; z-index: 4; margin: 0; padding: 12px 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; color: var(--ink); background: rgba(8,13,24,0.92); font-size: 13px; text-align: center; }
+.map-empty { position: absolute; right: 82px; bottom: 16px; left: 16px; z-index: 4; margin: 0; padding: 12px 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; color: var(--ink); background: rgba(8,13,24,0.92); font-size: 13px; text-align: center; }
 .map-route-notice { position: absolute; z-index: 6; top: 16px; left: 50%; width: min(440px, calc(100% - 96px)); margin: 0; padding: 11px 14px; border: 1px solid rgba(245,158,11,0.22); border-radius: 14px; color: var(--ink); background: rgba(8,13,24,0.92); box-shadow: 0 12px 28px rgba(0,0,0,0.28); font-size: 12.5px; line-height: 1.35; text-align: center; transform: translateX(-50%); }
 .map-panel__empty { margin: 0; padding: 14px 10px; border: 1px dashed rgba(255,255,255,0.14); border-radius: 14px; color: var(--muted); font-size: 12.5px; text-align: center; }
 .map-controls button { width: 38px; height: 38px; border: 1px solid rgba(255,255,255,0.14); border-radius: 12px; color: #fff; background: rgba(8,13,24,0.78); font-size: 22px; cursor: pointer; }
-.map-reopen-pill { position: absolute; z-index: 6; right: 16px; bottom: 16px; display: inline-flex; align-items: center; gap: 10px; max-width: min(320px, calc(100% - 32px)); min-height: 44px; padding: 10px 14px 10px 16px; border: 1px solid rgba(245,158,11,0.32); border-radius: 999px; color: #fff; background: rgba(8,13,24,0.9); box-shadow: 0 14px 30px rgba(0,0,0,0.34); font: inherit; cursor: pointer; }
+.map-reopen-pill { position: absolute; z-index: 6; left: 16px; bottom: 16px; display: inline-flex; align-items: center; gap: 10px; max-width: min(320px, calc(100% - 32px)); min-height: 44px; padding: 10px 14px 10px 16px; border: 1px solid rgba(245,158,11,0.32); border-radius: 999px; color: #fff; background: rgba(8,13,24,0.9); box-shadow: 0 14px 30px rgba(0,0,0,0.34); font: inherit; cursor: pointer; }
 .map-reopen-pill span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--disp); font-size: 12px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; }
 .map-reopen-pill b { color: var(--gold-bright); font-size: 18px; line-height: 1; }
 .map-reopen-pill:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
@@ -9396,9 +9397,9 @@ button.settings-row:active,
   .host-map { min-width: calc(var(--map-zoom, 1) * 820px); min-height: calc(100svh - 176px); }
   .map-fit-control { top: 12px; right: 12px; width: 42px; height: 42px; }
   .map-controls { top: 60px; right: 12px; }
-  .map-empty { inset: 66px 14px auto; z-index: 6; max-width: calc(100% - 28px); }
+  .map-empty { inset: 66px 82px auto 14px; z-index: 6; max-width: none; }
   .map-route-notice { top: 66px; width: calc(100% - 28px); }
-  .map-reopen-pill { position: fixed; right: 12px; bottom: calc(74px + env(safe-area-inset-bottom) + 10px); z-index: 65; max-width: calc(100vw - 24px); }
+  .map-reopen-pill { position: fixed; left: 12px; right: auto; bottom: calc(74px + env(safe-area-inset-bottom) + 10px); z-index: 65; max-width: calc(100vw - 96px); }
   .venue-leaflet .leaflet-bottom.leaflet-right { right: 12px; bottom: calc(92px + env(safe-area-inset-bottom)); }
   /* Bottom sheet: floats above the bottom nav, never part of page flow, so
      the map stays fully pannable behind/around it. Three sizes:

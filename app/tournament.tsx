@@ -8,6 +8,7 @@ import { nrm, canon, canonPlayer } from "@/lib/merge";
 import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type TournamentStats } from "@/lib/stats";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import { PLAYER_PHOTO_IDS, playerPhotoUrl } from "@/lib/player-photos";
+import { groupConsecutiveJourneyStops } from "@/lib/map-journey";
 import TriondaBall from "@/app/components/TriondaBall";
 import WorldCupTrophy from "@/app/components/WorldCupTrophy";
 
@@ -2815,6 +2816,11 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     });
   }, [mapMatches, selectedTeam, selectedTeamCanon]);
 
+  /* Collapse only consecutive same-venue stops. A team returning to an
+     earlier city later in the tournament is a new travel stop and must stay
+     in the visible journey and route polyline. */
+  const groupedTeamJourney = useMemo(() => groupConsecutiveJourneyStops(teamJourney), [teamJourney]);
+
   const matchPassesActiveFilter = useCallback((match: MapMatch, venue: Pick<VenueDetails, "timezone">) => {
     const status = matchStatus(match, nowMs);
     if (statusFilter === "today") return match.iso === venueTodayISO(venue.timezone, nowMs);
@@ -2857,10 +2863,10 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   // Live total derives from the per-venue counts already computed above —
   // no need for another full scan of mapMatches.
   const liveTotal = useMemo(() => venueModels.reduce((sum, venue) => sum + venue.liveCount, 0), [venueModels]);
-  const routePoints = useMemo(() => teamJourney.map(match => {
-    const venue = venueModels.find(v => v.venueId === match.venueId);
+  const routePoints = useMemo(() => groupedTeamJourney.map(stop => {
+    const venue = venueModels.find(v => v.venueId === stop.venueId);
     return venue ? mapPoint(venue) : null;
-  }).filter((point): point is { x: number; y: number } => !!point), [teamJourney, venueModels]);
+  }).filter((point): point is { x: number; y: number } => !!point), [groupedTeamJourney, venueModels]);
 
   /* Marker models for the Leaflet map (real lat/lng, not SVG projection) */
   const mapMarkers = useMemo<VenueMapMarker[]>(() => venueModels.map(venue => ({
@@ -2882,26 +2888,10 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   })), [venueModels, filteredVenueIds, activeVenueId, selectedTeam, teamJourney]);
 
   /* Team travel path as geographic stops for the Leaflet polyline */
-  const routeLatLngs = useMemo<[number, number][]>(() => teamJourney.map(match => {
-    const venue = venueModels.find(v => v.venueId === match.venueId);
+  const routeLatLngs = useMemo<[number, number][]>(() => groupedTeamJourney.map(stop => {
+    const venue = venueModels.find(v => v.venueId === stop.venueId);
     return venue ? [venue.latitude, venue.longitude] as [number, number] : null;
-  }).filter((p): p is [number, number] => !!p), [teamJourney, venueModels]);
-
-  /* Consecutive same-venue stops are grouped with an "xN" count rather than
-     nested match buttons; this keeps the travel path compact and preserves a
-     single clear tap target per visible stop. */
-  const groupedTeamJourney = useMemo(() => {
-    const groups: Array<{ key: string; matches: MapMatch[] }> = [];
-    for (const match of teamJourney) {
-      const last = groups[groups.length - 1];
-      if (last && last.matches[last.matches.length - 1].venueId === match.venueId) {
-        last.matches.push(match);
-      } else {
-        groups.push({ key: match.key, matches: [match] });
-      }
-    }
-    return groups;
-  }, [teamJourney]);
+  }).filter((p): p is [number, number] => !!p), [groupedTeamJourney, venueModels]);
 
   const openMatch = (match: MapMatch) => onMatchClick(match.sourceMatch, match.fixture);
 

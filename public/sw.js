@@ -4,7 +4,7 @@
  * assets. Match data must never be served from Cache Storage.
  * ---------------------------------------------------------------- */
 
-const CACHE_NAME = "compet-v8";
+const CACHE_NAME = "compet-v9";
 
 /* Static assets to pre-cache on install — the app shell. */
 const PRECACHE = [

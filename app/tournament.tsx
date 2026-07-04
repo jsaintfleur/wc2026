@@ -2634,6 +2634,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   const [activeVenueId, setActiveVenueId] = useState(remembered?.venueId || "METLIFE");
   const [filter, setFilter] = useState<MapFilter>("all");
   const [selectedTeam, setSelectedTeam] = useState("ALL");
+  const [showMapLegend, setShowMapLegend] = useState(false);
   /* Zoom for the SVG FALLBACK map only — the Leaflet map manages its own */
   const [svgZoom, setSvgZoom] = useState(1);
   /* Bottom sheet (mobile) / side panel (desktop) display state */
@@ -3003,6 +3004,15 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
               {label}
             </button>
           ))}
+          <button
+            type="button"
+            className="map-chip map-chip--legend"
+            aria-expanded={showMapLegend}
+            aria-label={showMapLegend ? "Hide map legend" : "Show map legend"}
+            onClick={() => setShowMapLegend(open => !open)}
+          >
+            ?
+          </button>
         </div>
         <label className="map-team-select">
           <span>Team path</span>
@@ -3011,6 +3021,16 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
             {allTeams.map(team => <option key={team} value={team}>{team}</option>)}
           </select>
         </label>
+      </div>
+
+      <div className={`map-legend${showMapLegend ? " map-legend--open" : ""}`} aria-label="Map marker legend">
+        <span><i className="map-legend__marker" aria-hidden="true"><i className="vm-marker"><i className="vm-marker__dot" /></i></i>Venue</span>
+        <span><i className="map-legend__marker" aria-hidden="true"><i className="vm-marker vm-marker--live"><i className="vm-marker__dot" /></i></i>Live</span>
+        <span><i className="map-legend__marker" aria-hidden="true"><i className="vm-marker vm-marker--active"><i className="vm-marker__dot" /></i></i>Selected</span>
+        <span><i className="map-legend__marker" aria-hidden="true"><i className="vm-marker vm-marker--muted"><i className="vm-marker__dot" /></i></i>Filtered out</span>
+        {selectedTeam !== "ALL" && (
+          <span><i className="map-legend__route" aria-hidden="true" />Team route</span>
+        )}
       </div>
 
       <section className={`map-shell map-shell--panel-${panelState}`}>

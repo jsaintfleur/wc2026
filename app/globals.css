@@ -8940,8 +8940,15 @@ button.settings-row:active,
 .map-filter-row::-webkit-scrollbar { display: none; }
 .map-chip { appearance: none; flex: 0 0 auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 999px; padding: 9px 12px; color: var(--ink); background: rgba(255,255,255,0.045); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .map-chip[aria-pressed="true"] { border-color: color-mix(in srgb, var(--gold) 55%, transparent); color: #111; background: var(--gold); }
+.map-chip--legend { display: none; width: 34px; height: 34px; justify-content: center; padding: 0; font-family: var(--disp); font-weight: 800; }
 .map-team-select { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .map-team-select select { min-height: 38px; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 0 10px; color: var(--ink); background: rgba(255,255,255,0.06); }
+.map-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 9px 14px; margin-top: -4px; padding: 0 2px; color: var(--muted); font-size: 11.5px; }
+.map-legend span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.map-legend i { font-style: normal; }
+.map-legend__marker { position: relative; width: 18px; height: 18px; display: inline-block; transform: scale(.42); transform-origin: center; }
+.map-legend__marker .vm-marker { position: absolute; top: -13px; left: -13px; }
+.map-legend__route { width: 30px; height: 0; border-top: 3px dotted var(--gold-bright); filter: drop-shadow(0 0 4px rgba(245,158,11,0.35)); }
 .map-shell { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: stretch; }
 .map-canvas-card { position: relative; min-height: 640px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; background: #07111d; }
 .map-canvas-scroll { width: 100%; height: 100%; overflow: auto; overscroll-behavior: contain; }
@@ -9091,6 +9098,9 @@ button.settings-row:active,
     mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
   }
   .map-chip { padding: 8px 10px; font-size: 11.5px; }
+  .map-chip--legend { display: inline-flex; align-items: center; }
+  .map-legend { display: none; margin-top: -8px; padding: 10px 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; background: rgba(8,13,24,0.9); }
+  .map-legend--open { display: flex; }
   .map-hero__stats { min-width: 0; }
   .map-shell { display: block; }
   /* Map fills the viewport area above the bottom nav */

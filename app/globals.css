@@ -9210,8 +9210,8 @@ button.settings-row:active,
 .map-view { display: flex; flex-direction: column; gap: 14px; padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 .map-hero { display: flex; justify-content: space-between; gap: 16px; padding: 18px; border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; background: radial-gradient(circle at 12% 8%, rgba(34,197,94,0.16), transparent 32%), linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025)), rgba(8, 13, 24, 0.92); }
 .map-hero__eyebrow { display: block; color: var(--gold-bright); font-family: var(--disp); font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
-.map-hero h2, .team-journey-panel h3 { margin: 4px 0 6px; color: #fff; font-family: var(--disp); font-size: 30px; line-height: 1; }
-.map-hero p, .team-journey-panel p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; max-width: 620px; }
+.map-hero h2 { margin: 4px 0 6px; color: #fff; font-family: var(--disp); font-size: 30px; line-height: 1; }
+.map-hero p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; max-width: 620px; }
 .map-hero__stats { display: grid; grid-template-columns: repeat(3, minmax(76px, 1fr)); gap: 8px; min-width: 280px; }
 .map-hero__stats span, .map-panel__metrics span { display: grid; gap: 2px; padding: 10px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: rgba(255,255,255,0.04); color: var(--muted); font-size: 11px; }
 .map-hero__stats b, .map-panel__metrics b { color: #fff; font-family: var(--disp); font-size: 20px; }
@@ -9308,7 +9308,7 @@ button.settings-row:active,
 .map-marker-pulse { fill: color-mix(in srgb, var(--live) 20%, transparent); stroke: color-mix(in srgb, var(--live) 72%, transparent); animation: mapPulse 1.55s ease-out infinite; }
 .map-marker-label { fill: rgba(255,255,255,0.86); font-family: var(--disp); font-size: 12px; font-weight: 800; paint-order: stroke; stroke: rgba(7,17,29,0.88); stroke-width: 4px; pointer-events: none; }
 @keyframes mapPulse { from { r: 14; opacity: .9; } to { r: 34; opacity: 0; } }
-.map-panel, .team-journey-panel { border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; background: linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)), rgba(8, 13, 24, 0.94); box-shadow: 0 18px 50px rgba(0,0,0,0.26); }
+.map-panel { border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; background: linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)), rgba(8, 13, 24, 0.94); box-shadow: 0 18px 50px rgba(0,0,0,0.26); }
 .map-panel { max-height: 640px; overflow: auto; padding: 14px; }
 /* Header bar: title (shown when collapsed) + minimize + close controls */
 .map-panel__bar { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-bottom: 8px; }
@@ -9347,7 +9347,7 @@ button.settings-row:active,
 .map-panel__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin: 14px 0; }
 .map-panel__cta { width: 100%; min-height: 42px; border: 0; border-radius: 12px; color: #10140f; background: var(--gold); font: inherit; font-weight: 800; cursor: pointer; }
 .venue-timeline { display: grid; gap: 8px; margin-top: 14px; }
-.venue-timeline__item, .team-journey-stop { appearance: none; width: 100%; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 10px; color: var(--ink); background: rgba(255,255,255,0.045); text-align: left; cursor: pointer; }
+.venue-timeline__item { appearance: none; width: 100%; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 10px; color: var(--ink); background: rgba(255,255,255,0.045); text-align: left; cursor: pointer; }
 .venue-timeline__item { display: grid; grid-template-columns: 10px 42px minmax(0,1fr) auto; gap: 8px; align-items: center; }
 .venue-timeline__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
 .venue-timeline__item--live .venue-timeline__dot { background: var(--live); box-shadow: 0 0 0 6px color-mix(in srgb, var(--live) 16%, transparent); }
@@ -9356,16 +9356,222 @@ button.settings-row:active,
 .venue-timeline__item b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .venue-timeline__item small { grid-column: 3 / 4; color: var(--muted); font-size: 11px; }
 .venue-timeline__status { grid-column: 4; grid-row: 1 / span 2; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 58px; }
-.venue-timeline__status .lv, .venue-timeline__status .ft, .team-journey-stop__status .lv, .team-journey-stop__status .ft { margin-top: 0; }
-.venue-timeline__status strong, .team-journey-stop__status strong { color: #fff; font-family: var(--disp); font-size: 13px; font-weight: 800; white-space: nowrap; }
-.team-journey-panel { padding: 16px; }
-.team-journey-list { display: grid; gap: 8px; margin-top: 12px; }
-.team-journey-stop { display: grid; grid-template-columns: 30px minmax(0,1fr) auto; gap: 10px; align-items: center; }
-.team-journey-stop > span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: #111; background: var(--gold); font-family: var(--disp); font-weight: 900; }
-.team-journey-stop b, .team-journey-stop small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.team-journey-stop small { color: var(--muted); font-size: 11px; }
-.team-journey-stop__status { display: grid; justify-items: end; gap: 4px; min-width: 58px; }
-.team-journey-stop__status em { color: var(--gold-bright); font-style: normal; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.venue-timeline__status .lv, .venue-timeline__status .ft { margin-top: 0; }
+.venue-timeline__status strong { color: #fff; font-family: var(--disp); font-size: 13px; font-weight: 800; white-space: nowrap; }
+/* ── Team Journey — travel-story timeline below the map ────────────
+   Vertical numbered timeline on mobile; horizontal route on desktop.
+   --tj-accent / --tj-accent-2 carry the selected team's kit colors. */
+.tj {
+  margin-top: 14px;
+  padding: 18px 16px 16px;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 24px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--tj-accent) 9%, transparent), rgba(255,255,255,0.02) 46%),
+    rgba(8, 13, 24, 0.94);
+  box-shadow: 0 18px 50px rgba(0,0,0,0.26);
+}
+.tj__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.tj__eyebrow {
+  color: var(--gold-bright);
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .9px;
+  text-transform: uppercase;
+}
+.tj__title { margin: 4px 0 0; color: #fff; font-family: var(--disp); font-size: 26px; line-height: 1.05; }
+.tj__status {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+}
+.tj__status--alive { color: #4ade80; border-color: rgba(74,222,128,0.35); background: rgba(74,222,128,0.10); }
+.tj__status--eliminated { color: var(--muted); background: rgba(255,255,255,0.05); }
+.tj__status--champion { color: var(--gold-bright); border-color: rgba(245,158,11,0.45); background: rgba(245,158,11,0.12); }
+.tj__status--not-started { color: var(--ink-soft); }
+
+/* Five-number summary strip */
+.tj__summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 16px;
+}
+.tj__summary > div {
+  padding: 10px 8px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.04);
+  text-align: center;
+  display: grid;
+  gap: 2px;
+}
+.tj__summary b {
+  color: #fff;
+  font-family: var(--disp);
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tj__summary span { color: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: .35px; text-transform: uppercase; }
+
+/* Timeline rail: vertical by default (mobile-first) */
+.tj__line { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.tj-stop { position: relative; display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 12px; padding-bottom: 14px; }
+/* Connector line between numbered markers */
+.tj-stop:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 34px;
+  bottom: -2px;
+  width: 2px;
+  background: rgba(255,255,255,0.12);
+}
+.tj-stop--completed:not(:last-child)::before { background: color-mix(in srgb, var(--tj-accent) 55%, rgba(255,255,255,0.2)); }
+.tj-stop__marker {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.16);
+  color: var(--ink-soft);
+  background: rgba(11, 18, 32, 0.98);
+  font-family: var(--disp);
+  font-size: 13px;
+  font-weight: 900;
+  z-index: 1;
+}
+.tj-stop--completed .tj-stop__marker { color: #111; border-color: transparent; background: linear-gradient(135deg, var(--tj-accent), var(--tj-accent-2)); }
+.tj-stop--live .tj-stop__marker { color: #fff; border-color: var(--live); box-shadow: 0 0 0 5px color-mix(in srgb, var(--live) 18%, transparent); }
+.tj-stop--next .tj-stop__marker { border-color: var(--gold-bright); color: var(--gold-bright); box-shadow: 0 0 0 5px rgba(245,158,11,0.14); }
+.tj-stop--upcoming .tj-stop__card { opacity: .82; }
+
+.tj-stop__card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+  animation: moreCardIn .32s ease both;
+}
+.tj-stop__distance {
+  display: inline-block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  font-variant-numeric: tabular-nums;
+}
+.tj-stop__city { color: #fff; font-family: var(--disp); font-size: 17px; font-weight: 800; line-height: 1.1; }
+.tj-stop__next-tag {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--gold-bright);
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.3);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .45px;
+  text-transform: uppercase;
+}
+.tj-stop__match {
+  appearance: none;
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  grid-template-areas: "stage team badge" "stage time badge";
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  color: var(--ink);
+  background: rgba(8,12,21,0.5);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.tj-stop__match:hover { border-color: color-mix(in srgb, var(--tj-accent) 45%, transparent); background: rgba(8,12,21,0.72); }
+.tj-stop__stage { grid-area: stage; color: var(--gold-bright); font-family: var(--disp); font-size: 11px; font-weight: 800; }
+.tj-stop__match b { grid-area: team; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tj-stop__match small { grid-area: time; color: var(--muted); font-size: 11px; }
+.tj-stop__badge {
+  grid-area: badge;
+  font-style: normal;
+  font-family: var(--disp);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tj-stop__badge--upcoming { color: var(--ink-soft); font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; }
+.tj-stop__badge--live { color: var(--live); animation: pulse 1.4s infinite; }
+.tj-stop__badge--W { color: #4ade80; }
+.tj-stop__badge--D { color: var(--ink-soft); }
+.tj-stop__badge--L { color: #f87171; }
+.tj-stop__more { margin-top: 8px; }
+.tj-stop__more summary {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.tj-stop__more p { margin: 6px 0 0; color: var(--ink-soft); font-size: 12px; }
+.tj__note { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; font-style: italic; }
+
+/* Desktop: the journey reads left-to-right as an exploratory route */
+@media (min-width: 768px) {
+  .tj__line {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(250px, 310px);
+    overflow-x: auto;
+    padding-bottom: 8px;
+    scrollbar-width: thin;
+  }
+  .tj-stop { grid-template-columns: 1fr; grid-template-rows: 34px auto; gap: 10px; padding: 0 14px 0 0; }
+  .tj-stop:not(:last-child)::before {
+    left: 34px;
+    right: -2px;
+    top: 16px;
+    bottom: auto;
+    width: auto;
+    height: 2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tj-stop__card { animation: none; }
+  .tj-stop__badge--live { animation: none; }
+}
+
+/* While the map card is scrolled out of view, the fixed venue sheet fades
+   away so it never covers the journey timeline below the map. */
+.map-panel--offscreen { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .2s ease, visibility .2s ease; }
+
+/* Map marker states added by the journey redesign: the next destination
+   pulses gold; a hovered timeline stop enlarges its marker. */
+.vm-marker--next .vm-marker__dot { background: var(--gold-bright); }
+.vm-marker--next .vm-marker__pulse { border-color: rgba(245,158,11,0.55); }
+.vm-marker--hover .vm-marker__dot { transform: scale(1.45); }
+.vm-marker--hover .vm-marker__label { color: #fff; }
 /* 768px matches the app-wide mobile/desktop boundary (see other views) —
    the previous 860px gave tablets desktop chrome with a mobile map sheet. */
 @media (max-width: 768px) {

@@ -9,6 +9,7 @@ import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type 
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import { PLAYER_PHOTO_IDS, playerPhotoUrl } from "@/lib/player-photos";
 import { groupConsecutiveJourneyStops } from "@/lib/map-journey";
+import { buildTeamJourney, type JourneyMatchInput, type JourneyVenue } from "@/lib/journey";
 import TriondaBall from "@/app/components/TriondaBall";
 import WorldCupTrophy from "@/app/components/WorldCupTrophy";
 
@@ -2861,6 +2862,90 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
      in the visible journey and route polyline. */
   const groupedTeamJourney = useMemo(() => groupConsecutiveJourneyStops(teamJourney), [teamJourney]);
 
+  /* Full Team Journey model (lib/journey.ts): grouped stops with distances,
+     Alive/Eliminated/Champion status, and the curved route split into a
+     completed leg and an upcoming leg for the map. */
+  const journeyModel = useMemo(() => {
+    if (selectedTeam === "ALL" || teamJourney.length === 0) return null;
+    const journeyVenues: Record<string, JourneyVenue> = {};
+    for (const venue of venueModels) {
+      journeyVenues[venue.venueId] = {
+        venueId: venue.venueId,
+        city: venue.city,
+        stadiumName: venue.stadiumName,
+        country: venue.country,
+        latitude: venue.latitude,
+        longitude: venue.longitude,
+        timezone: venue.timezone,
+        capacity: venue.capacity,
+      };
+    }
+    const inputs: JourneyMatchInput[] = teamJourney.map(match => {
+      const status = matchStatus(match, nowMs);
+      const f = match.fixture;
+      /* Which side is the selected team? Prefer the live fixture's naming */
+      const isHome = canon(f?.home || match.homeTeam) === selectedTeamCanon;
+      const opponent = canon(isHome ? (f?.away || match.awayTeam) : (f?.home || match.homeTeam)) || "TBD";
+      /* Result AND score from the team's perspective ("3-1" means the
+         selected team scored 3) — a raw home-away score reads wrong next
+         to a W/L badge when the team played away. Pens break drawn ties. */
+      let result: JourneyMatchInput["result"] = null;
+      let score = "";
+      if (status !== "upcoming" && f && f.gh != null && f.ga != null) {
+        const mine = isHome ? f.gh : f.ga;
+        const theirs = isHome ? f.ga : f.gh;
+        score = `${mine}-${theirs}`;
+        if (status === "completed") {
+          if (mine !== theirs) result = mine > theirs ? "W" : "L";
+          else if (f.penHome != null && f.penAway != null) {
+            const myPens = isHome ? f.penHome : f.penAway;
+            const theirPens = isHome ? f.penAway : f.penHome;
+            score = `${score} (${myPens}-${theirPens} pens)`;
+            result = myPens > theirPens ? "W" : "L";
+          } else result = "D";
+        }
+      }
+      return {
+        key: match.key,
+        no: match.no,
+        venueId: match.venueId,
+        ts: match.ts,
+        stage: match.stage,
+        opponent,
+        status,
+        score,
+        result,
+      };
+    });
+    /* Knockout counts as underway once any KO fixture has resolved teams —
+       this lets the model tell a group exit from "next round not drawn". */
+    const knockoutStarted = mapMatches.some(match => match.stage !== "Group Stage" && (match.fixture != null || match.homeTeam !== "TBD"));
+    return buildTeamJourney(inputs, journeyVenues, { knockoutStarted });
+  }, [teamJourney, mapMatches, venueModels, selectedTeam, selectedTeamCanon, nowMs]);
+
+  /* Hovering a journey-timeline stop highlights its map marker (desktop) */
+  const [hoverVenueId, setHoverVenueId] = useState("");
+
+  /* The venue sheet is position:fixed on mobile, which would keep it
+     floating over the journey timeline after the user scrolls past the
+     map. Track the map card's visibility and hide the sheet while the map
+     itself is off-screen — the journey below must never be covered. */
+  const canvasCardRef = useRef<HTMLDivElement>(null);
+  const [mapOffscreen, setMapOffscreen] = useState(false);
+  useEffect(() => {
+    const card = canvasCardRef.current;
+    if (!card || typeof IntersectionObserver === "undefined") return;
+    /* Hide well before the card fully leaves: once less than ~35% of the
+       map remains visible, the fixed sheet is already sitting on top of
+       journey content rather than the map it belongs to. */
+    const observer = new IntersectionObserver(
+      entries => setMapOffscreen(entries[0] ? entries[0].intersectionRatio < 0.35 : false),
+      { threshold: [0, 0.2, 0.35, 0.5] },
+    );
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, []);
+
   const matchPassesActiveFilter = useCallback((match: MapMatch, venue: Pick<VenueDetails, "timezone">) => {
     const status = matchStatus(match, nowMs);
     if (statusFilter === "today") return match.iso === venueTodayISO(venue.timezone, nowMs);
@@ -2919,15 +3004,15 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     live: venue.liveCount > 0,
     active: venue.venueId === activeVenueId,
     onTeamPath: selectedTeam !== "ALL" && teamJourney.some(match => match.venueId === venue.venueId),
-    nextStop: false,
-    hovered: false,
+    nextStop: journeyModel?.summary.status === "alive" && journeyModel.stops.some(stop => stop.isNext && stop.venue.venueId === venue.venueId),
+    hovered: hoverVenueId === venue.venueId,
     labelLeft: MAP_LABEL_LEFT_VENUES.has(venue.venueId),
     muted: !filteredVenueIds.has(venue.venueId),
     matchesHosted: venue.matchesHosted,
     liveCount: venue.liveCount,
     upcomingCount: venue.upcomingCount,
     completedCount: venue.completedCount,
-  })), [venueModels, filteredVenueIds, activeVenueId, selectedTeam, teamJourney]);
+  })), [venueModels, filteredVenueIds, activeVenueId, selectedTeam, teamJourney, journeyModel, hoverVenueId]);
 
   /* Team travel path as geographic stops for the Leaflet polyline */
   const routeLatLngs = useMemo<[number, number][]>(() => groupedTeamJourney.map(stop => {
@@ -3112,7 +3197,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
       </div>
 
       <section className={`map-shell map-shell--panel-${panelState}`}>
-        <div className="map-canvas-card">
+        <div className="map-canvas-card" ref={canvasCardRef}>
           <button
             type="button"
             className="map-fit-control"
@@ -3212,8 +3297,8 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
           )}>
             <VenueMap
               markers={mapMarkers}
-              completedRoute={routeLatLngs}
-              upcomingRoute={[]}
+              completedRoute={journeyModel?.completedPath || []}
+              upcomingRoute={journeyModel?.upcomingPath || []}
               mapStyle={prefs.mapStyle}
               initialCenter={viewRef.current.center}
               initialZoom={viewRef.current.zoom}
@@ -3254,7 +3339,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
             collapsed (header pill), half, expanded — closed unmounts the
             panel so the map is fully usable. Escape closes. */}
         {activeVenue && panelState !== "closed" && (
-          <aside className={`map-panel map-panel--${panelState}`} aria-label={`${activeVenue.stadiumName} details`}>
+          <aside className={`map-panel map-panel--${panelState}${mapOffscreen ? " map-panel--offscreen" : ""}`} aria-label={`${activeVenue.stadiumName} details`}>
             {/* Drag-handle bar (mobile): toggles between half and expanded */}
             <button
               type="button"
@@ -3331,41 +3416,95 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
         )}
       </section>
 
-      {selectedTeam !== "ALL" && (
-        <section className="team-journey-panel">
-          <div>
-            <span className="map-hero__eyebrow">Team Travel Path</span>
-            <h3>{selectedTeam}</h3>
-          </div>
-          {teamJourney.length === 0 ? (
-            <p>No confirmed venue path yet. Knockout destinations appear once the live bracket resolves.</p>
-          ) : (
-            <div className="team-journey-list">
-              {groupedTeamJourney.map((group, index) => {
-                const match = group.matches[0];
-                const venue = venueModels.find(v => v.venueId === match.venueId);
-                const score = matchScoreLabel(match);
-                const status = matchStatus(match, nowMs);
-                return (
-                  <button key={group.key} type="button" className="team-journey-stop" onClick={() => openMatch(match)}>
-                    <span>{index + 1}</span>
-                    <div>
-                      <b>{venue?.city || match.venueId}</b>
-                      <small>{match.stage} · {match.homeTeam} vs {match.awayTeam}{group.matches.length > 1 ? ` · ×${group.matches.length} matches` : ""}</small>
-                    </div>
-                    <span className="team-journey-stop__status">
-                      {status === "live" && <span className="lv">LIVE</span>}
-                      {status === "completed" && <span className="ft">FT</span>}
-                      {status === "upcoming" && <em>{formatVenueLocalTime(match.ts, venue?.timezone || "America/New_York")}</em>}
-                      {score && status !== "upcoming" && <strong>{score}</strong>}
-                    </span>
-                  </button>
-                );
-              })}
+      {selectedTeam !== "ALL" && journeyModel && (() => {
+        const { stops, summary } = journeyModel;
+        const accent = TEAM_PROFILES[selectedTeam]?.kitColors;
+        const statusLabel = summary.status === "champion" ? "Champion"
+          : summary.status === "eliminated" ? "Eliminated"
+          : summary.status === "not-started" ? "Not started" : "Alive";
+        return (
+        <section
+          className="tj"
+          aria-label={`${selectedTeam} tournament travel path`}
+          style={{ "--tj-accent": accent?.primary || "#f59e0b", "--tj-accent-2": accent?.secondary || "#fde68a" } as CSSProperties}
+        >
+          <header className="tj__head">
+            <div>
+              <span className="tj__eyebrow">Team Journey</span>
+              <h3 className="tj__title">{data.flags[selectedTeam] || "⚽"} {selectedTeam}</h3>
             </div>
+            <span className={`tj__status tj__status--${summary.status}`}>
+              {summary.status === "champion" ? "🏆 " : ""}{statusLabel}
+            </span>
+          </header>
+
+          {/* Journey summary strip — the story in five numbers */}
+          <div className="tj__summary" role="group" aria-label="Journey summary">
+            <div><b>{summary.citiesVisited}</b><span>{summary.citiesVisited === 1 ? "City" : "Cities"} visited</span></div>
+            <div><b>{summary.totalDistanceKm.toLocaleString("en-US")}</b><span>km travelled</span></div>
+            <div><b>{summary.matchesPlayed}</b><span>Played</span></div>
+            <div><b>{stageShortLabel(summary.currentRound)}</b><span>Round</span></div>
+            <div><b>{summary.nextVenue ? summary.nextVenue.city.split(" / ")[0] : summary.status === "alive" ? "TBD" : "—"}</b><span>Next stop</span></div>
+          </div>
+
+          {/* Route timeline: vertical on mobile, horizontal on desktop.
+              Hovering a stop highlights its marker on the map above. */}
+          <ol className="tj__line">
+            {stops.map(stop => (
+              <li
+                key={stop.key}
+                className={`tj-stop tj-stop--${stop.state}${stop.isNext ? " tj-stop--next" : ""}`}
+                onMouseEnter={() => setHoverVenueId(stop.venue.venueId)}
+                onMouseLeave={() => setHoverVenueId("")}
+              >
+                <span className="tj-stop__marker" aria-hidden="true">{stop.stopNumber}</span>
+                <div className="tj-stop__card">
+                  {stop.distanceFromPrevKm != null && (
+                    <span className="tj-stop__distance">✈ {stop.distanceFromPrevKm.toLocaleString("en-US")} km</span>
+                  )}
+                  <div className="tj-stop__city">{stop.venue.city}</div>
+                  {stop.isNext && <span className="tj-stop__next-tag">Next destination</span>}
+                  {stop.matches.map(mm => {
+                    const source = teamJourney.find(entry => entry.key === mm.key);
+                    return (
+                      <button
+                        key={mm.key}
+                        type="button"
+                        className="tj-stop__match"
+                        onClick={() => source && openMatch(source)}
+                        aria-label={`Open match details: ${selectedTeam} vs ${mm.opponent}`}
+                      >
+                        <span className="tj-stop__stage">{stageShortLabel(mm.stage)}</span>
+                        <b>vs {data.flags[mm.opponent] || ""} {mm.opponent}</b>
+                        <small>{formatVenueLocalTime(mm.ts, stop.venue.timezone)}</small>
+                        <em className={`tj-stop__badge tj-stop__badge--${mm.status}${mm.result ? ` tj-stop__badge--${mm.result}` : ""}`}>
+                          {mm.status === "live" ? "LIVE" : mm.status === "completed" ? `${mm.result} ${mm.score}` : "Upcoming"}
+                        </em>
+                      </button>
+                    );
+                  })}
+                  <details className="tj-stop__more">
+                    <summary>Stadium details</summary>
+                    <p>{stop.venue.stadiumName} · {stop.venue.country}{stop.venue.capacity ? ` · ${stop.venue.capacity.toLocaleString("en-US")} seats` : ""}</p>
+                  </details>
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          {/* Story-driven footnotes per journey state */}
+          {stops.length === 1 && summary.status !== "eliminated" && (
+            <p className="tj__note">Journey just started — more stops will appear as the tournament progresses.</p>
+          )}
+          {summary.status === "eliminated" && summary.endedIn && (
+            <p className="tj__note">Journey ended in {summary.endedIn.city} against {data.flags[summary.endedIn.opponent] || ""} {summary.endedIn.opponent}.</p>
+          )}
+          {summary.status === "champion" && (
+            <p className="tj__note">The road ended with the trophy — champions of the 2026 World Cup.</p>
           )}
         </section>
-      )}
+        );
+      })()}
     </section>
   );
 }, (prev, next) =>

@@ -199,9 +199,11 @@ export default function VenueMap({
      keep the app's visual language. */
   const icons = useMemo(() => markers.map(m => divIcon({
     className: "vm-marker-wrap",
-    iconSize: [0, 0],
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
     html:
       `<span class="vm-marker${m.live ? " vm-marker--live" : ""}${m.active ? " vm-marker--active" : ""}${m.muted ? " vm-marker--muted" : ""}">` +
+      '<span class="vm-marker__hit"></span>' +
       (m.live ? '<span class="vm-marker__pulse"></span>' : "") +
       '<span class="vm-marker__dot"></span>' +
       `<span class="vm-marker__label">${m.city.replace(/</g, "&lt;")}</span>` +

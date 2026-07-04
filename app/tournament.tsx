@@ -9,7 +9,10 @@ import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type 
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import { PLAYER_PHOTO_IDS, playerPhotoUrl } from "@/lib/player-photos";
 import { groupConsecutiveJourneyStops } from "@/lib/map-journey";
+import { resolveFilteredVenueSelection } from "@/lib/map-filters";
 import { buildTeamJourney, type JourneyMatchInput, type JourneyVenue } from "@/lib/journey";
+import { buildTeamRecords } from "@/lib/team-records";
+import { auditTournament } from "@/lib/integrity";
 import TriondaBall from "@/app/components/TriondaBall";
 import WorldCupTrophy from "@/app/components/WorldCupTrophy";
 
@@ -76,6 +79,8 @@ let startupLiveDataCache: PersistedLiveData | null | undefined;
 
 function logLiveDataSource(message: string, details?: Record<string, unknown>) {
   if (typeof window === "undefined") return;
+  /* Diagnostic chatter stays out of production consoles */
+  if (process.env.NODE_ENV === "production") return;
   console.info(`[compet live-data] ${message}`, details || {});
 }
 
@@ -583,9 +588,12 @@ function buildKnockoutCards(
         const loserName = loserFromFixture(fixture);
         let teams: [KnockoutParticipant, KnockoutParticipant];
 
-        if (fixture?.home && fixture?.away) {
-          const home = teamName(fixture.home);
-          const away = teamName(fixture.away);
+        const trustVendorTeams = fixture?.home && fixture?.away &&
+          (config.key === "r32" || isLive || isDone);
+
+        if (trustVendorTeams) {
+          const home = teamName(fixture!.home);
+          const away = teamName(fixture!.away);
           teams = [
             { name: home, winner: winnerName === home, loser: loserName === home },
             { name: away, winner: winnerName === away, loser: loserName === away },
@@ -717,6 +725,29 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
      useEffect) so avatars sourced from the index appear in the same pass —
      the write is idempotent and keyed only on the live payload. */
   useMemo(() => rebuildPlayerImageIndex(fixtures, leaderboardStats), [fixtures, leaderboardStats]);
+
+  /* Development-only data integrity audit: every time live data changes,
+     rebuild the canonical match list + team records and log any broken
+     invariant (duplicate matches, goal imbalances, knockout progression
+     contradictions). Zero cost in production builds. */
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const matches = buildAnalyticsMatches(data, fixtures, findLive, Date.now());
+    const teams = Object.values(data.groups).flat().map(canon);
+    const { issues } = auditTournament(teams, matches.map(mm => ({
+      key: mm.key, stage: mm.stage, ts: mm.ts, home: mm.home, away: mm.away,
+      status: mm.status, gh: mm.gh, ga: mm.ga,
+      penHome: mm.fixture?.penHome ?? null, penAway: mm.fixture?.penAway ?? null,
+    })));
+    if (issues.length) {
+      console.warn(`[integrity] ${issues.length} issue(s) detected:`);
+      for (const issue of issues) console.warn(`[integrity] ${issue.level.toUpperCase()} ${issue.code}: ${issue.message}`);
+    } else {
+      console.info("[integrity] all invariants hold");
+    }
+    /* Expose for inspection in dev tooling/tests */
+    (window as unknown as { __competAudit?: unknown }).__competAudit = { issues, matchCount: matches.length };
+  }, [data, fixtures, findLive]);
   const [liveStatus, setLiveStatus] = useState<LiveStatus>("init");
   const [liveTs, setLiveTs] = useState(() => getStartupLiveDataCache()?.ts || 0);
   const [, setLiveStale] = useState(false);
@@ -724,6 +755,8 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
   const [animate, setAnimate] = useState(true);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /* Timestamp of the last network poll — backs the fetch-storm guard */
+  const lastPollAtRef = useRef(0);
   const [teamDrawer, setTeamDrawer] = useState<string | null>(null);
   const [hostDrawer, setHostDrawer] = useState<string | null>(null);
   const [matchDetail, setMatchDetail] = useState<{ match: GroupStageMatch; fixture: LiveFixture | null } | null>(null);
@@ -746,6 +779,15 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
   const [showInstall, setShowInstall] = useState(false);
 
   const pollLive = useCallback(async () => {
+    /* Focus/visibility/online handlers all funnel here — a window-manager
+       focus flap (or automation) must not turn into a fetch storm. Skip
+       network refreshes within 5s of the previous one; the regular
+       interval and genuine returns-to-tab are unaffected. */
+    if (!isMock()) {
+      const sinceLast = Date.now() - lastPollAtRef.current;
+      if (sinceLast < 5000) return;
+      lastPollAtRef.current = Date.now();
+    }
     if (isMock()) {
       const mockFixtures = MOCK_FIXTURES as LiveFixture[];
       setFixtures(mockFixtures);
@@ -2898,16 +2940,30 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     return { ...detail, stadiumName: venue.common, capacity: venue.cap, matchesHosted: matches.length, matches, liveCount, completedCount, upcomingCount };
   }).sort((a, b) => b.liveCount - a.liveCount || b.matchesHosted - a.matchesHosted || a.city.localeCompare(b.city)), [data.venues, mapMatches, nowMs]);
 
+  const matchPassesActiveFilter = useCallback((match: MapMatch, venue: Pick<VenueDetails, "timezone">) => {
+    const status = matchStatus(match, nowMs);
+    if (statusFilter === "today") return match.iso === venueTodayISO(venue.timezone, nowMs);
+    if (statusFilter === "live") return status === "live";
+    if (statusFilter === "upcoming") return status === "upcoming";
+    if (statusFilter === "completed") return status === "completed";
+    if (statusFilter === "knockout") return match.stage !== "Group Stage";
+    return true;
+  }, [statusFilter, nowMs]);
+
   const activeVenue = venueModels.find(venue => venue.venueId === activeVenueId) || venueModels[0];
   const selectedTeamCanon = selectedTeam === "ALL" ? "" : canon(selectedTeam);
 
   const teamJourney = useMemo(() => {
     if (selectedTeam === "ALL") return [];
     return mapMatches.filter(match => {
+      const venue = venueModels.find(item => item.venueId === match.venueId);
+      if (!venue) return false;
+      const countryMatch = countryFilter === "all" || countryFilterKey(venue.country) === countryFilter;
+      if (!countryMatch || !matchPassesActiveFilter(match, venue)) return false;
       const teams = [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon);
       return teams.includes(selectedTeamCanon);
     });
-  }, [mapMatches, selectedTeam, selectedTeamCanon]);
+  }, [mapMatches, venueModels, selectedTeam, selectedTeamCanon, countryFilter, matchPassesActiveFilter]);
 
   /* Collapse only consecutive same-venue stops. A team returning to an
      earlier city later in the tournament is a new travel stop and must stay
@@ -2998,16 +3054,6 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     return () => observer.disconnect();
   }, []);
 
-  const matchPassesActiveFilter = useCallback((match: MapMatch, venue: Pick<VenueDetails, "timezone">) => {
-    const status = matchStatus(match, nowMs);
-    if (statusFilter === "today") return match.iso === venueTodayISO(venue.timezone, nowMs);
-    if (statusFilter === "live") return status === "live";
-    if (statusFilter === "upcoming") return status === "upcoming";
-    if (statusFilter === "completed") return status === "completed";
-    if (statusFilter === "knockout") return match.stage !== "Group Stage";
-    return true;
-  }, [statusFilter, nowMs]);
-
   const panelEmptyMessage = useMemo(() => {
     if (statusFilter === "today") return "No matches today at this venue.";
     if (statusFilter === "live") return "No live matches at this venue.";
@@ -3039,7 +3085,25 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     .sort((a, b) => a.ts - b.ts), [activeVenue, selectedTeam, selectedTeamCanon, matchPassesActiveFilter]);
   // Live total derives from the per-venue counts already computed above —
   // no need for another full scan of mapMatches.
-  const liveTotal = useMemo(() => venueModels.reduce((sum, venue) => sum + venue.liveCount, 0), [venueModels]);
+  /* Hero stats mirror the ACTIVE filters — with "USA" selected the counts
+     describe USA venues only, not the global tournament. With no filters
+     active this equals the global totals (16 venues / 104 matches). */
+  const filteredHeroStats = useMemo(() => {
+    let venues = 0;
+    let matchCount = 0;
+    let liveCount = 0;
+    for (const venue of venueModels) {
+      if (!filteredVenueIds.has(venue.venueId)) continue;
+      venues++;
+      const teamScoped = selectedTeam === "ALL"
+        ? venue.matches
+        : venue.matches.filter(match => [match.homeTeam, match.awayTeam, match.fixture?.home || "", match.fixture?.away || ""].map(canon).includes(selectedTeamCanon));
+      const passing = teamScoped.filter(match => matchPassesActiveFilter(match, venue));
+      matchCount += passing.length;
+      liveCount += passing.filter(match => matchStatus(match, nowMs) === "live").length;
+    }
+    return { venues, matches: matchCount, live: liveCount };
+  }, [venueModels, filteredVenueIds, selectedTeam, selectedTeamCanon, matchPassesActiveFilter, nowMs]);
   const routePoints = useMemo(() => groupedTeamJourney.map(stop => {
     const venue = venueModels.find(v => v.venueId === stop.venueId);
     return venue ? mapPoint(venue) : null;
@@ -3054,7 +3118,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     latitude: venue.latitude,
     longitude: venue.longitude,
     live: venue.liveCount > 0,
-    active: venue.venueId === activeVenueId,
+    active: venue.venueId === activeVenueId && filteredVenueIds.has(venue.venueId),
     onTeamPath: selectedTeam !== "ALL" && teamJourney.some(match => match.venueId === venue.venueId),
     nextStop: journeyModel?.summary.status === "alive" && journeyModel.stops.some(stop => stop.isNext && stop.venue.venueId === venue.venueId),
     hovered: hoverVenueId === venue.venueId,
@@ -3090,19 +3154,26 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   /* Keep the venue panel in sync with the active filter: if the selected
      venue drops out of the filtered set (e.g. panel shows MetLife, user taps
      "Mexico"), jump to the first venue that matches. A completely empty
-     filter keeps the selection and shows an explicit empty state instead. */
+     filter closes the panel so stale venue details cannot remain visible. */
   useEffect(() => {
     if (panelState === "closed") return;
     if (explicitSelectionRef.current === activeVenueId) {
       explicitSelectionRef.current = null;
       return;
     }
-    if (filteredVenueIds.size === 0 || filteredVenueIds.has(activeVenueId)) {
+    const nextSelection = resolveFilteredVenueSelection(activeVenueId, filteredVenueIds, venueModels.map(venue => venue.venueId));
+    if (!nextSelection.closePanel && nextSelection.venueId === activeVenueId) {
       userFilterActionRef.current = false;
       routeFitIssuedRef.current = false;
       return;
     }
-    const first = venueModels.find(venue => filteredVenueIds.has(venue.venueId));
+    if (nextSelection.closePanel || !nextSelection.venueId) {
+      setPanelState("closed");
+      userFilterActionRef.current = false;
+      routeFitIssuedRef.current = false;
+      return;
+    }
+    const first = venueModels.find(venue => venue.venueId === nextSelection.venueId);
     if (first) {
       setActiveVenueId(first.venueId);
       const shouldFocus = userFilterActionRef.current && !routeFitIssuedRef.current;
@@ -3181,9 +3252,9 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
           <p>Explore every World Cup 2026 venue, live stadium state, local kickoff time, and team travel path across the United States, Canada, and Mexico.</p>
         </div>
         <div className="map-hero__stats">
-          <span><b>{venueModels.length}</b> venues</span>
-          <span><b>{mapMatches.length}</b> matches</span>
-          <span><b>{liveTotal}</b> live</span>
+          <span><b>{filteredHeroStats.venues}</b>{filteredHeroStats.venues !== venueModels.length ? ` of ${venueModels.length} ` : " "}venues</span>
+          <span><b>{filteredHeroStats.matches}</b>{filteredHeroStats.matches !== mapMatches.length ? ` of ${mapMatches.length} ` : " "}matches</span>
+          <span><b>{filteredHeroStats.live}</b> live</span>
         </div>
       </section>
       <p className="sr-only" aria-live="polite">{mapStatusMessage}</p>
@@ -3557,6 +3628,17 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
         </section>
         );
       })()}
+      {selectedTeam !== "ALL" && !journeyModel && (
+        <section className="tj tj--empty" aria-label={`${selectedTeam} tournament travel path`}>
+          <header className="tj__head">
+            <div>
+              <span className="tj__eyebrow">Team Journey</span>
+              <h3 className="tj__title">{data.flags[selectedTeam] || ""} {selectedTeam}</h3>
+            </div>
+          </header>
+          <p className="tj__note">No travel path available for this filter.</p>
+        </section>
+      )}
     </section>
   );
 }, (prev, next) =>
@@ -4180,6 +4262,7 @@ type ConfederationAnalytics = {
 };
 
 type AnalyticsModel = {
+  modelQuality: "Advanced" | "Standard" | "Basic";
   teams: TeamAnalytics[];
   confederations: ConfederationAnalytics[];
   remainingByConfed: Record<Confederation, TeamAnalytics[]>;
@@ -4220,15 +4303,6 @@ function shortDate(ts: number): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(ts));
 }
 
-function analyticsRoundDepth(stage: string): number {
-  if (/final/i.test(stage) && !/third/i.test(stage)) return 5;
-  if (/semi/i.test(stage)) return 4;
-  if (/quarter/i.test(stage)) return 3;
-  if (/16/.test(stage)) return 2;
-  if (/32/.test(stage)) return 1;
-  return 0;
-}
-
 function analyticsBand(value: number, label: string): string {
   if (value >= 82) return `elite ${label} (${value})`;
   if (value >= 65) return `strong ${label} (${value})`;
@@ -4262,6 +4336,70 @@ function analyticsScoreFromMatches(
   const attack = analyticsScorePct(gf, maxGF);
   const defense = Math.max(0, 100 - analyticsScorePct(ga, Math.max(1, played * 3))) * 0.75 + analyticsScorePct(cleanSheets, played) * 0.25;
   return Math.round(resultScore * 0.3 + gdScore * 0.2 + attack * 0.2 + defense * 0.2 + pathDifficulty * 0.1);
+}
+
+/* Assembles the full tournament match list with resolved participants —
+ * group matches from the schedule (live fixture or persisted DB result),
+ * knockout matches through the shared bracket builder so ties whose
+ * fixtures the vendor has not published still carry their known teams.
+ * This is the canonical input for team records, analytics, and the
+ * dev-mode integrity audit — one gathering path, no per-view drift. */
+function buildAnalyticsMatches(
+  data: TournamentData,
+  fixtures: LiveFixture[],
+  findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null,
+  nowMs: number,
+): AnalyticsMatch[] {
+  const matches: AnalyticsMatch[] = [];
+  for (const m of data.gs) {
+    const fixture = findLive({ ts: m.ts, v: m.v, t1: m.t1, t2: m.t2 }, fixtures);
+    const stale = (fixture && isStaleStatus(m.ts, fixture.status, nowMs)) || (!fixture && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, nowMs));
+    const done = !stale && ((fixture && DONE_STATUSES.has(fixture.status)) || (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null));
+    const live = !stale && !!fixture && LIVE_STATUSES.has(fixture.status);
+    matches.push({
+      key: `gs-${m.no}`,
+      stage: "Group Stage",
+      ts: m.ts,
+      home: canon(m.t1),
+      away: canon(m.t2),
+      sourceMatch: m,
+      status: done ? "completed" : live ? "live" : "upcoming",
+      gh: done ? (fixture?.gh ?? m.dbGh ?? null) : null,
+      ga: done ? (fixture?.ga ?? m.dbGa ?? null) : null,
+      fixture,
+      sourceStats: fixture?.stats || m.dbStats,
+    });
+  }
+  for (const card of buildKnockoutCards(data, fixtures, findLive, nowMs)) {
+    const [teamA, teamB] = card.teams;
+    const home = teamA.placeholder ? "TBD" : teamA.name;
+    const away = teamB.placeholder ? "TBD" : teamB.name;
+    const done = card.isDone && card.fixture?.gh != null && card.fixture?.ga != null;
+    matches.push({
+      key: `ko-${card.matchNo}`,
+      stage: card.match.round,
+      ts: card.match.ts,
+      home,
+      away,
+      sourceMatch: {
+        no: card.matchNo,
+        iso: card.match.iso,
+        local: card.match.local,
+        et: card.match.et,
+        g: "KO",
+        t1: home,
+        t2: away,
+        v: card.match.v,
+        ts: card.match.ts,
+      },
+      status: done ? "completed" : card.isLive ? "live" : "upcoming",
+      gh: done ? card.fixture!.gh : null,
+      ga: done ? card.fixture!.ga : null,
+      fixture: card.fixture,
+      sourceStats: card.fixture?.stats,
+    });
+  }
+  return matches.sort((a, b) => a.ts - b.ts);
 }
 
 function buildAnalyticsModel(
@@ -4310,100 +4448,10 @@ function buildAnalyticsModel(
     });
   }
 
-  const matches: AnalyticsMatch[] = [];
-  for (const m of data.gs) {
-    const fixture = findLive({ ts: m.ts, v: m.v, t1: m.t1, t2: m.t2 }, fixtures);
-    const stale = (fixture && isStaleStatus(m.ts, fixture.status, nowMs)) || (!fixture && m.dbStatus && isStaleStatus(m.ts, m.dbStatus, nowMs));
-    const done = !stale && ((fixture && DONE_STATUSES.has(fixture.status)) || (m.dbStatus && DONE_STATUSES.has(m.dbStatus) && m.dbGh != null && m.dbGa != null));
-    const live = !stale && !!fixture && LIVE_STATUSES.has(fixture.status);
-    matches.push({
-      key: `gs-${m.no}`,
-      stage: "Group Stage",
-      ts: m.ts,
-      home: canon(m.t1),
-      away: canon(m.t2),
-      sourceMatch: m,
-      status: done ? "completed" : live ? "live" : "upcoming",
-      gh: done ? (fixture?.gh ?? m.dbGh ?? null) : null,
-      ga: done ? (fixture?.ga ?? m.dbGa ?? null) : null,
-      fixture,
-      sourceStats: fixture?.stats || m.dbStats,
-    });
-  }
-  data.ko.forEach((m, index) => {
-    const fixture = findLive({ ts: m.ts, v: m.v }, fixtures);
-    const stale = fixture && isStaleStatus(m.ts, fixture.status, nowMs);
-    const done = !stale && !!fixture && DONE_STATUSES.has(fixture.status) && fixture.gh != null && fixture.ga != null;
-    const live = !stale && !!fixture && LIVE_STATUSES.has(fixture.status);
-    const sourceMatch: GroupStageMatch = {
-      no: 73 + index,
-      iso: m.iso,
-      local: m.local,
-      et: m.et,
-      g: "KO",
-      t1: fixture?.home ? canon(fixture.home) : "TBD",
-      t2: fixture?.away ? canon(fixture.away) : "TBD",
-      v: m.v,
-      ts: m.ts,
-    };
-    matches.push({
-      key: `ko-${index}`,
-      stage: m.round,
-      ts: m.ts,
-      home: fixture?.home ? canon(fixture.home) : "TBD",
-      away: fixture?.away ? canon(fixture.away) : "TBD",
-      sourceMatch,
-      status: done ? "completed" : live ? "live" : "upcoming",
-      gh: done ? fixture.gh : null,
-      ga: done ? fixture.ga : null,
-      fixture,
-      sourceStats: fixture?.stats,
-    });
-  });
+  const matches = buildAnalyticsMatches(data, fixtures, findLive, nowMs);
 
-  const koLosers = new Set<string>();
-  const koTeams = new Set<string>();
-  const roundsReached = new Map<string, number>();
-  const nextByTeam = new Map<string, AnalyticsMatch>();
-
-  for (const match of matches.sort((a, b) => a.ts - b.ts)) {
-    const teams = [match.home, match.away].filter(team => byTeam.has(team));
-    for (const team of teams) {
-      if (match.stage !== "Group Stage") {
-        koTeams.add(team);
-        roundsReached.set(team, Math.max(roundsReached.get(team) || 0, analyticsRoundDepth(match.stage)));
-      }
-      if (match.status !== "completed" && match.ts >= nowMs - 4 * 60 * 60 * 1000 && !nextByTeam.has(team)) {
-        nextByTeam.set(team, match);
-      }
-    }
-    if (match.status !== "completed" || match.gh == null || match.ga == null || teams.length !== 2) continue;
-    const home = byTeam.get(match.home)!;
-    const away = byTeam.get(match.away)!;
-    const apply = (team: TeamAnalytics, opponent: TeamAnalytics, gf: number, ga: number, side: "home" | "away") => {
-      team.played++;
-      team.goalsFor += gf;
-      team.goalsAgainst += ga;
-      team.goalDiff = team.goalsFor - team.goalsAgainst;
-      if (ga === 0) team.cleanSheets++;
-      if (gf > ga) team.wins++;
-      else if (gf < ga) team.losses++;
-      else team.draws++;
-      const shots = numericStat(match.sourceStats, side, "Total Shots");
-      const shotsOn = numericStat(match.sourceStats, side, "Shots on Goal");
-      const possession = numericStat(match.sourceStats, side, "Ball Possession");
-      if (shots != null) team.shots = (team.shots || 0) + shots;
-      if (shotsOn != null) team.shotsOn = (team.shotsOn || 0) + shotsOn;
-      if (possession != null) team.possession = ((team.possession || 0) * (team.played - 1) + possession) / team.played;
-      team.matches.push({ label: match.stage, opponent: opponent.team, gf, ga, result: gf > ga ? "W" : gf < ga ? "L" : "D", ts: match.ts });
-    };
-    apply(home, away, match.gh, match.ga, "home");
-    apply(away, home, match.ga, match.gh, "away");
-    if (match.stage !== "Group Stage" && match.gh !== match.ga) {
-      koLosers.add(match.gh > match.ga ? away.team : home.team);
-    }
-  }
-
+  /* Group qualification signals for elimination — computed before records
+     so the canonical engine can distinguish group exits from pending draws */
   const standingsByGroup = Object.fromEntries(Object.keys(data.groups).map(g => [g, completedGroupStanding(g, data, fixtures, findLive, nowMs)]));
   const allGroupsComplete = Object.values(standingsByGroup).every(standing => standing.complete);
   const groupQualifiers = new Set<string>();
@@ -4414,22 +4462,67 @@ function buildAnalyticsModel(
   const third = rankThirdPlaceTeams(standingsByGroup);
   if (third.allComplete) third.qualified.forEach(entry => groupQualifiers.add(entry.row.t));
 
+  /* Canonical per-team records (lib/team-records) carry every counting
+     stat and the alive/eliminated status — including penalty-shootout
+     eliminations, which a raw score comparison misses. Analytics only
+     layers its model scores on top; it never re-counts. */
+  const teamRecords = buildTeamRecords(
+    allTeams,
+    matches.map(mm => ({
+      key: mm.key, stage: mm.stage, ts: mm.ts, home: mm.home, away: mm.away,
+      status: mm.status, gh: mm.gh, ga: mm.ga,
+      penHome: mm.fixture?.penHome ?? null, penAway: mm.fixture?.penAway ?? null,
+    })),
+    { allGroupsComplete, groupQualifiers },
+  );
+
+  /* Per-match extras the record engine doesn't track: shot/possession
+     aggregates and the per-team match history used by form and trends. */
+  const playedSoFar = new Map<string, number>();
+  for (const match of matches) {
+    if (match.status !== "completed" || match.gh == null || match.ga == null) continue;
+    const home = byTeam.get(match.home);
+    const away = byTeam.get(match.away);
+    if (!home || !away) continue;
+    const applyExtras = (team: TeamAnalytics, opponent: TeamAnalytics, gf: number, ga: number, side: "home" | "away") => {
+      const counted = (playedSoFar.get(team.team) || 0) + 1;
+      playedSoFar.set(team.team, counted);
+      const shots = numericStat(match.sourceStats, side, "Total Shots");
+      const shotsOn = numericStat(match.sourceStats, side, "Shots on Goal");
+      const possession = numericStat(match.sourceStats, side, "Ball Possession");
+      if (shots != null) team.shots = (team.shots || 0) + shots;
+      if (shotsOn != null) team.shotsOn = (team.shotsOn || 0) + shotsOn;
+      if (possession != null) team.possession = ((team.possession || 0) * (counted - 1) + possession) / counted;
+      team.matches.push({ label: match.stage, opponent: opponent.team, gf, ga, result: gf > ga ? "W" : gf < ga ? "L" : "D", ts: match.ts });
+    };
+    applyExtras(home, away, match.gh, match.ga, "home");
+    applyExtras(away, home, match.ga, match.gh, "away");
+  }
+
   for (const team of byTeam.values()) {
-    const groupEliminated = allGroupsComplete && !groupQualifiers.has(team.team) && !koTeams.has(team.team);
-    team.eliminated = koLosers.has(team.team) || groupEliminated;
-    team.alive = !team.eliminated;
-    const next = nextByTeam.get(team.team);
-    if (next) {
-      team.nextOpponent = next.home === team.team ? next.away : next.home;
-      team.nextMatchDate = shortDate(next.ts);
-      team.currentRound = next.stage;
-      team.pathStatus = next.stage === "Group Stage" ? "Group path active" : "Knockout path active";
+    const record = teamRecords.get(team.team);
+    if (!record) continue;
+    team.played = record.played;
+    team.wins = record.wins;
+    team.draws = record.draws;
+    team.losses = record.losses;
+    team.goalsFor = record.goalsFor;
+    team.goalsAgainst = record.goalsAgainst;
+    team.goalDiff = record.goalDiff;
+    team.cleanSheets = record.cleanSheets;
+    team.eliminated = record.eliminated;
+    team.alive = record.alive;
+    if (record.nextOpponent != null && record.nextTs != null) {
+      team.nextOpponent = record.nextOpponent;
+      team.nextMatchDate = shortDate(record.nextTs);
+      team.currentRound = record.nextStage || "Group Stage";
+      team.pathStatus = record.nextStage === "Group Stage" ? "Group path active" : "Knockout path active";
     } else if (team.eliminated) {
       team.pathStatus = "Eliminated";
       team.currentRound = "Eliminated";
     } else {
       team.pathStatus = "Alive, awaiting bracket slot";
-      team.currentRound = roundsReached.get(team.team) ? "Knockout" : "Group Stage";
+      team.currentRound = record.roundReached > 0 ? "Knockout" : "Group Stage";
     }
   }
 
@@ -4460,8 +4553,7 @@ function buildAnalyticsModel(
     team.matches.sort((a, b) => a.ts - b.ts);
   }
   for (const team of byTeam.values()) {
-    const next = nextByTeam.get(team.team);
-    const opponentName = next ? (next.home === team.team ? next.away : next.home) : "";
+    const opponentName = teamRecords.get(team.team)?.nextOpponent || "";
     const opponentStrength = byTeam.get(opponentName)?.score ?? 48;
     team.pathDifficulty = team.alive ? Math.round(Math.max(18, Math.min(92, 96 - opponentStrength))) : 0;
     const ppg = team.played ? (team.wins * 3 + team.draws) / team.played : 0;
@@ -4501,7 +4593,7 @@ function buildAnalyticsModel(
     const goalsFor = members.reduce((sum, team) => sum + team.goalsFor, 0);
     const goalsAgainst = members.reduce((sum, team) => sum + team.goalsAgainst, 0);
     const remaining = members.filter(team => team.alive).length;
-    const knockoutTeams = members.filter(team => koTeams.has(team.team)).length;
+    const knockoutTeams = members.filter(team => (teamRecords.get(team.team)?.roundReached || 0) > 0).length;
     const bestTeam = members[0] || null;
     const disappointment = [...members].sort((a, b) => a.score - b.score)[0] || null;
     return {
@@ -4516,9 +4608,9 @@ function buildAnalyticsModel(
       goalsAgainst,
       goalDiff: goalsFor - goalsAgainst,
       knockoutTeams,
-      quarterfinalists: members.filter(team => (roundsReached.get(team.team) || 0) >= 3).length,
-      semifinalists: members.filter(team => (roundsReached.get(team.team) || 0) >= 4).length,
-      finalists: members.filter(team => (roundsReached.get(team.team) || 0) >= 5).length,
+      quarterfinalists: members.filter(team => (teamRecords.get(team.team)?.roundReached || 0) >= 3).length,
+      semifinalists: members.filter(team => (teamRecords.get(team.team)?.roundReached || 0) >= 4).length,
+      finalists: members.filter(team => (teamRecords.get(team.team)?.roundReached || 0) >= 6).length,
       winPct: played ? Math.round((wins / played) * 100) : 0,
       pointsPerMatch: played ? Number((((wins * 3 + draws) / played)).toFixed(2)) : 0,
       avgStrength: members.length ? Math.round(members.reduce((sum, team) => sum + team.score, 0) / members.length) : 0,
@@ -4526,7 +4618,9 @@ function buildAnalyticsModel(
       disappointment,
       survivalRate: members.length ? Math.round((remaining / members.length) * 100) : 0,
     } satisfies ConfederationAnalytics;
-  }).sort((a, b) => b.avgStrength - a.avgStrength || b.remaining - a.remaining);
+  // Deterministic ordering: name breaks any remaining tie so equal-strength
+  // confederations never swap positions between renders.
+  }).sort((a, b) => b.avgStrength - a.avgStrength || b.remaining - a.remaining || a.confederation.localeCompare(b.confederation));
 
   const remainingByConfed = Object.fromEntries(CONFEDERATIONS.map(confed => [confed, teams.filter(team => team.confederation === confed && team.alive)])) as Record<Confederation, TeamAnalytics[]>;
   const strongestTeam = teams[0];
@@ -4568,7 +4662,16 @@ function buildAnalyticsModel(
       };
     });
 
-  return { teams, confederations, remainingByConfed, comparisonCards, matchups, strongestTeam, bestAttack, bestDefense, strongestConfed };
+  const completedMatches = matches.filter(match => match.status === "completed").length;
+  const statRichMatches = matches.filter(match => match.status === "completed" && !!match.sourceStats).length;
+  const statCoverage = completedMatches ? statRichMatches / completedMatches : 0;
+  const modelQuality: AnalyticsModel["modelQuality"] = statCoverage >= 0.75
+    ? "Advanced"
+    : statCoverage >= 0.25
+      ? "Standard"
+      : "Basic";
+
+  return { modelQuality, teams, confederations, remainingByConfed, comparisonCards, matchups, strongestTeam, bestAttack, bestDefense, strongestConfed };
 }
 
 function normalizeAnalyticsTab(value: string | null): AnalyticsTab | null {
@@ -4714,7 +4817,7 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, liveTs, liveStatus, on
         <div>
           <span className="analytics-kicker">Analytics Hub</span>
           <h3>Team strength, confederation power, and knockout survival.</h3>
-          <p>Basic model: results/form 30%, goal difference 20%, attack 20%, defense 20%, knockout path difficulty 10%. Advanced metrics appear automatically when the live feed supplies them.</p>
+          <p>{analytics.modelQuality} model: results/form 30%, goal difference 20%, attack 20%, defense 20%, knockout path difficulty 10%. Advanced metrics appear automatically when the live feed supplies them.</p>
           <p className="analytics-data-note">{analyticsDataNote}</p>
           <button type="button" className="analytics-method-button" onClick={() => setModelSheetOpen(true)}>ⓘ How scores work</button>
         </div>
@@ -4931,7 +5034,7 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, liveTs, liveStatus, on
               </span>
             ))}
           </div>
-          <p className="analytics-drawer__note">Ranking among {selectedAnalyticsTeam.confederation}: #{analytics.teams.filter(team => team.confederation === selectedAnalyticsTeam.confederation).findIndex(team => team.team === selectedAnalyticsTeam.team) + 1}. Model is basic until shots, possession, xG, and xGA coverage is complete.</p>
+          <p className="analytics-drawer__note">Ranking among {selectedAnalyticsTeam.confederation}: #{analytics.teams.filter(team => team.confederation === selectedAnalyticsTeam.confederation).findIndex(team => team.team === selectedAnalyticsTeam.team) + 1}. Current model quality: {analytics.modelQuality}; richer shot, possession, xG, and xGA coverage improves confidence automatically.</p>
         </aside>
       )}
 
@@ -4948,7 +5051,7 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, liveTs, liveStatus, on
             <span><b>Defense</b><em>20%</em><small>Goals allowed and clean sheets from completed matches.</small></span>
             <span><b>Path difficulty</b><em>10%</em><small>Projected next-opponent strength; eliminated teams drop to zero.</small></span>
           </div>
-          <p className="analytics-drawer__note">Derived entirely from this tournament's results. No preseason ratings, no external rankings, no betting odds.</p>
+          <p className="analytics-drawer__note">Current model quality: {analytics.modelQuality}. Derived entirely from this tournament's results. No preseason ratings, no external rankings, no betting odds.</p>
         </aside>
       )}
 

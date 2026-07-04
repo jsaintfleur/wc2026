@@ -9080,7 +9080,14 @@ button.settings-row:active,
   .map-hero h2 { display: inline; margin: 0; font-size: 22px; vertical-align: middle; }
   .map-hero p { display: none; }
   .map-toolbar { position: relative; z-index: 2; flex-direction: column; align-items: stretch; margin: 0 -14px; padding: 6px 14px 8px; background: #070a11; }
-  .map-filter-row { gap: 6px; padding-right: 18px; }
+  /* Right-edge fade signals the hidden chips — tighter padding alone left
+     ~290px of chips off-screen with no visual hint at common phone widths. */
+  .map-filter-row {
+    gap: 6px;
+    padding-right: 18px;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+  }
   .map-chip { padding: 8px 10px; font-size: 11.5px; }
   .map-hero__stats { min-width: 0; }
   .map-shell { display: block; }

@@ -525,6 +525,47 @@ function AppIcon({ name, className = "" }: { name: AppIconName; className?: stri
   );
 }
 
+function venueImageUrl(venueId: string): string {
+  return HOST_VENUE_DETAILS[venueId]?.imageUrl || "";
+}
+
+function venueInitials(name: string, city?: string): string {
+  const source = name || city || "Venue";
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase() || "")
+    .join("") || "V";
+}
+
+function VenueImage({ venueId, venueName, city = "", className = "", decorative = false }: {
+  venueId: string;
+  venueName: string;
+  city?: string;
+  className?: string;
+  decorative?: boolean;
+}) {
+  const [broken, setBroken] = useState(false);
+  const src = venueImageUrl(venueId);
+  const fallback = venueInitials(venueName, city);
+  return (
+    <span className={`venue-image ${className}${!src || broken ? " venue-image--fallback" : ""}`} aria-hidden={decorative ? "true" : undefined}>
+      {src && !broken
+        ? <img src={src} alt={decorative ? "" : `${venueName} stadium`} loading="lazy" decoding="async" onError={() => setBroken(true)} />
+        : <span>{fallback}</span>}
+    </span>
+  );
+}
+
+function venueImageHtml(venueId: string, venueName: string, city?: string): string {
+  const src = venueImageUrl(venueId);
+  const fallback = esc(venueInitials(venueName, city));
+  const alt = esc(`${venueName} stadium`);
+  if (!src) return `<span class="venue-image venue-image--inline venue-image--fallback" aria-hidden="true"><span>${fallback}</span></span>`;
+  return `<span class="venue-image venue-image--inline"><img src="${esc(src)}" alt="${alt}" loading="lazy" decoding="async" onerror="this.closest('.venue-image').classList.add('venue-image--fallback');this.remove();" /><span>${fallback}</span></span>`;
+}
+
 function isMock(): boolean {
   if (typeof window === "undefined") return false;
   return window.location.search.indexOf("mock") > -1;
@@ -1223,7 +1264,7 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
         <div class="tix__time">${timeHtml}</div>
       </div>
       <div class="tix__foot"><span class="gbadge">${m.g}</span>
-        <span class="ven">${esc(v.common)}</span><span class="cty">· ${esc(v.city)}, ${esc(v.country)}</span>
+        ${venueImageHtml(m.v, v.common, v.city)}<span class="ven">${esc(v.common)}</span><span class="cty">· ${esc(v.city)}, ${esc(v.country)}</span>
         <span class="mno">#${m.no}</span></div>
     </article>`;
   }
@@ -1257,7 +1298,7 @@ export default function Tournament({ data, initialView = "home" }: { data: Tourn
         <div class="tix__time">${timeHtml}</div>
       </div>
       <div class="tix__foot"><span class="gbadge">KO</span>
-        <span class="ven">${esc(card.source)} · ${esc(v.common)}</span><span class="cty">· ${esc(v.city)}, ${esc(v.country)}</span>
+        ${venueImageHtml(card.match.v, v.common, v.city)}<span class="ven">${esc(card.source)} · ${esc(v.common)}</span><span class="cty">· ${esc(v.city)}, ${esc(v.country)}</span>
         <span class="mno">#${card.matchNo}</span></div>
     </article>`;
   }
@@ -3663,7 +3704,10 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
                   })}
                   <details className="tj-stop__more">
                     <summary>Stadium details</summary>
-                    <p>{stop.venue.stadiumName} · {stop.venue.country}{stop.venue.capacity ? ` · ${stop.venue.capacity.toLocaleString("en-US")} seats` : ""}</p>
+                    <div className="tj-stop__venue-detail">
+                      <VenueImage venueId={stop.venue.venueId} venueName={stop.venue.stadiumName} city={stop.venue.city} className="tj-stop__venue-image" />
+                      <p>{stop.venue.stadiumName} · {stop.venue.country}{stop.venue.capacity ? ` · ${stop.venue.capacity.toLocaleString("en-US")} seats` : ""}</p>
+                    </div>
                   </details>
                 </div>
               </li>
@@ -5537,6 +5581,7 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
               onClick={() => onVenueClick(v.key)}
               aria-label={`View ${v.common} on the map`}
             >
+              <VenueImage venueId={v.key} venueName={v.common} city={v.city} className="more-venue-card__image" />
               <div className="more-venue-card__top">
                 <span className="more-venue-card__flag" role="img" aria-label={v.country}>{countryFlag(v.country)}</span>
                 <b className="more-venue-card__name">{v.common}</b>
@@ -6428,7 +6473,12 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
         <div className="ko-road-card__teams">
           {card.teams.map((team, index) => renderRoadTeam(card, team, index))}
         </div>
-        {v.common && <div className="ko-road-card__venue">{v.city || v.common}</div>}
+        {v.common && (
+          <div className="ko-road-card__venue">
+            <VenueImage venueId={card.match.v} venueName={v.common} city={v.city} className="ko-road-card__venue-image" decorative />
+            <span>{v.city || v.common}</span>
+          </div>
+        )}
         {opponents.length > 0 && (
           <div className="ko-road-card__opponents">
             <span>vs</span>
@@ -7000,13 +7050,16 @@ function HostCountryDrawer({ country, data, onClose }: {
 
   const keyVenue = keyMatch ? data.venues[keyMatch.v] : null;
   const keyDate = keyMatch ? parseISO(keyMatch.iso) : null;
+  const heroVenue = venues[0] || null;
 
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <aside className="drawer host-drawer" onClick={e => e.stopPropagation()} aria-label={`${country} host profile`}>
         <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
         <div className="host-drawer__hero">
-          <span className="host-drawer__flag">{data.flags[country] || "⚽"}</span>
+          {heroVenue
+            ? <VenueImage venueId={heroVenue.key} venueName={heroVenue.common} city={heroVenue.city} className="host-drawer__hero-image" />
+            : <span className="host-drawer__flag">{data.flags[country] || "⚽"}</span>}
           <div>
             <small>Host Country</small>
             <h2>{country}</h2>
@@ -7020,9 +7073,12 @@ function HostCountryDrawer({ country, data, onClose }: {
         </div>
         {keyMatch && keyVenue && keyDate && (
           <section className="host-drawer__key">
-            <span>Key Match</span>
-            <b>{"round" in keyMatch ? keyMatch.round : `Match ${keyMatch.no}`}</b>
-            <small>{MON[keyDate.getMonth()]} {keyDate.getDate()} · {keyMatch.et} · {keyVenue.common}</small>
+            <VenueImage venueId={keyMatch.v} venueName={keyVenue.common} city={keyVenue.city} className="host-drawer__key-image" />
+            <div>
+              <span>Key Match</span>
+              <b>{"round" in keyMatch ? keyMatch.round : `Match ${keyMatch.no}`}</b>
+              <small>{MON[keyDate.getMonth()]} {keyDate.getDate()} · {keyMatch.et} · {keyVenue.common}</small>
+            </div>
           </section>
         )}
         <section className="host-drawer__section">
@@ -7032,6 +7088,7 @@ function HostCountryDrawer({ country, data, onClose }: {
               const count = hostMatches.filter(match => match.v === venue.key).length;
               return (
                 <div key={venue.key} className="host-drawer__venue">
+                  <VenueImage venueId={venue.key} venueName={venue.common} city={venue.city} className="host-drawer__venue-image" />
                   <div>
                     <b>{venue.common}</b>
                     <small>{venue.city} · {venue.fifa}</small>
@@ -7542,9 +7599,12 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     return (
       <>
         <div className="md-drawer__venue">
-          {v.common} · {v.city}, {v.country}
-          <br />{match.et}{match.local !== match.et ? ` (${match.local})` : ""}
-          {fixture?.referee && <><br />Referee: {fixture.referee}</>}
+          <VenueImage venueId={match.v} venueName={v.common} city={v.city} className="md-drawer__venue-image" />
+          <div>
+            {v.common} · {v.city}, {v.country}
+            <br />{match.et}{match.local !== match.et ? ` (${match.local})` : ""}
+            {fixture?.referee && <><br />Referee: {fixture.referee}</>}
+          </div>
         </div>
 
         {fixture?.events && fixture.events.length > 0 && (
@@ -7975,8 +8035,11 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     return (
       <>
         <div className="md-drawer__venue">
-          {v.common} · {v.city}, {v.country}
-          <br />{match.et}{match.local !== match.et ? ` (${match.local})` : ""}
+          <VenueImage venueId={match.v} venueName={v.common} city={v.city} className="md-drawer__venue-image" />
+          <div>
+            {v.common} · {v.city}, {v.country}
+            <br />{match.et}{match.local !== match.et ? ` (${match.local})` : ""}
+          </div>
         </div>
         <div className="md-drawer__prematch">
           <div className="md-drawer__prematch-row">

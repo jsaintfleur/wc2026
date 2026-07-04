@@ -5,6 +5,7 @@ import {
   cappedDetailCandidates,
   freshSnapshot,
   liveSnapshotTtl,
+  normalizeWc26Status,
   parseRemainingQuota,
   readThroughTtlCache,
   slimFixturesForLiveList,
@@ -76,6 +77,14 @@ test("quota parser fails closed when remaining header is missing or invalid", ()
   assert.equal(parseRemainingQuota(undefined), 0);
   assert.equal(parseRemainingQuota("oops"), 0);
   assert.equal(parseRemainingQuota("501"), 501);
+});
+
+test("worldcup26 live tokens normalize to in-play statuses", () => {
+  assert.deepEqual(normalizeWc26Status("live", "FALSE"), { status: "1H", elapsed: null });
+  assert.deepEqual(normalizeWc26Status("67", "FALSE"), { status: "2H", elapsed: 67 });
+  assert.deepEqual(normalizeWc26Status("halftime", "FALSE"), { status: "HT", elapsed: 45 });
+  assert.deepEqual(normalizeWc26Status("notstarted", "FALSE"), { status: "NS", elapsed: null });
+  assert.deepEqual(normalizeWc26Status("finished", "TRUE"), { status: "FT", elapsed: 90 });
 });
 
 test("detail enrichment candidates are hard capped at one batch", () => {

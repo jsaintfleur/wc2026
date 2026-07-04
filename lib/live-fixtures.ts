@@ -70,6 +70,36 @@ export function hasGoalAssistData(events: MatchEvent[] | undefined): boolean {
   return !!events?.some(ev => ev.type === "Goal" && ev.detail !== "Own Goal" && !!ev.assist);
 }
 
+export function normalizeWc26Status(timeElapsed: string, finished: string): { status: string; elapsed: number | null } {
+  if (finished === "TRUE") return { status: "FT", elapsed: 90 };
+  const token = (timeElapsed || "").trim().toLowerCase();
+  switch (token) {
+    case "finished": return { status: "FT", elapsed: 90 };
+    case "halftime":
+    case "half-time":
+    case "ht": return { status: "HT", elapsed: 45 };
+    case "notstarted":
+    case "not_started":
+    case "not started": return { status: "NS", elapsed: null };
+    case "live":
+    case "inplay":
+    case "in_play":
+    case "playing": return { status: "1H", elapsed: null };
+    default: {
+      // During live play, time_elapsed may be a minute number like "34" or "67".
+      const min = parseInt(token, 10);
+      if (!Number.isNaN(min)) {
+        if (min <= 45) return { status: "1H", elapsed: min };
+        if (min <= 90) return { status: "2H", elapsed: min };
+        return { status: "ET", elapsed: min };
+      }
+      // Preserve an in-play posture for unexpected non-empty tokens. Falling
+      // back to NS hides live fixtures when the vendor changes token wording.
+      return token ? { status: "1H", elapsed: null } : { status: "NS", elapsed: null };
+    }
+  }
+}
+
 export function sameFixture(a: unknown, b: unknown): boolean {
   const left = a as { home?: string; away?: string };
   const right = b as { home?: string; away?: string };

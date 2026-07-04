@@ -9,6 +9,7 @@ import {
   cappedDetailCandidates,
   freshSnapshot,
   hasGoalAssistData,
+  normalizeWc26Status,
   parseRemainingQuota,
   readThroughTtlCache,
   slimFixturesForLiveList,
@@ -144,26 +145,6 @@ function parseScorers(raw: string, teamName: string): Array<{
   }).filter(e => e.player);
 }
 
-// Map worldcup26.ir time_elapsed to our status codes
-function mapStatus(timeElapsed: string, finished: string): { status: string; elapsed: number | null } {
-  if (finished === "TRUE") return { status: "FT", elapsed: 90 };
-  switch (timeElapsed) {
-    case "finished": return { status: "FT", elapsed: 90 };
-    case "halftime": return { status: "HT", elapsed: 45 };
-    case "notstarted": return { status: "NS", elapsed: null };
-    default: {
-      // During live play, time_elapsed may be a minute number like "34" or "67"
-      const min = parseInt(timeElapsed, 10);
-      if (!isNaN(min)) {
-        if (min <= 45) return { status: "1H", elapsed: min };
-        if (min <= 90) return { status: "2H", elapsed: min };
-        return { status: "ET", elapsed: min };
-      }
-      return { status: "NS", elapsed: null };
-    }
-  }
-}
-
 // Build a lookup from canon'd team pair → schedule match for correct timestamps/venues
 const SCHEDULE_BY_PAIR: Map<string, { ts: number; venue: string; round: string }> = new Map();
 for (const m of DATA.gs) {
@@ -218,7 +199,7 @@ async function fetchWC26(): Promise<{ ok: boolean; fixtures: unknown[] }> {
   const active = games.filter(g => g.finished === "TRUE" || g.time_elapsed !== "notstarted");
 
   const fixtures = active.map(g => {
-    const { status, elapsed } = mapStatus(g.time_elapsed, g.finished);
+    const { status, elapsed } = normalizeWc26Status(g.time_elapsed, g.finished);
     const homeEvents = parseScorers(g.home_scorers, g.home_team_name_en);
     const awayEvents = parseScorers(g.away_scorers, g.away_team_name_en);
     const events = [...homeEvents, ...awayEvents].sort((a, b) => {
@@ -568,6 +549,15 @@ async function fetchEspnLeaderStats(): Promise<LeaderboardStat[]> {
   return result.data;
 }
 
+function sourceRoundCounts(fixtures: unknown[] = []): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const fixture of fixtures) {
+    const round = String((fixture as { round?: unknown }).round || "Unknown");
+    counts[round] = (counts[round] || 0) + 1;
+  }
+  return counts;
+}
+
 function needsFixtureDetail(fixture: unknown): boolean {
   const f = fixture as { fixtureId?: number | null; status?: string; players?: unknown[] };
   if (!f.fixtureId || !DONE_STATUSES.has(f.status || "")) return false;
@@ -748,8 +738,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       configured: !!apiFootballKey,
       active, ts: now,
-      wc26: { ok: wc26.ok, fixtureCount: wc26.fixtures.length },
-      apiFootball: apif ? { ok: apif.ok, fixtureCount: apif.fixtures?.length ?? 0, richFixtureCount, quota: apif.quota } : "not configured",
+      wc26: { ok: wc26.ok, fixtureCount: wc26.fixtures.length, roundCounts: sourceRoundCounts(wc26.fixtures) },
+      apiFootball: apif ? { ok: apif.ok, fixtureCount: apif.fixtures?.length ?? 0, richFixtureCount, quota: apif.quota, roundCounts: sourceRoundCounts(apif.fixtures || []) } : "not configured",
       enrichment: {
         required: true,
         healthy: !!(apiFootballKey && apif?.ok && (apif.fixtures?.length ?? 0) > 0),
@@ -760,6 +750,7 @@ export async function GET(request: NextRequest) {
       },
       verifiedCount: VERIFIED_RESULTS.length,
       mergedCount: merged.length,
+      mergedRoundCounts: sourceRoundCounts(merged),
       leaderboardStats,
       source: apif?.ok && (apif.fixtures?.length ?? 0) > 0 ? "api-football+wc26" : wc26.ok ? "wc26" : "verified-only",
       sample: merged.slice(0, 3),

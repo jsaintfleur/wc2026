@@ -2,7 +2,7 @@
 
 import { Component, Fragment, memo, useEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import type { VenueFitRequest, VenueFocusRequest, VenueMapMarker } from "@/app/components/VenueMap";
+import type { VenueFitRequest, VenueFocusRequest, VenueMapMarker, VenueRouteFitRequest } from "@/app/components/VenueMap";
 import { HOST_VENUE_DETAILS, MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type PlayerMatchStat, type TeamLineup, type VenueDetails } from "@/lib/data";
 import { nrm, canon, canonPlayer } from "@/lib/merge";
 import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type TournamentStats } from "@/lib/stats";
@@ -2642,6 +2642,8 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
   const [focusRequest, setFocusRequest] = useState<VenueFocusRequest | null>(null);
   /* One-shot "show every venue" request consumed by the Leaflet map */
   const [fitRequest, setFitRequest] = useState<VenueFitRequest | null>(null);
+  /* One-shot team-route bounds request consumed by the Leaflet map */
+  const [routeFitRequest, setRouteFitRequest] = useState<VenueRouteFitRequest | null>(null);
   /* Live view (center/zoom) mirrored from Leaflet's moveend for persistence */
   const viewRef = useRef<{ center: [number, number]; zoom: number }>({
     center: remembered?.center || MAP_DEFAULT_CENTER,
@@ -2872,7 +2874,30 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
     return venue ? [venue.latitude, venue.longitude] as [number, number] : null;
   }).filter((p): p is [number, number] => !!p), [teamJourney, venueModels]);
 
+  /* Consecutive same-venue stops are grouped with an "xN" count rather than
+     nested match buttons; this keeps the travel path compact and preserves a
+     single clear tap target per visible stop. */
+  const groupedTeamJourney = useMemo(() => {
+    const groups: Array<{ key: string; matches: MapMatch[] }> = [];
+    for (const match of teamJourney) {
+      const last = groups[groups.length - 1];
+      if (last && last.matches[last.matches.length - 1].venueId === match.venueId) {
+        last.matches.push(match);
+      } else {
+        groups.push({ key: match.key, matches: [match] });
+      }
+    }
+    return groups;
+  }, [teamJourney]);
+
   const openMatch = (match: MapMatch) => onMatchClick(match.sourceMatch, match.fixture);
+
+  /* When a selected team has enough resolved stops to draw a path, fit the
+     map to that path once so the user immediately sees what changed. */
+  useEffect(() => {
+    if (selectedTeam === "ALL" || routeLatLngs.length < 2) return;
+    setRouteFitRequest(req => ({ points: routeLatLngs, seq: (req?.seq || 0) + 1 }));
+  }, [selectedTeam, routeLatLngs]);
 
   /* Keep the venue panel in sync with the active filter: if the selected
      venue drops out of the filtered set (e.g. panel shows MetLife, user taps
@@ -3094,6 +3119,7 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
               initialZoom={viewRef.current.zoom}
               focusRequest={focusRequest}
               fitRequest={fitRequest}
+              routeFitRequest={routeFitRequest}
               autoFitIfEmpty={!!remembered}
               layoutKey={panelState}
               onSelect={selectVenue}
@@ -3105,6 +3131,9 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
           </MapErrorBoundary>
           {filteredVenueIds.size === 0 && (
             <p className="map-empty" role="status">No venues match this filter. Try a different filter or team.</p>
+          )}
+          {selectedTeam !== "ALL" && routeLatLngs.length < 2 && (
+            <p className="map-route-notice" role="status">No confirmed route yet for {selectedTeam} — knockout venues appear as the bracket resolves.</p>
           )}
           {activeVenue && panelState === "closed" && (
             <button
@@ -3208,16 +3237,17 @@ const MapView = memo(function MapView({ data, fixtures, findLive, nowMs, onMatch
             <p>No confirmed venue path yet. Knockout destinations appear once the live bracket resolves.</p>
           ) : (
             <div className="team-journey-list">
-              {teamJourney.map((match, index) => {
+              {groupedTeamJourney.map((group, index) => {
+                const match = group.matches[0];
                 const venue = venueModels.find(v => v.venueId === match.venueId);
                 const score = matchScoreLabel(match);
                 const status = matchStatus(match, nowMs);
                 return (
-                  <button key={match.key} type="button" className="team-journey-stop" onClick={() => openMatch(match)}>
+                  <button key={group.key} type="button" className="team-journey-stop" onClick={() => openMatch(match)}>
                     <span>{index + 1}</span>
                     <div>
                       <b>{venue?.city || match.venueId}</b>
-                      <small>{match.stage} · {match.homeTeam} vs {match.awayTeam}</small>
+                      <small>{match.stage} · {match.homeTeam} vs {match.awayTeam}{group.matches.length > 1 ? ` · ×${group.matches.length} matches` : ""}</small>
                     </div>
                     <em>{status === "live" ? "LIVE" : score || formatVenueLocalTime(match.ts, venue?.timezone || "America/New_York")}</em>
                   </button>

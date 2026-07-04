@@ -51,6 +51,12 @@ export interface VenueFitRequest {
   seq: number;
 }
 
+/* A one-shot route-bounds request used when a team path becomes drawable. */
+export interface VenueRouteFitRequest {
+  points: [number, number][];
+  seq: number;
+}
+
 interface VenueMapProps {
   markers: VenueMapMarker[];
   /* Team travel path as [lat, lng] stops, in match order */
@@ -60,6 +66,7 @@ interface VenueMapProps {
   initialZoom: number;
   focusRequest: VenueFocusRequest | null;
   fitRequest: VenueFitRequest | null;
+  routeFitRequest: VenueRouteFitRequest | null;
   /* Restored views can point to an old ocean/empty tile area after settings
      changes or viewport changes; when true, the controller checks once and
      recovers to all venues if no marker is visible. */
@@ -107,6 +114,10 @@ function validVenuePoints(markers: VenueMapMarker[]): [number, number][] {
 
 function fitMapToVenues(map: LeafletMap, markers: VenueMapMarker[], animate: boolean) {
   const points = validVenuePoints(markers);
+  fitMapToPoints(map, points, animate, 5);
+}
+
+function fitMapToPoints(map: LeafletMap, points: [number, number][], animate: boolean, maxZoom = 7) {
   if (points.length === 0) return;
   if (points.length === 1) {
     map.flyTo(points[0], Math.max(map.getZoom(), 5), { duration: animate ? 0.45 : 0 });
@@ -115,22 +126,24 @@ function fitMapToVenues(map: LeafletMap, markers: VenueMapMarker[], animate: boo
   map.fitBounds(latLngBounds(points), {
     animate,
     duration: animate ? 0.55 : undefined,
-    maxZoom: 5,
+    maxZoom,
     padding: [46, 46],
   });
 }
 
 /* Imperative map behaviors that need the Leaflet instance */
-function MapController({ markers, focusRequest, fitRequest, autoFitIfEmpty, layoutKey, onViewChange }: {
+function MapController({ markers, focusRequest, fitRequest, routeFitRequest, autoFitIfEmpty, layoutKey, onViewChange }: {
   markers: VenueMapMarker[];
   focusRequest: VenueFocusRequest | null;
   fitRequest: VenueFitRequest | null;
+  routeFitRequest: VenueRouteFitRequest | null;
   autoFitIfEmpty: boolean;
   layoutKey: string;
   onViewChange?: (center: [number, number], zoom: number) => void;
 }) {
   const map = useMap();
   const handledFitSeqRef = useRef(0);
+  const handledRouteFitSeqRef = useRef(0);
   const checkedEmptyRestoreRef = useRef(false);
 
   /* Re-measure when the surrounding layout (sheet/panel) changes size —
@@ -162,6 +175,15 @@ function MapController({ markers, focusRequest, fitRequest, autoFitIfEmpty, layo
     handledFitSeqRef.current = fitRequest.seq;
     fitMapToVenues(map, markers, true);
   }, [fitRequest, map, markers]);
+
+  /* Fit just the selected team's route stops when a real path appears. This
+     is separate from the all-venues control so team exploration never
+     overwrites the user's explicit recovery button state. */
+  useEffect(() => {
+    if (!routeFitRequest || handledRouteFitSeqRef.current === routeFitRequest.seq) return;
+    handledRouteFitSeqRef.current = routeFitRequest.seq;
+    fitMapToPoints(map, routeFitRequest.points, true, 7);
+  }, [routeFitRequest, map]);
 
   /* If a remembered/restored viewport opens with zero venues visible, recover
      to the continental view once. This guards users from being stranded over
@@ -207,7 +229,7 @@ function MapBackgroundClick({ onBackgroundClick }: { onBackgroundClick?: () => v
 
 export default function VenueMap({
   markers, routePoints, mapStyle, initialCenter, initialZoom,
-  focusRequest, fitRequest, autoFitIfEmpty, layoutKey, onSelect, onBackgroundClick, onViewChange,
+  focusRequest, fitRequest, routeFitRequest, autoFitIfEmpty, layoutKey, onSelect, onBackgroundClick, onViewChange,
 }: VenueMapProps) {
   const tiles = TILE_STYLES[mapStyle] || TILE_STYLES.Dark;
 
@@ -272,6 +294,7 @@ export default function VenueMap({
         markers={markers}
         focusRequest={focusRequest}
         fitRequest={fitRequest}
+        routeFitRequest={routeFitRequest}
         autoFitIfEmpty={autoFitIfEmpty}
         layoutKey={layoutKey}
         onViewChange={onViewChange}

@@ -3913,6 +3913,12 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
   border-radius: 18px;
 }
 
+.host-drawer__key > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
 .host-drawer__key-image {
   width: 78px;
   height: 58px;
@@ -3920,15 +3926,20 @@ code { background: var(--glass-heavy); border: 1px solid var(--line); border-rad
 }
 
 .host-drawer__key b {
+  display: block;
   color: #fff;
   font-family: var(--disp);
   font-size: 19px;
+  line-height: 1.1;
   font-weight: 800;
 }
 
 .host-drawer__key small {
+  display: block;
   color: var(--ink-soft);
   font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .host-drawer__section {

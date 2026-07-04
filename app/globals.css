@@ -2672,13 +2672,13 @@ body::after {
   top: 104px;
   z-index: 20;
   display: flex;
-  gap: 8px;
-  margin: 9px -10px 8px;
-  padding: 7px 10px;
+  gap: 12px;
+  margin: 10px -10px 10px;
+  padding: 10px;
   overflow-x: auto;
   scrollbar-width: none;
   background:
-    linear-gradient(180deg, rgba(8, 12, 21, 0.98), rgba(8, 12, 21, 0.9));
+    linear-gradient(180deg, rgba(8, 12, 21, 0.99), rgba(8, 12, 21, 0.88));
   backdrop-filter: blur(18px) saturate(1.35);
   -webkit-backdrop-filter: blur(18px) saturate(1.35);
   border-block: 1px solid rgba(255,255,255,0.055);
@@ -2691,21 +2691,39 @@ body::after {
 
 .ko-stage__tab {
   appearance: none;
+  position: relative;
+  isolation: isolate;
   flex: 0 0 auto;
-  min-width: 108px;
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 14px;
-  background: rgba(255,255,255,0.035);
+  min-width: 190px;
+  min-height: 132px;
+  border: 1px solid rgba(255,255,255,0.105);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255,255,255,0.08), transparent 56%),
+    linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025));
   color: var(--ink-soft);
-  padding: 10px 14px;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+  padding: 18px 18px 16px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 9px;
   font: inherit;
   cursor: pointer;
-  transition: color .18s, background .18s, border-color .18s, transform .18s, box-shadow .18s;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 16px 34px rgba(0,0,0,0.18);
+  transition: color .18s ease, background .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+
+.ko-stage__tab::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(245,158,11,0.28), transparent 46%),
+    linear-gradient(180deg, rgba(245,158,11,0.16), rgba(8,12,21,0.08));
+  transition: opacity .18s ease;
 }
 
 .ko-stage__tab:active {
@@ -2713,36 +2731,87 @@ body::after {
   transition-duration: .06s;
 }
 
-.ko-stage__tab span {
+.ko-stage__tab-label {
   font-family: var(--disp);
   font-weight: 800;
-  font-size: 11px;
-  letter-spacing: .4px;
+  font-size: 13px;
+  line-height: 1.05;
+  letter-spacing: 0;
   text-transform: uppercase;
+  text-align: center;
 }
 
-.ko-stage__tab b {
-  min-width: 28px;
-  padding: 2px 6px;
+.ko-stage__tab-range {
+  color: rgba(255,255,255,0.82);
+  font-size: 25px;
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ko-stage__tab-meter {
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
   border-radius: 999px;
-  background: rgba(255,255,255,0.05);
-  color: var(--muted);
-  font-size: 9px;
+  background: rgba(255,255,255,0.075);
+}
+
+.ko-stage__tab-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--gold-bright), #fbbf24);
+  box-shadow: 0 0 18px rgba(245,158,11,0.38);
+}
+
+.ko-stage__tab-count {
+  min-width: 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1;
   font-weight: 800;
+  white-space: nowrap;
+}
+
+.ko-stage__tab-state {
+  color: rgba(255,255,255,0.38);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .ko-stage__tab--active {
   color: #fff;
-  border-color: rgba(245,158,11,0.45);
-  background:
-    linear-gradient(145deg, rgba(245,158,11,0.18), rgba(34,197,94,0.06)),
-    rgba(255,255,255,0.05);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.22), 0 0 0 1px rgba(245,158,11,0.06) inset;
+  border-color: rgba(245,158,11,0.62);
+  box-shadow:
+    0 18px 40px rgba(0,0,0,0.3),
+    0 0 0 1px rgba(245,158,11,0.1) inset,
+    0 0 38px rgba(245,158,11,0.12);
 }
 
-.ko-stage__tab--active b {
+.ko-stage__tab--active::before {
+  opacity: 1;
+}
+
+.ko-stage__tab--active .ko-stage__tab-count {
   color: var(--gold-bright);
-  background: rgba(8,12,21,0.45);
+  background: rgba(8,12,21,0.58);
+}
+
+.ko-stage__tab--complete .ko-stage__tab-count {
+  color: #d9f99d;
+  background: rgba(132,204,22,0.13);
+}
+
+.ko-stage__tab--complete .ko-stage__tab-meter i {
+  background: linear-gradient(90deg, #84cc16, #bef264);
+  box-shadow: 0 0 18px rgba(132,204,22,0.3);
 }
 
 .ko-road {
@@ -3581,7 +3650,17 @@ body::after {
   }
 
   .ko-stage__tab {
-    min-width: 116px;
+    min-width: 168px;
+    min-height: 120px;
+    padding: 15px 14px 14px;
+  }
+
+  .ko-stage__tab-label {
+    font-size: 12px;
+  }
+
+  .ko-stage__tab-range {
+    font-size: 22px;
   }
 
   .ko-team__name {

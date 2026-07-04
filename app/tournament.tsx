@@ -6537,20 +6537,30 @@ function KnockoutStageView({ data, fixtures, findLive, nowMs, onMatchClick }: {
       </div>
 
       <div className="ko-stage__tabs" role="tablist" aria-label="Knockout rounds">
-        {rounds.map(round => (
-          <button
-            key={round.key}
-            type="button"
-            role="tab"
-            aria-selected={activeRound === round.key}
-            className={`ko-stage__tab${activeRound === round.key ? " ko-stage__tab--active" : ""}`}
-            onClick={() => focusRound(round.key)}
-          >
-            <span>{round.label}</span>
-            <small>{knockoutMatchRange(round.matchNumbers)}</small>
-            <b>{round.cards.filter(card => card.isDone).length}/{round.cards.length} played</b>
-          </button>
-        ))}
+        {rounds.map(round => {
+          const roundDone = round.cards.filter(card => card.isDone).length;
+          const roundTotal = round.cards.length;
+          const roundPct = roundTotal ? Math.round((roundDone / roundTotal) * 100) : 0;
+          const roundState = roundPct === 100 ? "complete" : roundPct > 0 ? "in progress" : "up next";
+          return (
+            <button
+              key={round.key}
+              type="button"
+              role="tab"
+              aria-selected={activeRound === round.key}
+              className={`ko-stage__tab${activeRound === round.key ? " ko-stage__tab--active" : ""}${roundPct === 100 ? " ko-stage__tab--complete" : ""}`}
+              onClick={() => focusRound(round.key)}
+            >
+              <span className="ko-stage__tab-label">{round.label}</span>
+              <small className="ko-stage__tab-range">{knockoutMatchRange(round.matchNumbers)}</small>
+              <span className="ko-stage__tab-meter" aria-hidden="true">
+                <i style={{ width: `${roundPct}%` }} />
+              </span>
+              <b className="ko-stage__tab-count">{roundDone}/{roundTotal} played</b>
+              <em className="ko-stage__tab-state">{roundState}</em>
+            </button>
+          );
+        })}
       </div>
 
       <div className="ko-road" aria-label="Road to the World Cup">

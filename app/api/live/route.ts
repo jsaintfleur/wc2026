@@ -21,6 +21,7 @@ import {
   type TimedCache,
   withVerifiedResults,
 } from "@/lib/live-fixtures";
+import { attributeKnockoutFixtures } from "@/lib/knockout-persistence";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -688,6 +689,7 @@ async function persistFinished(fixtures: unknown[]): Promise<number> {
       venueCommon: m.venue.commonName,
       homeTeam: m.homeTeam?.name || null,
       awayTeam: m.awayTeam?.name || null,
+      stage: m.stage,
       state: m.state,
     }));
   } catch {
@@ -697,44 +699,86 @@ async function persistFinished(fixtures: unknown[]): Promise<number> {
   const merged = mergeFixtures(scheduleMatches, finished);
   let written = 0;
 
-  for (const { match, fixture } of merged) {
-    const state = (match as PersistableScheduleMatch).state;
+  const upsertState = async (matchId: number, fixture: MergeVendorFixture, state: PersistableScheduleMatch["state"]) => {
     const events = chooseRicherEvents(fixture.events, state?.events);
     const players = chooseRicherPlayers(fixture.players, state?.players);
     const stats = fixture.stats || state?.stats;
     const lineups = fixture.lineups || state?.lineups;
     const referee = fixture.referee || state?.referee || undefined;
+    const fields = {
+      status: fixture.status as string,
+      elapsed: typeof fixture.elapsed === "number" ? fixture.elapsed : 90,
+      homeGoals: typeof fixture.gh === "number" ? fixture.gh : null,
+      awayGoals: typeof fixture.ga === "number" ? fixture.ga : null,
+      events: toJson(events),
+      stats: toJson(stats),
+      lineups: toJson(lineups),
+      players: toJson(players),
+      referee,
+    };
+    await prisma.matchState.upsert({
+      where: { matchId },
+      update: { ...fields, updatedAt: new Date() },
+      create: { matchId, ...fields },
+    });
+  };
+
+  const claimedFixtures = new Set<MergeVendorFixture>();
+  for (const { match, fixture } of merged) {
+    claimedFixtures.add(fixture);
     try {
-      await prisma.matchState.upsert({
-        where: { matchId: match.id },
-        update: {
-          status: fixture.status as string,
-          elapsed: typeof fixture.elapsed === "number" ? fixture.elapsed : 90,
-          homeGoals: typeof fixture.gh === "number" ? fixture.gh : null,
-          awayGoals: typeof fixture.ga === "number" ? fixture.ga : null,
-          events: toJson(events),
-          stats: toJson(stats),
-          lineups: toJson(lineups),
-          players: toJson(players),
-          referee,
-          updatedAt: new Date(),
-        },
-        create: {
-          matchId: match.id,
-          status: fixture.status as string,
-          elapsed: typeof fixture.elapsed === "number" ? fixture.elapsed : 90,
-          homeGoals: typeof fixture.gh === "number" ? fixture.gh : null,
-          awayGoals: typeof fixture.ga === "number" ? fixture.ga : null,
-          events: toJson(events),
-          stats: toJson(stats),
-          lineups: toJson(lineups),
-          players: toJson(players),
-          referee,
-        },
-      });
+      await upsertState(match.id, fixture, (match as PersistableScheduleMatch).state);
       written++;
     } catch {
       // Non-critical — don't fail the live response
+    }
+  }
+
+  /* ── Knockout attribution path ────────────────────────────────────
+     Knockout rows are placeholders (null team ids), so the strict
+     pair-merge above can never claim their fixtures — without this,
+     knockout results and enriched events never reach the DB and
+     /api/match/:no stays empty for every knockout tie. Attribute
+     unclaimed completed knockout fixtures to team-less knockout rows
+     by kickoff window, ONLY when unambiguous in both directions, and
+     backfill the row's team ids so future polls take the named path. */
+  const unclaimed = finished.filter(f => !claimedFixtures.has(f));
+  if (unclaimed.length) {
+    const rowsByScheduleId = new Map(scheduleMatches.map(m => [m.id, m]));
+    const koSlots = scheduleMatches.map(m => ({
+      id: m.id,
+      matchNumber: m.matchNumber,
+      kickoffTs: m.kickoffTs,
+      stage: (m as PersistableScheduleMatch & { stage?: string }).stage || "",
+      hasTeams: !!(m.homeTeam && m.awayTeam),
+    }));
+    const { attributions, skipped } = attributeKnockoutFixtures(
+      koSlots,
+      unclaimed.map(f => ({ ts: f.ts || 0, round: f.round, home: f.home, away: f.away })),
+    );
+    if (skipped.length && process.env.NODE_ENV !== "production") {
+      for (const reason of skipped) console.warn(`[persist] knockout attribution skipped: ${reason}`);
+    }
+    for (const { fixtureIndex, slot } of attributions) {
+      const fixture = unclaimed[fixtureIndex];
+      try {
+        /* Backfill team ids from canonical names so subsequent merges —
+           and the match-detail endpoint's team lookups — see real teams. */
+        const [homeTeamRow, awayTeamRow] = await Promise.all([
+          prisma.team.findUnique({ where: { name: canon(fixture.home) } }),
+          prisma.team.findUnique({ where: { name: canon(fixture.away) } }),
+        ]);
+        if (homeTeamRow && awayTeamRow) {
+          await prisma.match.update({
+            where: { id: slot.id },
+            data: { homeTeamId: homeTeamRow.id, awayTeamId: awayTeamRow.id },
+          });
+        }
+        await upsertState(slot.id, fixture, rowsByScheduleId.get(slot.id)?.state ?? null);
+        written++;
+      } catch {
+        // Non-critical — don't fail the live response
+      }
     }
   }
   return written;

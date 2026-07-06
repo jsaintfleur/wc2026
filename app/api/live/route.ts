@@ -137,8 +137,11 @@ function parseScorers(raw: string, teamName: string): Array<{
     const minMatch = entry.match(/(\d+)'?\+(\d+)'/) || entry.match(/(\d+)'/);
     const minute = minMatch ? parseInt(minMatch[1], 10) : 0;
     const extra = minMatch?.[2] ? parseInt(minMatch[2], 10) : null;
-    // Player name is everything before the minute number
-    const player = entry.replace(/\s*\d+'?\+?\d*'?(\(.*?\))?$/, "").trim();
+    // Player name is everything before the minute number. The wc26 feed
+    // frequently sends garbled transliterations ("Jvd Blingham"); normalize
+    // through PLAYER_NORM here at the source so every consumer — match
+    // drawer, timelines, goal toasts, stats — renders the canonical name.
+    const player = canonPlayer(entry.replace(/\s*\d+'?\+?\d*'?(\(.*?\))?$/, "").trim());
     return {
       minute,
       extra,
@@ -333,13 +336,15 @@ function vendorEventType(type: string | undefined): MatchEvent["type"] {
 }
 
 function mapVendorEvents(f: VendorFixture): MatchEvent[] {
+  /* Names normalize through PLAYER_NORM at the source (see parseScorers)
+     so abbreviated or transliterated vendor names never reach the UI. */
   return (f.events || []).map((e) => ({
     minute: e.time?.elapsed ?? 0,
     extra: e.time?.extra ?? null,
     type: vendorEventType(e.type),
     detail: e.detail || "",
-    player: e.player?.name ?? "",
-    assist: e.assist?.name ?? null,
+    player: canonPlayer(e.player?.name ?? ""),
+    assist: e.assist?.name ? canonPlayer(e.assist.name) : null,
     team: e.team?.name ?? "",
   }));
 }

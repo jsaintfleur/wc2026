@@ -15,6 +15,7 @@ import { buildTeamJourney, type JourneyMatchInput, type JourneyVenue } from "@/l
 import { buildTeamRecords } from "@/lib/team-records";
 import { auditTournament } from "@/lib/integrity";
 import { claimKnockoutFixtureForSlot } from "@/lib/knockout-fixtures";
+import { alignFixtureToDisplayTeams } from "@/lib/fixture-display";
 import { KNOCKOUT_ROUND_MATCH_NUMBERS, KNOCKOUT_SOURCE_PAIRS, knockoutMatchRange } from "@/lib/knockout-structure";
 import TriondaBall from "@/app/components/TriondaBall";
 import WorldCupTrophy from "@/app/components/WorldCupTrophy";
@@ -697,25 +698,25 @@ function buildKnockoutCards(
         const matchNo = config.matchNumbers[index] || Number(match.mr) || 0;
         let teams = unresolvedTeams(config, index);
         const liveFixture = findLive({ ts: match.ts, v: match.v }, fixtures);
-        const fixture = claimKnockoutFixtureForSlot({
+        const claimedFixture = claimKnockoutFixtureForSlot({
           directFixture: liveFixture || fixtureFromMatchState(match),
           fixtures,
           round: config.dataRound,
           slotTeams: teams,
           claimedFixtureKeys,
         });
-        const isLive = !!fixture && LIVE_STATUSES.has(fixture.status) && !isStaleStatus(match.ts, fixture.status, nowMs);
-        const isDone = isCompletedKnockoutFixture(fixture);
-        const winnerName = winnerFromFixture(fixture);
-        const loserName = loserFromFixture(fixture);
+        const isLive = !!claimedFixture && LIVE_STATUSES.has(claimedFixture.status) && !isStaleStatus(match.ts, claimedFixture.status, nowMs);
+        const isDone = isCompletedKnockoutFixture(claimedFixture);
+        const winnerName = winnerFromFixture(claimedFixture);
+        const loserName = loserFromFixture(claimedFixture);
 
         const hasMatchTeams = !!match.t1 && !!match.t2 && match.t1 !== "TBD" && match.t2 !== "TBD";
-        const trustVendorTeams = fixture?.home && fixture?.away &&
+        const trustVendorTeams = claimedFixture?.home && claimedFixture?.away &&
           (config.key === "r32" || isLive || isDone);
 
         if (trustVendorTeams) {
-          const home = teamName(fixture!.home);
-          const away = teamName(fixture!.away);
+          const home = teamName(claimedFixture!.home);
+          const away = teamName(claimedFixture!.away);
           teams = [
             { name: home, winner: winnerName === home, loser: loserName === home },
             { name: away, winner: winnerName === away, loser: loserName === away },
@@ -728,6 +729,7 @@ function buildKnockoutCards(
             { name: away, winner: winnerName === away, loser: loserName === away },
           ];
         }
+        const fixture = alignFixtureToDisplayTeams(claimedFixture, teams[0].name, teams[1].name);
 
         // Compute bracket path links: which two matches feed this slot,
         // and which match in the next round this slot feeds into.
@@ -1773,6 +1775,7 @@ export default function Tournament({ data, initialView = "home", initialLiveData
             findLive={findLive}
             nowMs={nowMs}
             onNavigate={handleTab}
+            onHostClick={setHostDrawer}
             onVenueClick={(venueId) => { setMapVenueTarget(venueId); handleTab("map"); }}
             onTeamClick={setTeamDrawer}
             onPlayerClick={(name, team) => setPlayerProfile({ name, team })}
@@ -1917,6 +1920,40 @@ const KO_ROUND_STEPS: { key: string; label: string; matches: (round: string) => 
   { key: "third", label: "Third Place", matches: r => /third/i.test(r) },
   { key: "final", label: "Final", matches: r => r.trim() === "Final" },
 ];
+
+function ScheduleCountdownDigits({ targetTs }: { targetTs: number }) {
+  const [now, setNow] = useState(() => new Date());
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const tick = () => {
+      setMounted(true);
+      setNow(new Date());
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const diff = Math.max(0, targetTs - now.getTime());
+  const totalSec = Math.floor(diff / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return (
+    <>
+      <span className="cd-hero__digit" suppressHydrationWarning>{mounted ? pad(h) : "--"}</span>
+      <span className="cd-hero__colon">:</span>
+      <span className="cd-hero__digit" suppressHydrationWarning>{mounted ? pad(m) : "--"}</span>
+      <span className="cd-hero__colon">:</span>
+      <span className="cd-hero__digit" suppressHydrationWarning>{mounted ? pad(s) : "--"}</span>
+    </>
+  );
+}
 
 function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNavigate, onPlayerClick, onMatchClick }: {
   data: TournamentData;
@@ -2102,20 +2139,6 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
     ? leaders.topAssisters.filter(leader => isRenderableLeader(leader) && leader.assists === topAssister.assists).length
     : 0;
 
-  /* -- countdown math --------------------------------------------- */
-  const countdown = useMemo(() => {
-    if (!nextMatch) return null;
-    const diff = Math.max(0, nextMatch.ts - nowMs);
-    const totalSec = Math.floor(diff / 1000);
-    const d = Math.floor(totalSec / 86400);
-    const h = Math.floor((totalSec % 86400) / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-    return { d, h, m, s };
-  }, [nextMatch, nowMs]);
-
-  const pad = (n: number) => String(n).padStart(2, "0");
-
   return (
     <main className="home-dash" aria-label="Tournament Dashboard">
 
@@ -2149,15 +2172,12 @@ function LandingGate({ data, fixtures, findLive, nowMs, computeLeaders, onNaviga
             </button>
           ))}
         </section>
-      ) : nextMatch && countdown ? (
+      ) : nextMatch ? (
         <section className="home-dash__next" aria-label="Next match countdown">
           <PitchLines />
           <div className="home-next__eyebrow">Next Match</div>
-          <div className="home-next__countdown">
-            {countdown.d > 0 && <><span className="home-next__digit" suppressHydrationWarning>{countdown.d}</span><span className="home-next__unit">d</span></>}
-            <span className="home-next__digit" suppressHydrationWarning>{pad(countdown.h)}</span><span className="home-next__sep">:</span>
-            <span className="home-next__digit" suppressHydrationWarning>{pad(countdown.m)}</span><span className="home-next__sep">:</span>
-            <span className="home-next__digit" suppressHydrationWarning>{pad(countdown.s)}</span>
+          <div className="home-next__countdown cd-hero__countdown" aria-label="Time until next match">
+            <ScheduleCountdownDigits targetTs={nextMatch.ts} />
           </div>
           <div className="home-next__match">
             <span className="home-next__team"><span>{fl(nextMatch.home)}</span> {nextMatch.home}</span>
@@ -5217,13 +5237,14 @@ function AnalyticsView({ data, fixtures, findLive, nowMs, liveTs, liveStatus, on
  * Sections: Hero, Progress, Quick Access, Stadiums, Host Cities,
  *           Calendar Timeline, History, App Settings
  * --------------------------------------------------------------- */
-function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigate, onVenueClick, onTeamClick, onPlayerClick }: {
+function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigate, onHostClick, onVenueClick, onTeamClick, onPlayerClick }: {
   data: TournamentData;
   fixtures: LiveFixture[];
   leaderboardStats: ExternalLeaderStat[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
   nowMs: number;
   onNavigate: (view: ViewType) => void;
+  onHostClick: (country: string) => void;
   /* Opens the Map view centered on the given venue (stadium card tap) */
   onVenueClick: (venueId: string) => void;
   onTeamClick: (team: string) => void;
@@ -5606,7 +5627,9 @@ function MoreView({ data, fixtures, leaderboardStats, findLive, nowMs, onNavigat
         </div>
         <div className="more-view__hosts" aria-label="Host countries">
           {data.hosts.map(host => (
-            <span key={host}>{countryFlag(host)} {host}</span>
+            <button key={host} type="button" onClick={() => onHostClick(host)} aria-label={`View ${host} host profile`}>
+              {countryFlag(host)} {host}
+            </button>
           ))}
         </div>
       </section>
@@ -6724,11 +6747,9 @@ function CountdownHero({ data, fixtures, findLive }: {
   fixtures: LiveFixture[];
   findLive: (m: { ts: number; v?: string; t1?: string; t2?: string }, fx: LiveFixture[]) => LiveFixture | null;
 }) {
-  const [mounted, setMounted] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     queueMicrotask(() => {
-      setMounted(true);
       setNow(Date.now());
     });
     const id = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, 1000);
@@ -6806,13 +6827,6 @@ function CountdownHero({ data, fixtures, findLive }: {
   const ts = useGs ? nextGs!.ts : nextKo?.match.ts;
   if (!ts) return null;
 
-  const diff = Math.max(0, ts - now);
-  const totalSec = Math.floor(diff / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const mn = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-
   const isoDate = useGs ? nextGs!.iso : nextKo!.match.iso;
   const d = parseISO(isoDate);
   const etTime = useGs ? nextGs!.et : nextKo!.match.et;
@@ -6825,11 +6839,7 @@ function CountdownHero({ data, fixtures, findLive }: {
       <PitchLines />
       <div className="cd-hero__label">NEXT MATCH <span className="cd-hero__tap" aria-hidden="true">↘</span></div>
       <div className="cd-hero__countdown" suppressHydrationWarning>
-        <span className="cd-hero__digit" suppressHydrationWarning>{mounted ? pad(h) : "--"}</span>
-        <span className="cd-hero__colon">:</span>
-        <span className="cd-hero__digit" suppressHydrationWarning>{mounted ? pad(mn) : "--"}</span>
-        <span className="cd-hero__colon">:</span>
-        <span className="cd-hero__digit" suppressHydrationWarning>{mounted ? pad(s) : "--"}</span>
+        <ScheduleCountdownDigits targetTs={ts} />
       </div>
       {useGs && nextGs ? (
         <div className="cd-hero__teams">
@@ -7099,11 +7109,32 @@ function HostCountryDrawer({ country, data, onClose }: {
   data: TournamentData;
   onClose: () => void;
 }) {
+  const [sheetState, setSheetState] = useState<"collapsed" | "half" | "expanded">("half");
+  const closePanel = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.state?.competHostDrawer === country) {
+      window.history.back();
+      return;
+    }
+    onClose();
+  }, [country, onClose]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.history.pushState({ ...(window.history.state || {}), competHostDrawer: country }, "", window.location.href);
+    const onPopState = () => {
+      onClose();
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, [country, onClose]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
-      onClose();
+      closePanel();
     };
     window.addEventListener("keydown", onKey);
     // Lock body scroll while drawer is open
@@ -7113,7 +7144,7 @@ function HostCountryDrawer({ country, data, onClose }: {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  }, [closePanel]);
 
   const venueCountry = country === "United States" ? "USA" : country;
   const venues = useMemo(() => Object.entries(data.venues)
@@ -7136,58 +7167,104 @@ function HostCountryDrawer({ country, data, onClose }: {
 
   const keyVenue = keyMatch ? data.venues[keyMatch.v] : null;
   const keyDate = keyMatch ? parseISO(keyMatch.iso) : null;
+  const minimized = sheetState === "collapsed";
+  const nextMinimizedState = minimized ? "half" : "collapsed";
 
   return (
-    <div className="drawer-overlay" onClick={onClose}>
-      <aside className="drawer host-drawer" onClick={e => e.stopPropagation()} aria-label={`${country} host profile`}>
-        <button className="drawer__close" onClick={onClose} aria-label="Close">&times;</button>
-        <div className="host-drawer__hero">
-          <HostCountryFlagMark country={country} />
-          <div>
-            <small>Host Country</small>
-            <h2>{country}</h2>
-            <p>{profile.profile}</p>
+    <div className="drawer-overlay host-drawer-overlay" onClick={closePanel}>
+      <aside
+        className={`drawer host-drawer host-drawer--${sheetState}`}
+        onClick={e => e.stopPropagation()}
+        aria-label={`${country} host profile`}
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="host-drawer__bar">
+          <button
+            type="button"
+            className="host-drawer__grabber"
+            aria-label={minimized ? "Expand host profile" : "Collapse host profile"}
+            onClick={() => setSheetState(nextMinimizedState)}
+          >
+            <span />
+          </button>
+          <div className="host-drawer__bar-title">
+            <span>{country}</span>
+            <small>{venues.length} venues · {matchCount} matches</small>
           </div>
+          <div className="host-drawer__states" role="group" aria-label="Panel size">
+            {(["collapsed", "half", "expanded"] as const).map(state => (
+              <button
+                key={state}
+                type="button"
+                className="host-drawer__state-btn"
+                aria-pressed={sheetState === state}
+                onClick={() => setSheetState(state)}
+              >
+                {state === "collapsed" ? "Min" : state === "half" ? "Half" : "Full"}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="host-drawer__icon-btn"
+            onClick={() => setSheetState(nextMinimizedState)}
+            aria-label={minimized ? "Expand host profile" : "Minimize host profile"}
+          >
+            {minimized ? "↥" : "−"}
+          </button>
+          <button type="button" className="host-drawer__icon-btn" onClick={closePanel} aria-label="Close host profile">&times;</button>
         </div>
-        <div className="host-drawer__stats">
-          <div><b>{venues.length}</b><span>Venues</span></div>
-          <div><b>{matchCount}</b><span>Matches</span></div>
-          <div><b>{capacity.toLocaleString("en-US")}</b><span>Total seats</span></div>
-        </div>
-        {keyMatch && keyVenue && keyDate && (
-          <section className="host-drawer__key">
-            <VenueImage venueId={keyMatch.v} venueName={keyVenue.common} city={keyVenue.city} className="host-drawer__key-image" />
+
+        <div className="host-drawer__content" aria-hidden={minimized}>
+          <div className="host-drawer__hero">
+            <HostCountryFlagMark country={country} />
             <div>
-              <span>Key Match</span>
-              <b>{"round" in keyMatch ? keyMatch.round : `Match ${keyMatch.no}`}</b>
-              <small>{MON[keyDate.getMonth()]} {keyDate.getDate()} · {keyMatch.et} · {keyVenue.common}</small>
+              <small>Host Country</small>
+              <h2>{country}</h2>
+              <p>{profile.profile}</p>
+            </div>
+          </div>
+          <div className="host-drawer__stats">
+            <div><b>{venues.length}</b><span>Venues</span></div>
+            <div><b>{matchCount}</b><span>Matches</span></div>
+            <div><b>{capacity.toLocaleString("en-US")}</b><span>Total seats</span></div>
+          </div>
+          {keyMatch && keyVenue && keyDate && (
+            <section className="host-drawer__key">
+              <VenueImage venueId={keyMatch.v} venueName={keyVenue.common} city={keyVenue.city} className="host-drawer__key-image" />
+              <div>
+                <span>Key Match</span>
+                <b>{"round" in keyMatch ? keyMatch.round : `Match ${keyMatch.no}`}</b>
+                <small>{MON[keyDate.getMonth()]} {keyDate.getDate()} · {keyMatch.et} · {keyVenue.common}</small>
+              </div>
+            </section>
+          )}
+          <section className="host-drawer__section">
+            <h3>Venues</h3>
+            <div className="host-drawer__venues">
+              {venues.map(venue => {
+                const count = hostMatches.filter(match => match.v === venue.key).length;
+                return (
+                  <div key={venue.key} className="host-drawer__venue">
+                    <VenueImage venueId={venue.key} venueName={venue.common} city={venue.city} className="host-drawer__venue-image" />
+                    <div>
+                      <b>{venue.common}</b>
+                      <small>{venue.city} · {venue.fifa}</small>
+                    </div>
+                    <span>{venue.cap.toLocaleString("en-US")} · {count} match{count !== 1 ? "es" : ""}</span>
+                  </div>
+                );
+              })}
             </div>
           </section>
-        )}
-        <section className="host-drawer__section">
-          <h3>Venues</h3>
-          <div className="host-drawer__venues">
-            {venues.map(venue => {
-              const count = hostMatches.filter(match => match.v === venue.key).length;
-              return (
-                <div key={venue.key} className="host-drawer__venue">
-                  <VenueImage venueId={venue.key} venueName={venue.common} city={venue.city} className="host-drawer__venue-image" />
-                  <div>
-                    <b>{venue.common}</b>
-                    <small>{venue.city} · {venue.fifa}</small>
-                  </div>
-                  <span>{venue.cap.toLocaleString("en-US")} · {count} match{count !== 1 ? "es" : ""}</span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-        <section className="host-drawer__section">
-          <h3>Fun Facts</h3>
-          <div className="host-drawer__facts">
-            {profile.facts.map(fact => <span key={fact}>{fact}</span>)}
-          </div>
-        </section>
+          <section className="host-drawer__section">
+            <h3>Fun Facts</h3>
+            <div className="host-drawer__facts">
+              {profile.facts.map(fact => <span key={fact}>{fact}</span>)}
+            </div>
+          </section>
+        </div>
       </aside>
     </div>
   );
@@ -7483,7 +7560,7 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
     fixtureId: match.dbFixtureId || undefined,
   } : null;
   const storedFixture = mergeRichFixture(detailFixture, persistedFixture);
-  const fixture = mergeRichFixture(liveFixture, storedFixture);
+  const fixture = alignFixtureToDisplayTeams(mergeRichFixture(liveFixture, storedFixture), match.t1, match.t2);
 
   const hasKickedOff = match.ts <= nowMs + 5 * 60000;
   const hasDbScore = match.dbStatus && match.dbGh != null && match.dbGa != null;

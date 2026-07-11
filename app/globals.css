@@ -10073,6 +10073,118 @@ button.settings-row:active,
   margin-top: 12px;
 }
 
+/* Compet Power Index -------------------------------------------------- */
+.power-view { display: grid; gap: 18px; padding: 0 12px 22px; }
+.power-hero { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); gap: 16px; align-items: stretch; }
+.power-hero__copy, .power-podium-card, .power-board, .power-detail, .power-insights article, .power-preview, .power-methodology article {
+  border: 1px solid rgba(222,231,245,.1);
+  background: rgba(11,17,28,.78);
+  box-shadow: 0 18px 45px rgba(0,0,0,.22);
+}
+.power-hero__copy { position: relative; min-height: 248px; padding: 24px; overflow: hidden; }
+.power-hero__copy::after { content: ""; position: absolute; right: 20px; bottom: 20px; width: 170px; height: 170px; border: 1px solid rgba(92,184,151,.18); border-radius: 50%; }
+.power-hero__copy span, .power-section-title span { display: block; color: #7dd3c7; font-size: 11px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; }
+.power-hero__copy h2 { max-width: 620px; margin: 12px 0; color: #f8fbff; font-family: var(--disp); font-size: clamp(34px, 5vw, 64px); line-height: .94; }
+.power-hero__copy p { max-width: 640px; color: rgba(226,235,247,.74); font-size: 15px; line-height: 1.55; }
+.power-sync, .power-board__tabs, .power-detail__top, .power-preview__teams, .power-preview__prob, .power-prob, .power-detail__movement { display: flex; align-items: center; }
+.power-sync { position: relative; z-index: 1; flex-wrap: wrap; gap: 10px; margin-top: 18px; color: rgba(226,235,247,.65); font-size: 12px; }
+.power-sync button, .power-board__tabs button { border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.06); color: #f7fafc; font: inherit; font-weight: 800; cursor: pointer; }
+.power-sync button { padding: 9px 12px; }
+.power-hero__podium { display: grid; gap: 10px; }
+.power-podium-card { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 76px; padding: 16px; color: #f8fbff; text-align: left; cursor: pointer; }
+.power-podium-card__rank, .power-row__rank { color: rgba(226,235,247,.55); font-family: var(--disp); font-weight: 900; }
+.power-podium-card__flag { font-size: 28px; line-height: 1; }
+.power-podium-card b, .power-row__team b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.power-podium-card strong { font-family: var(--disp); font-size: 28px; }
+.power-podium-card small { grid-column: 3 / -1; color: #7dd3c7; font-weight: 800; }
+.power-insights { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.power-insights article { min-height: 116px; padding: 16px; color: rgba(240,245,252,.86); font-size: 13px; line-height: 1.45; }
+.power-layout { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(340px, .95fr); gap: 16px; align-items: start; }
+.power-board, .power-detail { min-width: 0; padding: 14px; }
+.power-board__tabs { gap: 8px; overflow-x: auto; padding-bottom: 12px; }
+.power-board__tabs button { flex: 0 0 auto; padding: 9px 11px; color: rgba(240,245,252,.62); white-space: nowrap; }
+.power-board__tabs button[aria-selected="true"] { color: #08111b; background: #7dd3c7; }
+.power-board__head, .power-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) 72px 70px 88px; gap: 10px; align-items: center; }
+.power-board__head { padding: 0 12px 8px; color: rgba(226,235,247,.48); font-size: 10px; font-weight: 900; letter-spacing: .9px; text-transform: uppercase; }
+.power-board__list { display: grid; gap: 8px; }
+.power-row { min-height: 66px; width: 100%; padding: 10px 12px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.035); color: #f8fbff; text-align: left; cursor: pointer; transition: transform .18s ease, border-color .18s ease, background .18s ease; }
+.power-row:hover, .power-row--active { transform: translateY(-1px); border-color: rgba(125,211,199,.34); background: rgba(125,211,199,.08); }
+.power-row__team { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 8px; align-items: center; }
+.power-row__team small { grid-column: 2; color: rgba(226,235,247,.58); font-size: 11px; }
+.power-move { justify-self: start; min-width: 54px; padding: 6px 8px; color: rgba(226,235,247,.7); background: rgba(255,255,255,.05); font-size: 11px; font-weight: 900; text-align: center; }
+.power-move--up { color: #8ff0b1; background: rgba(41,172,99,.12); }
+.power-move--down { color: #ff9c9c; background: rgba(239,68,68,.12); }
+.power-move--new { color: #fde68a; background: rgba(245,158,11,.13); }
+.power-row__score, .power-detail__score b { font-family: var(--disp); font-size: 24px; font-weight: 900; }
+.power-row__confidence { color: rgba(226,235,247,.65); font-size: 12px; }
+.power-detail { position: sticky; top: 14px; }
+.power-detail__top { justify-content: space-between; gap: 12px; }
+.power-detail__team { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; min-width: 0; border: 0; background: transparent; color: #f8fbff; text-align: left; cursor: pointer; }
+.power-detail__team span { grid-row: span 2; font-size: 36px; }
+.power-detail__team b { min-width: 0; overflow: hidden; font-family: var(--disp); font-size: 28px; text-overflow: ellipsis; white-space: nowrap; }
+.power-detail__team small, .power-detail__score small, .power-detail__score span, .power-detail__movement span, .power-metric span, .power-detail__notes span { color: rgba(226,235,247,.55); font-size: 11px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; }
+.power-detail__score { text-align: right; }
+.power-detail__score b { display: block; }
+.power-why { margin: 16px 0; padding: 14px; border: 1px solid rgba(125,211,199,.16); background: rgba(125,211,199,.055); }
+.power-why summary { color: #f8fbff; font-weight: 900; cursor: pointer; }
+.power-why p { margin: 10px 0 0; color: rgba(226,235,247,.78); line-height: 1.5; }
+.power-detail__movement { flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.power-detail__movement div { min-width: 104px; padding: 10px; background: rgba(255,255,255,.04); }
+.power-detail__movement b { display: block; margin-top: 4px; color: #fff; }
+.power-detail__movement p { flex-basis: 100%; margin: 0; color: rgba(226,235,247,.68); font-size: 12px; line-height: 1.45; }
+.power-trend { min-height: 130px; margin-bottom: 14px; padding: 12px; background: rgba(255,255,255,.035); }
+.power-trend svg { width: 100%; height: 86px; }
+.power-trend polyline { fill: none; stroke: #7dd3c7; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.power-trend__ticks { display: flex; justify-content: space-between; gap: 6px; color: rgba(226,235,247,.5); font-size: 10px; }
+.power-trend--empty { display: grid; place-items: center; color: rgba(226,235,247,.54); font-size: 12px; }
+.power-detail__grid, .power-detail__notes, .power-methodology, .power-preview-grid { display: grid; gap: 10px; }
+.power-detail__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.power-metric, .power-detail__notes div { min-width: 0; padding: 11px; background: rgba(255,255,255,.04); }
+.power-metric b, .power-detail__notes b { display: block; margin-top: 5px; overflow-wrap: anywhere; color: #fff; font-family: var(--disp); font-size: 18px; }
+.power-detail__probabilities { margin: 16px 0; }
+.power-detail__probabilities h3, .power-section-title h3 { margin: 0 0 10px; color: #f8fbff; font-family: var(--disp); }
+.power-prob { display: grid; grid-template-columns: 100px minmax(0, 1fr) 44px; gap: 10px; margin-top: 9px; }
+.power-prob i { height: 8px; background: #7dd3c7; }
+.power-previews { display: grid; gap: 12px; }
+.power-preview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.power-preview { padding: 16px; }
+.power-preview__teams { justify-content: space-between; gap: 10px; }
+.power-preview__teams b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.power-preview__teams span { color: #7dd3c7; font-family: var(--disp); font-size: 24px; font-weight: 900; }
+.power-preview__prob { gap: 3px; margin: 14px 0; }
+.power-preview__prob i { height: 9px; min-width: 8px; }
+.power-preview__prob i:nth-of-type(1) { background: #7dd3c7; }
+.power-preview__prob i:nth-of-type(2) { background: #94a3b8; }
+.power-preview__prob i:nth-of-type(3) { background: #f8b95f; }
+.power-preview p { margin: 0; color: rgba(226,235,247,.7); font-size: 13px; line-height: 1.45; }
+.power-methodology { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.power-methodology article { padding: 14px; }
+.power-methodology article b, .power-methodology article span { display: block; }
+.power-methodology article b { color: #fff; }
+.power-methodology article span { margin: 8px 0; color: #7dd3c7; font-family: var(--disp); font-size: 24px; font-weight: 900; }
+.power-methodology article p { margin: 0; color: rgba(226,235,247,.66); font-size: 12px; line-height: 1.45; }
+
+@media (max-width: 940px) {
+  .power-hero, .power-layout, .power-preview-grid { grid-template-columns: 1fr; }
+  .power-detail { position: static; }
+  .power-insights { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .power-methodology { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .power-view { padding-inline: 8px; }
+  .power-hero__copy { min-height: 220px; padding: 18px; }
+  .power-insights, .power-methodology, .power-detail__grid { grid-template-columns: 1fr; }
+  .power-board { padding: 10px; }
+  .power-board__head { display: none; }
+  .power-row { grid-template-columns: 42px minmax(0, 1fr) 54px 58px; }
+  .power-row__confidence { display: none; }
+  .power-detail__top { align-items: flex-start; }
+  .power-podium-card { grid-template-columns: auto auto minmax(0, 1fr); }
+  .power-podium-card strong { grid-column: 3; }
+  .power-podium-card small { grid-column: 2 / -1; }
+}
+
 @media (min-width: 768px) {
   .stats-view--premium {
     padding: 16px 18px 42px;

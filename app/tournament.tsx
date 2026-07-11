@@ -6,6 +6,7 @@ import type { VenueFitRequest, VenueFocusRequest, VenueMapMarker, VenueRouteFitR
 import { HOST_VENUE_DETAILS, MOCK_FIXTURES, type TournamentData, type LiveFixture, type GroupStageMatch, type KnockoutMatch, type MatchEvent, type MatchStats, type PlayerMatchStat, type TeamLineup, type VenueDetails } from "@/lib/data";
 import { nrm, canon, canonPlayer } from "@/lib/merge";
 import { buildTournamentStats, type ExternalLeaderStat, type PlayerLeader, type TournamentStats } from "@/lib/stats";
+import { PowerRankingEngine, type TeamPowerRanking, type PowerRankingSection } from "@/lib/power-rankings";
 import { TEAM_PROFILES, type PlayerInfo } from "@/lib/teams";
 import { PLAYER_PHOTO_IDS, playerPhotoUrl } from "@/lib/player-photos";
 import { groupConsecutiveJourneyStops } from "@/lib/map-journey";
@@ -54,8 +55,8 @@ function isStaleStatus(ts: number, status: string, now = Date.now()): boolean {
   return now - ts > STALE_LIVE_THRESHOLD;
 }
 
-type ViewType = "home" | "schedule" | "groups" | "bracket" | "teams" | "map" | "analytics" | "more" | "settings" | "stats" | "venues" | "about";
-const VIEW_TYPES = ["home","schedule","groups","bracket","teams","map","analytics","more","settings","stats","venues","about"] as const;
+type ViewType = "home" | "schedule" | "groups" | "bracket" | "power" | "teams" | "map" | "analytics" | "more" | "settings" | "stats" | "venues" | "about";
+const VIEW_TYPES = ["home","schedule","groups","bracket","power","teams","map","analytics","more","settings","stats","venues","about"] as const;
 function isViewType(value: string | null | undefined): value is ViewType {
   return !!value && (VIEW_TYPES as readonly string[]).includes(value);
 }
@@ -1543,6 +1544,8 @@ export default function Tournament({ data, initialView = "home", initialLiveData
     if (view === "groups") return renderGroups(animate);
     if (view === "venues") return renderVenues(animate);
     if (view === "analytics") return "";
+    if (view === "analytics") return "";
+    if (view === "power") return ""; // power rankings rendered as React
     if (view === "stats") return ""; // stats rendered as React, not HTML string
     if (view === "bracket") return ""; // bracket rendered as React bracket
     return renderAbout();
@@ -1578,6 +1581,7 @@ export default function Tournament({ data, initialView = "home", initialLiveData
     { key: "schedule", label: "Schedule" },
     { key: "groups", label: "Groups" },
     { key: "bracket", label: "Knockout" },
+    { key: "power", label: "Power" },
     { key: "teams", label: "Teams" },
     { key: "map", label: "Map" },
     { key: "more", label: "More" },
@@ -1588,6 +1592,7 @@ export default function Tournament({ data, initialView = "home", initialLiveData
     schedule: <AppIcon name="calendar" />,
     groups: <AppIcon name="groups" />,
     bracket: <AppIcon name="bracket" />,
+    power: <AppIcon name="stats" />,
     teams: <AppIcon name="teams" />,
     map: <AppIcon name="map" />,
     analytics: <AppIcon name="stats" />,
@@ -1626,10 +1631,10 @@ export default function Tournament({ data, initialView = "home", initialLiveData
           <div className="hero__pitch-lines" aria-hidden="true" />
           <div className="hero__context">
             <h1 className="hero__context-title">
-              {view === "schedule" ? "Schedule" : view === "groups" ? "Groups" : view === "teams" ? "Teams" : view === "analytics" ? "Analytics" : view === "settings" ? "Settings" : view === "stats" ? "Statistics" : view === "more" ? "More" : view === "venues" ? "Venues" : view === "about" ? "About" : "COMPET 2026"}
+              {view === "schedule" ? "Schedule" : view === "groups" ? "Groups" : view === "power" ? "Power Rankings" : view === "teams" ? "Teams" : view === "analytics" ? "Analytics" : view === "settings" ? "Settings" : view === "stats" ? "Statistics" : view === "more" ? "More" : view === "venues" ? "Venues" : view === "about" ? "About" : "COMPET 2026"}
             </h1>
             <p className="hero__context-sub">
-              {view === "schedule" ? `${data.gs.length + data.ko.length} matches · Group stage & knockout` : view === "groups" ? `${Object.keys(data.groups).length} groups · 48 teams` : view === "teams" ? "48 nations competing" : view === "analytics" ? "Team strength, confederation power & knockout survival" : view === "settings" ? "Personalize tournament, alerts, map, data, and display" : view === "stats" ? "Goals, assists & cards" : view === "more" ? "Venues, about & more" : ""}
+              {view === "schedule" ? `${data.gs.length + data.ko.length} matches · Group stage & knockout` : view === "groups" ? `${Object.keys(data.groups).length} groups · 48 teams` : view === "power" ? "Compet Power Index · form, dominance and probabilities" : view === "teams" ? "48 nations competing" : view === "analytics" ? "Team strength, confederation power & knockout survival" : view === "settings" ? "Personalize tournament, alerts, map, data, and display" : view === "stats" ? "Goals, assists & cards" : view === "more" ? "Venues, about & more" : ""}
             </p>
           </div>
         </section>
@@ -1751,6 +1756,16 @@ export default function Tournament({ data, initialView = "home", initialLiveData
             liveEnrichmentIssue={liveEnrichmentIssue}
             onRefresh={pollLive}
             onNavigate={handleTab}
+          />
+        ) : view === "power" ? (
+          <PowerRankingsView
+            data={data}
+            fixtures={fixtures}
+            fl={fl}
+            liveTs={liveTs}
+            liveStatus={liveStatus}
+            onRefresh={pollLive}
+            onTeamClick={setTeamDrawer}
           />
         ) : view === "teams" ? (
           <TeamsView data={data} fixtures={fixtures} findLive={findLive} nowMs={nowMs} onTeamClick={setTeamDrawer} favs={favs} toggleFav={toggleFav} />
@@ -8242,6 +8257,269 @@ function MatchDetailDrawer({ match, initialFixture, fixtures, flags, venues, gco
         </div>
       </div>
     </div>
+  );
+}
+
+function PowerRankingsView({ data, fixtures, fl, liveTs, liveStatus, onRefresh, onTeamClick }: {
+  data: TournamentData;
+  fixtures: LiveFixture[];
+  fl: (team: string) => string;
+  liveTs: number | null;
+  liveStatus: LiveStatus;
+  onRefresh: () => void;
+  onTeamClick: (team: string) => void;
+}) {
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("overview");
+  const engine = useMemo(() => new PowerRankingEngine(), []);
+  const model = useMemo(() => engine.calculate(data, fixtures, Date.now()), [data, fixtures, engine]);
+  const selected = useMemo(
+    () => model.rankings.find(r => canon(r.team) === canon(selectedTeam || "")) || model.rankings[0],
+    [model.rankings, selectedTeam],
+  );
+  const topThree = model.rankings.slice(0, 3);
+  const sections: PowerRankingSection[] = [
+    { key: "overview", title: "Overview", rankings: model.rankings.slice(0, 12) },
+    ...model.sections,
+  ].filter(section => section.rankings.length > 0);
+  const currentSection = sections.find(section => section.key === activeSection) || sections[0];
+  const syncLabel = liveStatus === "active" ? "Live model" : liveStatus === "paused" ? "Cached model" : "CPI model";
+  const syncedAt = liveTs ? new Date(liveTs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "Pending sync";
+
+  const movementLabel = (ranking: TeamPowerRanking) => {
+    if (ranking.movement === "NEW") return "NEW";
+    if (ranking.movement === "UNCHANGED") return "UNCHANGED";
+    const amount = Number(ranking.movement);
+    return amount > 0 ? `+${amount}` : `${amount}`;
+  };
+
+  const movementClass = (ranking: TeamPowerRanking) => {
+    if (ranking.movement === "NEW") return " power-move--new";
+    if (ranking.movement === "UNCHANGED") return "";
+    return Number(ranking.movement) > 0 ? " power-move--up" : " power-move--down";
+  };
+
+  const metric = (label: string, value: string | number | null, suffix = "") => (
+    value == null ? null : <div className="power-metric"><span>{label}</span><b>{value}{suffix}</b></div>
+  );
+
+  const renderTrend = (ranking: TeamPowerRanking) => {
+    const points = ranking.trend.slice(-8);
+    if (points.length < 2) {
+      return <div className="power-trend power-trend--empty">Trend starts after two completed matches.</div>;
+    }
+    const max = Math.max(...points.map(p => p.score));
+    const min = Math.min(...points.map(p => p.score));
+    const spread = Math.max(max - min, 1);
+    const coords = points.map((point, index) => {
+      const x = points.length === 1 ? 0 : (index / (points.length - 1)) * 100;
+      const y = 86 - ((point.score - min) / spread) * 72;
+      return `${x},${y}`;
+    }).join(" ");
+    return (
+      <div className="power-trend" aria-label={`${ranking.team} CPI trend`}>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img">
+          <polyline points={coords} />
+        </svg>
+        <div className="power-trend__ticks">
+          {points.map(point => (
+            <span key={`${point.matchNumber}-${point.rank}`} title={`Match ${point.matchNumber}: ${point.result} vs ${point.opponent}, CPI ${point.score.toFixed(1)}, rank #${point.rank}`}>
+              M{point.matchNumber}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderRankingRow = (ranking: TeamPowerRanking, compact = false) => (
+    <button
+      key={`${ranking.team}-${ranking.rank}`}
+      type="button"
+      className={`power-row${selected && canon(selected.team) === canon(ranking.team) ? " power-row--active" : ""}`}
+      onClick={() => setSelectedTeam(ranking.team)}
+      aria-label={`Open ${ranking.team} CPI details`}
+    >
+      <span className="power-row__rank">#{ranking.rank}</span>
+      <span className="power-row__team"><span>{fl(ranking.team)}</span><b>{ranking.team}</b><small>{ranking.status}</small></span>
+      <span className={`power-move${movementClass(ranking)}`} title={ranking.movementReason}>{movementLabel(ranking)}</span>
+      <span className="power-row__score">{ranking.score.toFixed(1)}</span>
+      {!compact && <span className="power-row__confidence">{ranking.confidence}%</span>}
+    </button>
+  );
+
+  return (
+    <main className="power-view" aria-label="Power Rankings">
+      <section className="power-hero">
+        <div className="power-hero__copy">
+          <span>Compet Power Index</span>
+          <h2>Who is playing the best football right now?</h2>
+          <p>CPI blends tournament results, derived advanced performance, opponent strength, recent form and match dominance after every completed fixture.</p>
+          <div className="power-sync">
+            <span>{syncLabel} · {syncedAt} · {model.matchesPlayed} completed matches</span>
+            <button type="button" onClick={onRefresh}>Refresh</button>
+          </div>
+        </div>
+        <div className="power-hero__podium" aria-label="Top three CPI teams">
+          {topThree.map(ranking => (
+            <button key={ranking.team} type="button" onClick={() => setSelectedTeam(ranking.team)} className="power-podium-card">
+              <span className="power-podium-card__rank">#{ranking.rank}</span>
+              <span className="power-podium-card__flag">{fl(ranking.team)}</span>
+              <b>{ranking.team}</b>
+              <strong>{ranking.score.toFixed(1)}</strong>
+              <small>{ranking.status}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="power-insights" aria-label="CPI insights">
+        {model.insights.map(insight => <article key={insight}>{insight}</article>)}
+      </section>
+
+      <section className="power-layout">
+        <div className="power-board">
+          <div className="power-board__tabs" role="tablist" aria-label="Power ranking sections">
+            {sections.map(section => (
+              <button
+                key={section.key}
+                type="button"
+                aria-selected={currentSection.key === section.key}
+                onClick={() => setActiveSection(section.key)}
+              >
+                {section.title}
+              </button>
+            ))}
+          </div>
+          <div className="power-board__head">
+            <span>Rank</span><span>Team</span><span>Move</span><span>CPI</span><span>Confidence</span>
+          </div>
+          <div className="power-board__list">
+            {currentSection.rankings.map(ranking => renderRankingRow(ranking))}
+          </div>
+        </div>
+
+        {selected && (
+          <aside className="power-detail" aria-label={`${selected.team} analytics`}>
+            <div className="power-detail__top">
+              <button type="button" className="power-detail__team" onClick={() => onTeamClick(selected.team)}>
+                <span>{fl(selected.team)}</span>
+                <b>{selected.team}</b>
+                <small>Open team profile</small>
+              </button>
+              <div className="power-detail__score"><span>CPI</span><b>{selected.score.toFixed(1)}</b><small>{selected.status}</small></div>
+            </div>
+
+            <details className="power-why" open>
+              <summary>Why?</summary>
+              <p>{selected.explanation}</p>
+            </details>
+
+            <div className="power-detail__movement">
+              <div><span>Current Rank</span><b>#{selected.rank}</b></div>
+              <div><span>Previous Rank</span><b>{selected.previousRank ? `#${selected.previousRank}` : "New"}</b></div>
+              <div><span>Highest Rank</span><b>#{selected.highestRank}</b></div>
+              <div><span>Lowest Rank</span><b>#{selected.lowestRank}</b></div>
+              <p>{selected.movementReason}</p>
+            </div>
+
+            {renderTrend(selected)}
+
+            <div className="power-detail__grid">
+              {metric("Confidence", selected.confidence, "%")}
+              {metric("Momentum", selected.momentum > 0 ? `+${selected.momentum.toFixed(1)}` : selected.momentum.toFixed(1))}
+              {metric("Form", selected.formRating.toFixed(1))}
+              {metric("Attack", selected.attackRating.toFixed(1))}
+              {metric("Defense", selected.defenseRating.toFixed(1))}
+              {metric("Midfield", selected.midfieldRating.toFixed(1))}
+              {metric("Avg Rating", selected.averageMatchRating)}
+              {metric("Goals", selected.goals)}
+              {metric("Assists", selected.assists)}
+              {metric("xG", selected.expectedGoals)}
+              {metric("xGA", selected.expectedGoalsAgainst)}
+              {metric("Possession", selected.possession, "%")}
+              {metric("Pass Accuracy", selected.passingAccuracy, "%")}
+              {metric("Shots", selected.shots)}
+              {metric("Conversion", selected.conversionRate, "%")}
+              {metric("Clean Sheets", selected.cleanSheets)}
+              {metric("Discipline", selected.discipline)}
+            </div>
+
+            <div className="power-detail__probabilities">
+              <h3>Tournament Favorites</h3>
+              {([
+                ["Next Match", selected.winProbabilityNextMatch],
+                ["Quarterfinal", selected.quarterfinalProbability],
+                ["Semifinal", selected.semifinalProbability],
+                ["Final", selected.finalProbability],
+                ["Championship", selected.championshipProbability],
+              ] as [string, number | null][]).filter(([, value]) => value != null).map(([label, value]) => (
+                <div key={label} className="power-prob">
+                  <span>{label}</span>
+                  <i style={{ width: `${value ?? 0}%` }} />
+                  <b>{value}%</b>
+                </div>
+              ))}
+            </div>
+
+            <div className="power-detail__notes">
+              <div><span>Tournament MVP</span><b>{selected.tournamentMvp || "Awaiting player data"}</b></div>
+              <div><span>Player in Form</span><b>{selected.playerInForm || "Awaiting player data"}</b></div>
+              <div><span>Key Strength</span><b>{selected.keyStrength}</b></div>
+              <div><span>Biggest Weakness</span><b>{selected.biggestWeakness}</b></div>
+            </div>
+          </aside>
+        )}
+      </section>
+
+      {model.previews.length > 0 && (
+        <section className="power-previews" aria-label="Match preview integration">
+          <div className="power-section-title">
+            <span>Match Preview Integration</span>
+            <h3>Upcoming CPI Edges</h3>
+          </div>
+          <div className="power-preview-grid">
+            {model.previews.map(preview => (
+              <article key={preview.matchNumber} className="power-preview">
+                <div className="power-preview__teams">
+                  <b>{fl(preview.teamA)} {preview.teamA}</b>
+                  <span>{preview.predictedScore}</span>
+                  <b>{fl(preview.teamB)} {preview.teamB}</b>
+                </div>
+                <div className="power-preview__prob">
+                  <span>{preview.winProbabilityA}%</span>
+                  <i style={{ width: `${preview.winProbabilityA}%` }} />
+                  <i style={{ width: `${preview.drawProbability}%` }} />
+                  <i style={{ width: `${preview.winProbabilityB}%` }} />
+                  <span>{preview.winProbabilityB}%</span>
+                </div>
+                <p>Upset probability {preview.upsetProbability}%. Tactical edge: {preview.keyTacticalAdvantage}. Confidence {preview.predictionConfidence}%.</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="power-methodology">
+        <div className="power-section-title">
+          <span>Methodology</span>
+          <h3>What CPI Measures</h3>
+        </div>
+        {[
+          ["Tournament Performance", "40%", "Wins, draws, goal difference, clean sheets, stage reached and match importance."],
+          ["Advanced Performance", "20%", "xG/xGA, shot quality, big chances, press and defensive efficiency when available or derivable."],
+          ["Strength of Opposition", "15%", "Opponent quality is recalculated from CPI itself across iterative passes."],
+          ["Recent Form", "15%", "Last-match and last-five weighting keeps the model sensitive to current performance."],
+          ["Match Dominance", "10%", "Rewards territory, possession, shot differential and chance suppression."],
+        ].map(([name, weight, detail]) => (
+          <article key={name}>
+            <b>{name}</b>
+            <span>{weight}</span>
+            <p>{detail}</p>
+          </article>
+        ))}
+      </section>
+    </main>
   );
 }
 

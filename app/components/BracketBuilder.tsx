@@ -319,7 +319,7 @@ export default function BracketBuilder({ flags, groups, gcolor }: BracketBuilder
       ctx.textAlign = "center";
       ctx.font = "600 18px -apple-system, BlinkMacSystemFont, sans-serif";
       ctx.fillStyle = "rgba(255,255,255,0.38)";
-      ctx.fillText("wc2026-xi-gray.vercel.app", W / 2, H - 42);
+      ctx.fillText("compet.jeanlucs.com", W / 2, H - 42);
       ctx.textAlign = "left";
     };
 

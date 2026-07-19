@@ -12,5 +12,29 @@
       "path": "/api/verify",
       "schedule": "0 6 * * *"
     }
+  ],
+  "redirects": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "wc2026-xi-gray.vercel.app"
+        }
+      ],
+      "destination": "https://compet.jeanlucs.com/",
+      "permanent": true
+    },
+    {
+      "source": "/:path+",
+      "has": [
+        {
+          "type": "host",
+          "value": "wc2026-xi-gray.vercel.app"
+        }
+      ],
+      "destination": "https://compet.jeanlucs.com/:path+",
+      "permanent": true
+    }
   ]
 }

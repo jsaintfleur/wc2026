@@ -302,7 +302,7 @@ function emptyMetrics(): TeamAdvancedMetrics {
 
 function normalizeAverages(metrics: TeamAdvancedMetrics, matches: number): TeamAdvancedMetrics {
   if (matches === 0) return { ...metrics, xg: null, xga: null, shotQuality: null, bigChancesCreated: null, bigChancesAllowed: null, shotDifferential: null, finalThirdEntries: null, progressivePossession: null, pressSuccess: null, defensiveEfficiency: null, possession: null, passingAccuracy: null };
-  const perMatchKeys: (keyof TeamAdvancedMetrics)[] = ["xg", "xga", "shotQuality", "bigChancesCreated", "bigChancesAllowed", "shotDifferential", "finalThirdEntries", "progressivePossession", "pressSuccess", "defensiveEfficiency", "possession", "passingAccuracy"];
+  const perMatchKeys = ["xg", "xga", "shotQuality", "bigChancesCreated", "bigChancesAllowed", "shotDifferential", "finalThirdEntries", "progressivePossession", "pressSuccess", "defensiveEfficiency", "possession", "passingAccuracy"] as const;
   const out = { ...metrics };
   for (const key of perMatchKeys) {
     const value = out[key];

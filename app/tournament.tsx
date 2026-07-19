@@ -1544,7 +1544,6 @@ export default function Tournament({ data, initialView = "home", initialLiveData
     if (view === "groups") return renderGroups(animate);
     if (view === "venues") return renderVenues(animate);
     if (view === "analytics") return "";
-    if (view === "analytics") return "";
     if (view === "power") return ""; // power rankings rendered as React
     if (view === "stats") return ""; // stats rendered as React, not HTML string
     if (view === "bracket") return ""; // bracket rendered as React bracket
